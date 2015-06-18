@@ -11,3 +11,4 @@ samples/model-client-sample-dotnet/ModelClientSample/ModelClientSample/obj
 velocity.log
 
 dependency-reduced-pom.xml
+/nb-configuration.xml
