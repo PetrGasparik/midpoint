@@ -15,6 +15,7 @@
  */
 package com.evolveum.midpoint.prism.parser;
 
+import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
@@ -38,6 +39,7 @@ import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.exception.TunnelException;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
@@ -83,9 +85,17 @@ public class PrismBeanConverter {
 	
 	private PrismContext prismContext;
 
-	public PrismBeanConverter(PrismContext prismContext) {
+	// Not fully implemented yet.
+	private XNodeProcessorEvaluationMode mode;
+
+	public PrismBeanConverter(PrismContext prismContext, PrismBeanInspector inspector) {
+		this(prismContext, inspector, XNodeProcessorEvaluationMode.STRICT);
+	}
+
+	public PrismBeanConverter(PrismContext prismContext, PrismBeanInspector inspector, XNodeProcessorEvaluationMode mode) {
 		this.prismContext = prismContext;
-        this.inspector = new PrismBeanInspector(prismContext);
+		this.inspector = inspector;
+		this.mode = mode;
 	}
 	
 	public PrismContext getPrismContext() {
@@ -215,14 +225,27 @@ public class PrismBeanConverter {
 				objectFactory = instantiateObjectFactory(objectFactoryClass);
 				elementMethod = inspector.findElementMethodInObjectFactory(objectFactoryClass, propName);
 				if (elementMethod == null) {
-					throw new SchemaException("No field "+propName+" in class "+beanClass+" (and no element method in object factory too)");
+					// Check for "any" method
+					elementMethod = inspector.findAnyMethod(beanClass);
+					if (elementMethod == null) {
+						throw new SchemaException("No field "+propName+" in class "+beanClass+" (and no element method in object factory too)");
+					}
+					unmarshallToAny(bean, elementMethod, key, xsubnode);
+					continue;
+					
 				}
 				field = inspector.lookupSubstitution(beanClass, elementMethod);
 				if (field == null) {
 					// Check for "any" field
 					field = inspector.findAnyField(beanClass);
 					if (field == null) {
-						throw new SchemaException("No field "+propName+" in class "+beanClass+" (no suitable substitution and no 'any' field)");
+						elementMethod = inspector.findAnyMethod(beanClass);
+						if (elementMethod == null) {
+							throw new SchemaException("No field "+propName+" in class "+beanClass+" (and no element method in object factory too)");
+						}
+						unmarshallToAny(bean, elementMethod, key, xsubnode);
+						continue;
+//						throw new SchemaException("No field "+propName+" in class "+beanClass+" (no suitable substitution and no 'any' field)");
 					}
 					unmarshallToAny(bean, field, key, xsubnode);
 					continue;
@@ -375,22 +398,35 @@ public class PrismBeanConverter {
 					paramType = explicitParamType; 
 				}
 			}
-			
+
+			boolean problem = false;
 			Object propValue = null;
 			Collection<Object> propValues = null;
 			if (xsubnode instanceof ListXNode) {
 				ListXNode xlist = (ListXNode)xsubnode;
 				if (setter != null) {
-					propValue = convertSinglePropValue(xsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace);
+					try {
+						propValue = convertSinglePropValue(xsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace);
+					} catch (SchemaException e) {
+						problem = processSchemaException(e, xsubnode);
+					}
 				} else {
 					// No setter, we have to use collection getter
 					propValues = new ArrayList<>(xlist.size());
-					for(XNode xsubsubnode: xlist) {
-						propValues.add(convertSinglePropValue(xsubsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace));
+					for (XNode xsubsubnode: xlist) {
+						try {
+							propValues.add(convertSinglePropValue(xsubsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace));
+						} catch (SchemaException e) {
+							problem = processSchemaException(e, xsubsubnode);
+						}
 					}
 				}
 			} else {
-				propValue = convertSinglePropValue(xsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace);
+				try {
+					propValue = convertSinglePropValue(xsubnode, fieldName, paramType, storeAsRawType, beanClass, paramNamespace);
+				} catch (SchemaException e) {
+					problem = processSchemaException(e, xsubnode);
+				}
 			}
 			
 			if (setter != null) {
@@ -418,9 +454,10 @@ public class PrismBeanConverter {
 					for (Object propVal: propValues) {
 						col.add(prepareValueToBeStored(propVal, wrapInJaxbElement, objectFactory, elementMethod, propName, beanClass));
 					}
-				} else {
+				} else if (!problem) {
 					throw new IllegalStateException("Strange. Multival property "+propName+" in "+beanClass+" produced null values list, parsed from "+xnode);
 				}
+				checkJaxbElementConsistence(col);
 			} else {
 				throw new IllegalStateException("Uh? No setter nor getter.");
 			}
@@ -433,15 +470,74 @@ public class PrismBeanConverter {
 		return bean;
 	}
 
-	private <T,S> void unmarshallToAny(T bean, Field anyField, QName elementName, XNode xsubnode) throws SchemaException{
+	/*
+	 *  We want to avoid this:
+	 *    <expression>
+     *      <script>
+     *        <code>'up'</code>
+     *      </script>
+     *      <value>up</value>
+     *    </expression>
+     *
+     *  Because it cannot be reasonably serialized in XNode (<value> gets changed to <script>).
+	 */
+	private void checkJaxbElementConsistence(Collection<Object> collection) throws SchemaException {
+		QName elementName = null;
+		for (Object object : collection) {
+			if (!(object instanceof JAXBElement)) {
+				continue;
+			}
+			JAXBElement element = (JAXBElement) object;
+			if (elementName == null) {
+				elementName = element.getName();
+			} else {
+				if (!QNameUtil.match(elementName, element.getName())) {
+					String m = "Mixing incompatible element names in one property: "
+							+ elementName + " and " + element.getName();
+					if (mode != XNodeProcessorEvaluationMode.COMPAT) {
+						throw new SchemaException(m);
+					} else {
+						LOGGER.warn("{}", m);
+					}
+				}
+			}
+		}
+	}
+
+	protected boolean processSchemaException(SchemaException e, XNode xsubnode) throws SchemaException {
+		boolean problem;
+		if (mode != XNodeProcessorEvaluationMode.COMPAT) {
+            throw e;
+        } else {
+            LoggingUtils.logException(LOGGER, "Couldn't parse part of the document. It will be ignored. Document part:\n{}", e, xsubnode);
+            problem = true;
+        }
+		return problem;
+	}
+
+	private <T,S> void unmarshallToAny(T bean, Method getter, QName elementName, XNode xsubnode) throws SchemaException{
 		Class<T> beanClass = (Class<T>) bean.getClass();
 		
 		Class objectFactoryClass = inspector.getObjectFactoryClass(elementName.getNamespaceURI());
 		Object objectFactory = instantiateObjectFactory(objectFactoryClass);
 		Method elementFactoryMethod = inspector.findElementMethodInObjectFactory(objectFactoryClass, elementName.getLocalPart());
 		Class<S> subBeanClass = (Class<S>) elementFactoryMethod.getParameterTypes()[0];
+
+		if (xsubnode instanceof ListXNode){
+			for (XNode xsubSubNode : ((ListXNode) xsubnode)){
+				S subBean = unmarshall(xsubSubNode, subBeanClass);
+				unmarshallToAnyValue(bean, beanClass, subBean, objectFactoryClass, objectFactory, elementFactoryMethod, getter);
+			}
+		} else{ 
+			S subBean = unmarshall(xsubnode, subBeanClass);
+			unmarshallToAnyValue(bean, beanClass, subBean, objectFactoryClass, objectFactory, elementFactoryMethod, getter);
+		}
 		
-		S subBean = unmarshall(xsubnode, subBeanClass);
+	}
+	
+	private <T, S> void unmarshallToAnyValue(T bean, Class beanClass, S subBean, Class objectFactoryClass, Object objectFactory, Method elementFactoryMethod, Method getter){
+		
+		
 		JAXBElement<S> subBeanElement;
 		try {
 			subBeanElement = (JAXBElement<S>) elementFactoryMethod.invoke(objectFactory, subBean);
@@ -449,7 +545,6 @@ public class PrismBeanConverter {
 			throw new IllegalArgumentException("Cannot invoke factory method "+elementFactoryMethod+" on "+objectFactoryClass+" with "+subBean+": "+e1, e1);
 		}
 		
-		Method getter = inspector.findPropertyGetter(beanClass, anyField.getName());
 		Collection<Object> col;
 		Object getterReturn;
 		try {
@@ -462,7 +557,12 @@ public class PrismBeanConverter {
 		} catch (ClassCastException e) {
 			throw new SystemException("Getter "+getter+" on bean of type "+beanClass+" returned "+getterReturn+" instead of collection");
 		}
-		col.add(subBeanElement);
+		col.add(subBeanElement != null ? subBeanElement.getValue() : subBeanElement);
+	}
+	
+	private <T,S> void unmarshallToAny(T bean, Field anyField, QName elementName, XNode xsubnode) throws SchemaException{
+		Method getter = inspector.findPropertyGetter(bean.getClass(), anyField.getName());
+		unmarshallToAny(bean, getter, elementName, xsubnode);
 	}
 	
     private Object instantiateObjectFactory(Class objectFactoryClass) {
@@ -624,7 +724,7 @@ public class PrismBeanConverter {
 		}
 		
 		if (!classType.isEnum()) {
-			throw new SystemException("Cannot convert primitive value to non-enum bean of type "+classType);
+			throw new SchemaException("Cannot convert primitive value to non-enum bean of type " + classType);
 		}
 		// Assume string, maybe TODO extend later
 		String primValue = (String) xprim.getParsedValue(DOMUtil.XSD_STRING);
@@ -702,7 +802,6 @@ public class PrismBeanConverter {
         } else if (prismContext != null && prismContext.getSchemaRegistry().determineDefinitionFromClass(bean.getClass()) != null){
         	return prismContext.getXnodeProcessor().serializeObject(((Objectable)bean).asPrismObject()).getSubnode();
         }
-
         // Note: SearchFilterType is treated below
 
         Class<? extends Object> beanClass = bean.getClass();

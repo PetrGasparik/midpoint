@@ -18,10 +18,12 @@ package com.evolveum.midpoint.common.refinery;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.util.QNameUtil;
 
 import org.apache.commons.lang.Validate;
@@ -38,6 +40,7 @@ import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.LayerType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDefinitionType;
@@ -107,11 +110,90 @@ public class RefinedResourceSchema extends ResourceSchema implements DebugDumpab
 			if (intent == null && acctDef.isDefault()) {
 				return acctDef;
 			}
-			if (acctDef.getIntent().equals(intent)) {
+			if (acctDef.getIntent() != null && acctDef.getIntent().equals(intent)) {
+				return acctDef;
+			}
+			if (acctDef.getIntent() == null && intent == null) {
 				return acctDef;
 			}
 		}
 		return null;
+	}
+	
+	public CompositeRefinedObjectClassDefinition determineCompositeObjectClassDefinition(ResourceShadowDiscriminator discriminator) {
+		if (discriminator.getKind() == null && discriminator.getObjectClass() == null) {
+			return null;
+		}
+		RefinedObjectClassDefinition structuralObjectClassDefinition;
+		if (discriminator.getKind() == null && discriminator.getObjectClass() != null) {
+			structuralObjectClassDefinition = getRefinedDefinition(discriminator.getObjectClass());
+		} else {
+			structuralObjectClassDefinition = getRefinedDefinition(discriminator.getKind(), discriminator.getIntent());
+		}
+		if (structuralObjectClassDefinition == null) {
+			return null;
+		}
+		Collection<RefinedObjectClassDefinition> auxiliaryObjectClassDefinitions = structuralObjectClassDefinition.getAuxiliaryObjectClassDefinitions();
+		return new CompositeRefinedObjectClassDefinition(structuralObjectClassDefinition, auxiliaryObjectClassDefinitions);
+	}
+	
+	public CompositeRefinedObjectClassDefinition determineCompositeObjectClassDefinition(PrismObject<ShadowType> shadow) throws SchemaException {
+		ShadowType shadowType = shadow.asObjectable();
+		
+		RefinedObjectClassDefinition structuralObjectClassDefinition = null;
+		ShadowKindType kind = shadowType.getKind();
+		String intent = shadowType.getIntent();
+		QName structuralObjectClassQName = shadowType.getObjectClass();
+		
+		if (kind != null) {
+			structuralObjectClassDefinition = getRefinedDefinition(kind, intent);
+		}
+		
+		if (structuralObjectClassDefinition == null) {
+			// Fallback to objectclass only
+			if (structuralObjectClassQName == null) {
+				return null;
+			}
+			structuralObjectClassDefinition = getRefinedDefinition(structuralObjectClassQName);
+		}
+		
+		if (structuralObjectClassDefinition == null) {
+			return null;			
+		}
+		List<QName> auxiliaryObjectClassQNames = shadowType.getAuxiliaryObjectClass();
+		Collection<RefinedObjectClassDefinition> auxiliaryObjectClassDefinitions = new ArrayList<>(auxiliaryObjectClassQNames.size());
+		for (QName auxiliaryObjectClassQName: auxiliaryObjectClassQNames) {
+			RefinedObjectClassDefinition auxiliaryObjectClassDef = getRefinedDefinition(auxiliaryObjectClassQName);
+			if (auxiliaryObjectClassDef == null) {
+				throw new SchemaException("Auxiliary object class "+auxiliaryObjectClassQName+" specified in "+shadow+" does not exist");
+			}
+			auxiliaryObjectClassDefinitions.add(auxiliaryObjectClassDef);
+		}
+				
+		return new CompositeRefinedObjectClassDefinition(structuralObjectClassDefinition, auxiliaryObjectClassDefinitions);
+	}
+	
+	public CompositeRefinedObjectClassDefinition determineCompositeObjectClassDefinition(QName structuralObjectClassQName, ShadowKindType kind, String intent) {
+		RefinedObjectClassDefinition structuralObjectClassDefinition = null;
+		Collection<RefinedObjectClassDefinition> auxiliaryObjectClassDefinitions;
+		if (kind != null) {
+			structuralObjectClassDefinition = getRefinedDefinition(kind, intent);
+		} 
+		if (structuralObjectClassDefinition == null) {
+			// Fallback to objectclass only
+			if (structuralObjectClassQName == null) {
+				throw new IllegalArgumentException("No kind nor objectclass defined");
+			}
+			structuralObjectClassDefinition = getRefinedDefinition(structuralObjectClassQName);
+		}
+		
+		if (structuralObjectClassDefinition == null) {
+			return null;
+		}		
+
+		auxiliaryObjectClassDefinitions = structuralObjectClassDefinition.getAuxiliaryObjectClassDefinitions();
+		
+		return new CompositeRefinedObjectClassDefinition(structuralObjectClassDefinition, auxiliaryObjectClassDefinitions);
 	}
 
     /**
@@ -314,18 +396,22 @@ public class RefinedResourceSchema extends ResourceSchema implements DebugDumpab
 			return null;
 		}
 		
-		SchemaHandlingType schemaHandling = resourceType.getSchemaHandling();
-		
 		RefinedResourceSchema rSchema = new RefinedResourceSchema(resourceType, originalResourceSchema, prismContext);
 		
-		if (hasAnyObjectTypeDef(schemaHandling)) {
-			
+		SchemaHandlingType schemaHandling = resourceType.getSchemaHandling();
+		if (schemaHandling != null) {
 			parseObjectTypeDefsFromSchemaHandling(rSchema, resourceType, schemaHandling, 
-					schemaHandling.getObjectType(), null, prismContext, "definition of "+resourceType);
-					
-		} else {
-			parseObjectTypesFromSchema(rSchema, resourceType, prismContext, 
-					"definition of "+resourceType);
+				schemaHandling.getObjectType(), null, prismContext, "definition of "+resourceType);
+		}
+
+		parseObjectTypesFromSchema(rSchema, resourceType, prismContext, 
+				"definition of "+resourceType);
+		
+		// We need to parse associations and auxiliary object classes in a second pass. We need to have all object classes parsed before correctly setting association
+		// targets
+		for (RefinedObjectClassDefinition rOcDef: rSchema.getRefinedDefinitions()) {
+			rOcDef.parseAssociations(rSchema);
+			rOcDef.parseAuxiliaryObjectClasses(rSchema);
 		}
 		
 		return rSchema;
@@ -365,12 +451,6 @@ public class RefinedResourceSchema extends ResourceSchema implements DebugDumpab
 				
 			rSchema.add(rOcDef);
 		}
-		
-		// We need to parse associations in a second pass. We need to have all object classes parsed before correctly setting association
-		// targets
-		for (RefinedObjectClassDefinition rOcDef: rSchema.getRefinedDefinitions()) {
-			rOcDef.parseAssociations(rSchema);
-		}
 	}
 
 	private static void parseObjectTypesFromSchema(RefinedResourceSchema rSchema, ResourceType resourceType,
@@ -378,23 +458,23 @@ public class RefinedResourceSchema extends ResourceSchema implements DebugDumpab
 
 		RefinedObjectClassDefinition rAccountDefDefault = null;
 		for(ObjectClassComplexTypeDefinition objectClassDef: rSchema.getOriginalResourceSchema().getObjectClassDefinitions()) {
-			if (objectClassDef.getKind() == ShadowKindType.ACCOUNT) {
-				QName objectClassname = objectClassDef.getTypeName();
-				RefinedObjectClassDefinition rAccountDef = RefinedObjectClassDefinition.parseFromSchema(objectClassDef, resourceType, rSchema, prismContext,
-						"object class " + objectClassname + " (interpreted as account type definition), in " + contextDescription);
-				
-				if (rAccountDef.isDefault()) {
-					if (rAccountDefDefault == null) {
-						rAccountDefDefault = rAccountDef;
-					} else {
-						throw new SchemaException("More than one default account definitions ("+rAccountDefDefault+", "+rAccountDef+") in " + contextDescription);
-					}
-				}
-					
-				rSchema.add(rAccountDef);
+			QName objectClassname = objectClassDef.getTypeName();
+			if (rSchema.getRefinedDefinition(objectClassname) != null) {
+				continue;
 			}
-		}
-		
+			RefinedObjectClassDefinition rOcDef = RefinedObjectClassDefinition.parseFromSchema(objectClassDef, resourceType, rSchema, prismContext,
+					"object class " + objectClassname + ", in " + contextDescription);
+			
+			if (objectClassDef.getKind() == ShadowKindType.ACCOUNT && rOcDef.isDefault()) {
+				if (rAccountDefDefault == null) {
+					rAccountDefDefault = rOcDef;
+				} else {
+					throw new SchemaException("More than one default account definitions ("+rAccountDefDefault+", "+rOcDef+") in " + contextDescription);
+				}
+			}
+			
+			rSchema.add(rOcDef);
+		}		
 	}
 		
 	public LayerRefinedResourceSchema forLayer(LayerType layer) {

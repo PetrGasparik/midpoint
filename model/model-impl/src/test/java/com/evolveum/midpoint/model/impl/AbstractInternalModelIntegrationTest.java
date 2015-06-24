@@ -364,6 +364,8 @@ public class AbstractInternalModelIntegrationTest extends AbstractModelIntegrati
 			LensContext<F> context, Class<F> focusType, File file) throws JAXBException, SchemaException,
             IOException {
 		PrismObject<ShadowType> account = PrismTestUtil.parseObject(file);
+		account.trim();
+		account.checkConsistence();
 		LensFocusContext<F> focusContext = context.getOrCreateFocusContext();
 		ObjectDelta<F> userDelta = ObjectDelta.createModificationAddReference(focusType, focusContext
 				.getObjectOld().getOid(), FocusType.F_LINK_REF, prismContext, account);
@@ -407,7 +409,7 @@ public class AbstractInternalModelIntegrationTest extends AbstractModelIntegrati
 		ResourceType resourceType = accCtx.getResource();
 		QName attrQName = new QName(ResourceTypeUtil.getResourceNamespace(resourceType), attributeLocalName);
 		ItemPath attrPath = new ItemPath(ShadowType.F_ATTRIBUTES, attrQName);
-		RefinedObjectClassDefinition refinedAccountDefinition = accCtx.getRefinedAccountDefinition();
+		RefinedObjectClassDefinition refinedAccountDefinition = accCtx.getStructuralObjectClassDefinition();
 		RefinedAttributeDefinition attrDef = refinedAccountDefinition.findAttributeDefinition(attrQName);
 		assertNotNull("No definition of attribute "+attrQName+" in account def "+refinedAccountDefinition, attrDef);
 		ObjectDelta<ShadowType> accountDelta = ObjectDelta.createEmptyModifyDelta(ShadowType.class, accountOid, prismContext);

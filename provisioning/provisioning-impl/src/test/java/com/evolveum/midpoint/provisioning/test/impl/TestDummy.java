@@ -49,6 +49,7 @@ import org.apache.commons.lang.StringUtils;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
+import org.testng.annotations.AfterClass;
 import org.testng.annotations.Listeners;
 import org.testng.annotations.Test;
 import org.w3c.dom.Element;
@@ -61,6 +62,7 @@ import com.evolveum.midpoint.common.monitor.InternalMonitor;
 import com.evolveum.midpoint.common.refinery.RefinedAttributeDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
+import com.evolveum.midpoint.common.refinery.ResourceShadowDiscriminator;
 import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.PrismContainer;
 import com.evolveum.midpoint.prism.PrismContainerDefinition;
@@ -206,6 +208,11 @@ public class TestDummy extends AbstractDummyTest {
 	public void initSystem(Task initTask, OperationResult initResult) throws Exception {
 		super.initSystem(initTask, initResult);
 //		InternalMonitor.setTraceConnectorOperation(true);
+	}
+	
+	@AfterClass
+	public static void assertCleanShutdown() throws Exception {
+		dummyResource.assertNoConnections();
 	}
 
 	@Test
@@ -469,9 +476,9 @@ public class TestDummy extends AbstractDummyTest {
 	}
 
 	@Test
-	public void test006RefinedSchema() throws ObjectNotFoundException, CommunicationException, SchemaException,
-			ConfigurationException {
-		TestUtil.displayTestTile("test006RefinedSchema");
+	public void test006RefinedSchema() throws Exception {
+		final String TEST_NAME = "test006RefinedSchema";
+		TestUtil.displayTestTile(TEST_NAME);
 		// GIVEN
 
 		// WHEN
@@ -493,6 +500,12 @@ public class TestDummy extends AbstractDummyTest {
 		assertFalse("Empty secondary identifiers in account", accountDef.getSecondaryIdentifiers().isEmpty());
 		assertNotNull("No naming attribute in account", accountDef.getNamingAttribute());
 		assertFalse("No nativeObjectClass in account", StringUtils.isEmpty(accountDef.getNativeObjectClass()));
+		
+		assertEquals("Unexpected kind in account definition", ShadowKindType.ACCOUNT, accountDef.getKind());
+		assertTrue("Account definition in not default", accountDef.isDefaultInAKind());
+		assertEquals("Wrong intent in account definition", SchemaConstants.INTENT_DEFAULT, accountDef.getIntent());
+		assertFalse("Account definition is deprecated", accountDef.isDeprecated());
+		assertFalse("Account definition in auxiliary", accountDef.isAuxiliary());
 
 		RefinedAttributeDefinition uidDef = accountDef.findAttributeDefinition(ConnectorFactoryIcfImpl.ICFS_UID);
 		assertEquals(1, uidDef.getMaxOccurs());
@@ -1210,7 +1223,7 @@ public class TestDummy extends AbstractDummyTest {
 		newAccount.setPassword("parrotMonster");
 		dummyResource.addAccount(newAccount);
 
-		ObjectQuery query = ObjectQueryUtil.createResourceAndAccountQuery(RESOURCE_DUMMY_OID, 
+		ObjectQuery query = ObjectQueryUtil.createResourceAndObjectClassQuery(RESOURCE_DUMMY_OID, 
 				new QName(ResourceTypeUtil.getResourceNamespace(resourceType),
 						ConnectorFactoryIcfImpl.ACCOUNT_OBJECT_CLASS_LOCAL_NAME), prismContext); 
 
@@ -1221,6 +1234,7 @@ public class TestDummy extends AbstractDummyTest {
 			@Override
 			public boolean handle(PrismObject<ShadowType> object, OperationResult parentResult) {
 				foundObjects.add(object);
+				display("Found", object);
 
 				ObjectType objectType = object.asObjectable();
 				assertTrue(objectType instanceof ShadowType);
@@ -1294,7 +1308,7 @@ public class TestDummy extends AbstractDummyTest {
 		OperationResult result = new OperationResult(TestDummy.class.getName()
 				+ "." + TEST_NAME);
 
-		ObjectQuery query = ObjectQueryUtil.createResourceAndAccountQuery(RESOURCE_DUMMY_OID, 
+		ObjectQuery query = ObjectQueryUtil.createResourceAndObjectClassQuery(RESOURCE_DUMMY_OID, 
 				new QName(ResourceTypeUtil.getResourceNamespace(resourceType),
 						ConnectorFactoryIcfImpl.ACCOUNT_OBJECT_CLASS_LOCAL_NAME), prismContext); 
 
@@ -2486,7 +2500,7 @@ public class TestDummy extends AbstractDummyTest {
 
 		ObjectQuery query;
         if (useObjectClassFilter) {
-            query = ObjectQueryUtil.createResourceAndAccountQuery(RESOURCE_DUMMY_OID, new QName(ResourceTypeUtil.getResourceNamespace(resourceType),
+            query = ObjectQueryUtil.createResourceAndObjectClassQuery(RESOURCE_DUMMY_OID, new QName(ResourceTypeUtil.getResourceNamespace(resourceType),
                     ConnectorFactoryIcfImpl.ACCOUNT_OBJECT_CLASS_LOCAL_NAME), prismContext);
             if (attrFilter != null) {
                 AndFilter filter = (AndFilter) query.getFilter();
@@ -2906,10 +2920,12 @@ public class TestDummy extends AbstractDummyTest {
 		delta.checkConsistence();
 
 		// WHEN
+		TestUtil.displayWhen(TEST_NAME);
 		provisioningService.modifyObject(ShadowType.class, delta.getOid(), delta.getModifications(),
 				new OperationProvisioningScriptsType(), null, task, result);
 
 		// THEN
+		TestUtil.displayThen(TEST_NAME);
 		result.computeStatus();
 		display("modifyObject result", result);
 		TestUtil.assertSuccess(result);
@@ -3834,10 +3850,9 @@ public class TestDummy extends AbstractDummyTest {
 	static Task syncTokenTask = null;
 	
 	@Test
-	public void test800LiveSyncInit() throws ObjectNotFoundException, CommunicationException, SchemaException,
-			com.evolveum.icf.dummy.resource.ObjectAlreadyExistsException, ConfigurationException,
-			SecurityViolationException {
-		TestUtil.displayTestTile("test800LiveSyncInit");
+	public void test800LiveSyncInit() throws Exception {
+		final String TEST_NAME = "test800LiveSyncInit";
+		TestUtil.displayTestTile(TEST_NAME);
 		syncTokenTask = taskManager.createTaskInstance(TestDummy.class.getName() + ".syncTask");
 
 		dummyResource.setSyncStyle(DummySyncStyle.DUMB);
@@ -3849,8 +3864,12 @@ public class TestDummy extends AbstractDummyTest {
 		// Dry run to remember the current sync token in the task instance.
 		// Otherwise a last sync token whould be used and
 		// no change would be detected
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType), 
-				syncTokenTask, result);
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType));
+		
+		// WHEN
+		TestUtil.displayWhen(TEST_NAME);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		result.computeStatus();
@@ -3867,10 +3886,12 @@ public class TestDummy extends AbstractDummyTest {
 
 	@Test
 	public void test801LiveSyncAddBlackbeard() throws Exception {
-		TestUtil.displayTestTile("test801LiveSyncAddBlackbeard");
+		final String TEST_NAME = "test801LiveSyncAddBlackbeard";
+		TestUtil.displayTestTile(TEST_NAME);
+		
 		// GIVEN
-		OperationResult result = new OperationResult(TestDummy.class.getName()
-				+ ".test801LiveSyncAddBlackbeard");
+		Task task = taskManager.createTaskInstance(TestDummy.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
 
 		syncServiceMock.reset();
 		dummyResource.setSyncStyle(DummySyncStyle.DUMB);
@@ -3884,9 +3905,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType));
+		
 		// WHEN
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType), 
-				syncTokenTask, result);
+		TestUtil.displayWhen(TEST_NAME);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		result.computeStatus();
@@ -3931,10 +3955,11 @@ public class TestDummy extends AbstractDummyTest {
 
 	@Test
 	public void test802LiveSyncModifyBlackbeard() throws Exception {
-		TestUtil.displayTestTile("test802LiveSyncModifyBlackbeard");
+		final String TEST_NAME = "test802LiveSyncModifyBlackbeard";
+		TestUtil.displayTestTile(TEST_NAME);
 		// GIVEN
 		OperationResult result = new OperationResult(TestDummy.class.getName()
-				+ ".test802LiveSyncModifyBlackbeard");
+				+ "." + TEST_NAME);
 
 		syncServiceMock.reset();
 
@@ -3943,9 +3968,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType));
+		
 		// WHEN
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType), 
-				syncTokenTask, result);
+		TestUtil.displayWhen(TEST_NAME);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		result.computeStatus();
@@ -4117,9 +4145,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				objectClass);
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, objectClass, syncTokenTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4186,9 +4217,12 @@ public class TestDummy extends AbstractDummyTest {
 		DummyAccount dummyAccount = getDummyAccountAssert(DRAKE_USERNAME, drakeIcfUid);
 		dummyAccount.replaceAttributeValue("fullname", "Captain Drake");
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				objectClass);
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, objectClass, syncTokenTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4257,9 +4291,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				objectClass);
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, objectClass, syncTokenTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4331,9 +4368,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				objectClass);
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, objectClass, syncTokenTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4407,9 +4447,12 @@ public class TestDummy extends AbstractDummyTest {
 
 		display("Resource before sync", dummyResource.debugDump());
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				objectClass);
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, objectClass, syncTokenTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4473,10 +4516,12 @@ public class TestDummy extends AbstractDummyTest {
 		DummyAccount dummyAccount = getDummyAccountAssert(ACCOUNT_DAEMON_USERNAME, daemonIcfUid);
 		dummyAccount.replaceAttributeValue("fullname", "Maxwell deamon");
 
+		ResourceShadowDiscriminator coords = new ResourceShadowDiscriminator(RESOURCE_DUMMY_OID, 
+				ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType));
+		
 		// WHEN
 		TestUtil.displayWhen(TEST_NAME);
-		provisioningService.synchronize(RESOURCE_DUMMY_OID, ProvisioningTestUtil.getDefaultAccountObjectClass(resourceType), 
-				syncTask, result);
+		provisioningService.synchronize(coords, syncTokenTask, result);
 
 		// THEN
 		TestUtil.displayThen(TEST_NAME);
@@ -4495,13 +4540,12 @@ public class TestDummy extends AbstractDummyTest {
 	}
 
 	@Test
-	public void test901FailResourceNotFound() throws FileNotFoundException, JAXBException,
-			ObjectAlreadyExistsException, SchemaException, CommunicationException, ObjectNotFoundException,
-			ConfigurationException, SecurityViolationException {
-		TestUtil.displayTestTile("test901FailResourceNotFound");
+	public void test901FailResourceNotFound() throws Exception {
+		final String TEST_NAME = "test901FailResourceNotFound";
+		TestUtil.displayTestTile(TEST_NAME);
 		// GIVEN
 		OperationResult result = new OperationResult(TestDummy.class.getName()
-				+ ".test901FailResourceNotFound");
+				+ "." + TEST_NAME);
 
 		// WHEN
 		try {
@@ -4518,6 +4562,19 @@ public class TestDummy extends AbstractDummyTest {
 		TestUtil.assertFailure(result);
 		
 		assertSteadyResource();
+	}
+	
+	
+	@Test
+	public void test999Shutdown() throws Exception {
+		final String TEST_NAME = "test999Shutdown";
+		TestUtil.displayTestTile(TEST_NAME);
+		
+		// WHEN
+		provisioningService.shutdown();
+		
+		// THEN
+		dummyResource.assertNoConnections();
 	}
 	
 	private void checkAccountShadow(ShadowType shadow, OperationResult parentResult) throws SchemaException {
