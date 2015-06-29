@@ -18,13 +18,13 @@ package com.evolveum.midpoint.web.page.admin.configuration;
 
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.prism.PrismProperty;
+import com.evolveum.midpoint.prism.PrismPropertyDefinition;
 import com.evolveum.midpoint.prism.match.PolyStringNormMatchingRule;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyStringNormalizer;
 import com.evolveum.midpoint.prism.query.*;
 import com.evolveum.midpoint.schema.GetOperationOptions;
-import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
@@ -32,6 +32,10 @@ import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.task.api.TaskManager;
+import com.evolveum.midpoint.util.DOMUtil;
+import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
+import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
+import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
@@ -63,10 +67,9 @@ import com.evolveum.midpoint.web.util.ObjectTypeGuiDescriptor;
 import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.web.util.WebModelUtils;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-
+import com.evolveum.prism.xml.ns._public.query_3.QueryType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.ajax.form.AjaxFormChoiceComponentUpdatingBehavior;
 import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.form.OnChangeAjaxBehavior;
 import org.apache.wicket.ajax.markup.html.form.AjaxCheckBox;
@@ -84,6 +87,7 @@ import org.apache.wicket.markup.repeater.Item;
 import org.apache.wicket.model.*;
 import org.apache.wicket.request.mapper.parameter.PageParameters;
 
+import javax.xml.namespace.QName;
 import java.util.*;
 
 /**
@@ -103,6 +107,7 @@ public class PageDebugList extends PageAdminConfiguration {
     private static final String OPERATION_LAXATIVE_DELETE = DOT_CLASS + "laxativeDelete";
 
     private static final String OPERATION_LOAD_RESOURCES = DOT_CLASS + "loadResources";
+    private static final String OPERATION_DELETE_SHADOWS = DOT_CLASS + "deleteShadows";
 
     private static final String ID_CONFIRM_DELETE_POPUP = "confirmDeletePopup";
     private static final String ID_MAIN_FORM = "mainForm";
@@ -124,9 +129,7 @@ public class PageDebugList extends PageAdminConfiguration {
     private IModel<DebugConfDialogDto> confDialogModel;
     private IModel<List<ObjectViewDto>> resourcesModel;
 
-    private int objectsDeleted = 0;
-
-    public PageDebugList(){
+    public PageDebugList() {
         this(true);
     }
 
@@ -148,7 +151,7 @@ public class PageDebugList extends PageAdminConfiguration {
             }
         };
 
-        resourcesModel= new LoadableModel<List<ObjectViewDto>>() {
+        resourcesModel = new LoadableModel<List<ObjectViewDto>>() {
 
             @Override
             protected List<ObjectViewDto> load() {
@@ -189,42 +192,13 @@ public class PageDebugList extends PageAdminConfiguration {
 
     private void initLayout() {
         DeleteAllDialog deleteAllDialog = new DeleteAllDialog(ID_DELETE_ALL_DIALOG,
-                createStringResource("pageDebugList.dialog.title.deleteAll")){
+                createStringResource("pageDebugList.dialog.title.deleteAll")) {
 
             @Override
             public void yesPerformed(AjaxRequestTarget target) {
                 close(target);
 
-                Collection<SelectorOptions<GetOperationOptions>> options = new ArrayList<>();
-                GetOperationOptions opt = GetOperationOptions.createRaw();
-                options.add(SelectorOptions.create(ItemPath.EMPTY_PATH, opt));
-
-                Task task = createSimpleTask(OPERATION_LAXATIVE_DELETE);
-                OperationResult result = new OperationResult(OPERATION_LAXATIVE_DELETE);
-
-                objectsDeleted = 0;
-                DeleteAllDto dto = getModel().getObject();
-
-                if(dto.getDeleteUsers()){
-                    deleteAllUsers(task, result, options);
-                }
-                if(dto.getDeleteOrgs()){
-                    deleteAllOrgUnits(task, result, options);
-                }
-                if(dto.getDeleteAccountShadow()){
-                    deleteAllAccountShadows(task, result, options, true);
-                }
-                if(dto.getDeleteNonAccountShadow()){
-                    deleteAllAccountShadows(task, result, options, false);
-                }
-
-                LOGGER.info("Deleted {} out of {} objects.", objectsDeleted, getObjectsToDelete());
-
-                target.add(getListTable());
-                target.add(getFeedbackPanel());
-
-                result.recomputeStatus();
-                showResult(result);
+                deleteAllIdentitiesConfirmed(target, getModel().getObject());
             }
         };
         add(deleteAllDialog);
@@ -251,7 +225,7 @@ public class PageDebugList extends PageAdminConfiguration {
             }
 
             @Override
-            public boolean getLabelEscapeModelStrings(){
+            public boolean getLabelEscapeModelStrings() {
                 return false;
             }
         };
@@ -267,7 +241,7 @@ public class PageDebugList extends PageAdminConfiguration {
 
         DebugSearchDto dto = searchModel.getObject();
         Class type = dto.getType().getClassDefinition();
-        addOrReplaceTable(new RepositoryObjectDataProvider(this, type){
+        addOrReplaceTable(new RepositoryObjectDataProvider(this, type) {
 
             @Override
             protected void saveProviderPaging(ObjectQuery query, ObjectPaging paging) {
@@ -419,26 +393,26 @@ public class PageDebugList extends PageAdminConfiguration {
                     }
                 }));
 
-//        headerMenuItems.add(new InlineMenuItem(createStringResource("pageDebugList.menu.deleteAllType"), true,
-//                new HeaderMenuAction(this) {
-//
-//                    @Override
-//                    public void onSubmit(AjaxRequestTarget target, Form<?> form) {
-//                        deleteAllType(target);
-//                    }
-//                }));
+        headerMenuItems.add(new InlineMenuItem(createStringResource("pageDebugList.menu.deleteAllType"), true,
+                new HeaderMenuAction(this) {
+
+                    @Override
+                    public void onSubmit(AjaxRequestTarget target, Form<?> form) {
+                        deleteAllType(target);
+                    }
+                }));
 
         headerMenuItems.add(new InlineMenuItem(createStringResource("pageDebugList.menu.deleteShadowsOnResource"),
                 new Model(true),
                 new AbstractReadOnlyModel<Boolean>() {
 
-            @Override
-            public Boolean getObject() {
-                DebugSearchDto dto = searchModel.getObject();
-                return ObjectTypes.SHADOW.equals(dto.getType());
-            }
+                    @Override
+                    public Boolean getObject() {
+                        DebugSearchDto dto = searchModel.getObject();
+                        return ObjectTypes.SHADOW.equals(dto.getType());
+                    }
 
-        }, false, new HeaderMenuAction(this) {
+                }, false, new HeaderMenuAction(this) {
 
             @Override
             public void onClick(AjaxRequestTarget target) {
@@ -601,7 +575,7 @@ public class PageDebugList extends PageAdminConfiguration {
         target.add(table);
     }
 
-    private ObjectQuery createQuery(){
+    private ObjectQuery createQuery() {
         DebugSearchDto dto = searchModel.getObject();
 
         List<ObjectFilter> filters = new ArrayList<>();
@@ -680,124 +654,58 @@ public class PageDebugList extends PageAdminConfiguration {
         };
     }
 
-    private void deleteAllUsers(Task task, final OperationResult result, Collection<SelectorOptions<GetOperationOptions>> options){
-        ResultHandler<UserType> userHandler = new ResultHandler<UserType>() {
+    private void deleteAllIdentitiesConfirmed(AjaxRequestTarget target, DeleteAllDto dto) {
+        Collection<SelectorOptions<GetOperationOptions>> options = new ArrayList<>();
+        GetOperationOptions opt = GetOperationOptions.createRaw();
+        options.add(SelectorOptions.create(ItemPath.EMPTY_PATH, opt));
 
-            @Override
-            public boolean handle(PrismObject object, OperationResult parentResult) {
-                if (!SystemObjectsType.USER_ADMINISTRATOR.value().equals(object.asObjectable().getOid())) {
-                    ObjectDelta delta = ObjectDelta.createDeleteDelta(UserType.class, object.asObjectable().getOid(), getPrismContext());
-                    Task task = createSimpleTask(OPERATION_LAXATIVE_DELETE);
-                    OperationResult r = result.createMinorSubresult(OPERATION_LAXATIVE_DELETE);
-
-                    try {
-                        getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), ModelExecuteOptions.createRaw(), task, r);
-                        objectsDeleted++;
-
-                        if (objectsDeleted % DELETE_LOG_INTERVAL == 0)
-                            LOGGER.info("Deleted {} out of {} objects.", objectsDeleted, getObjectsToDelete());
-
-                        r.recordSuccess();
-                    } catch (Exception ex) {
-                        r.computeStatus(getString("pageDebugList.message.singleUserDeleteProblem"));
-                        LoggingUtils.logException(LOGGER, getString("pageDebugList.message.singleUserDeleteProblem"), ex);
-                    }
-                    parentResult.addSubresult(r);
-                }
-                return true;
-            }
-        };
-
+        OperationResult result = new OperationResult(OPERATION_LAXATIVE_DELETE);
         try {
-            getModelService().searchObjectsIterative(UserType.class, null, userHandler, options, task, result);
+            if (dto.getDeleteUsers()) {
+                ObjectQuery query = createDeleteAllUsersQuery();
+                deleteObjectsAsync(UserType.COMPLEX_TYPE, query, true, result);
+            }
+            if (dto.getDeleteOrgs()) {
+                deleteObjectsAsync(OrgType.COMPLEX_TYPE, null, true, result);
+            }
+            if (dto.getDeleteAccountShadow()) {
+                deleteAllShadowsConfirmed(result, true);
+            }
+            if (dto.getDeleteNonAccountShadow()) {
+                deleteAllShadowsConfirmed(result, false);
+            }
         } catch (Exception ex) {
             result.computeStatus(getString("pageDebugList.message.laxativeProblem"));
             LoggingUtils.logException(LOGGER, getString("pageDebugList.message.laxativeProblem"), ex);
         }
+
+        target.add(getFeedbackPanel());
+
+        result.recomputeStatus();
+        showResult(result);
     }
 
-    private void deleteAllOrgUnits(Task task, final OperationResult result, Collection<SelectorOptions<GetOperationOptions>> options){
-        ResultHandler<OrgType> userHandler = new ResultHandler<OrgType>() {
+    private ObjectQuery createDeleteAllUsersQuery() {
+        InOidFilter inOid = InOidFilter.createInOid(SystemObjectsType.USER_ADMINISTRATOR.value());
+        NotFilter not = new NotFilter(inOid);
 
-            @Override
-            public boolean handle(PrismObject object, OperationResult parentResult) {
-             ObjectDelta delta = ObjectDelta.createDeleteDelta(OrgType.class, object.asObjectable().getOid(), getPrismContext());
-                Task task = createSimpleTask(OPERATION_LAXATIVE_DELETE);
-                OperationResult r = result.createMinorSubresult(OPERATION_LAXATIVE_DELETE);
+        return ObjectQuery.createObjectQuery(not);
+    }
 
-                try {
-                    getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), ModelExecuteOptions.createRaw(), task, r);
-                    objectsDeleted++;
+    private void deleteAllShadowsConfirmed(OperationResult result, boolean deleteAccountShadows)
+            throws ObjectAlreadyExistsException, ObjectNotFoundException, SchemaException {
 
-                    if (objectsDeleted % DELETE_LOG_INTERVAL == 0)
-                        LOGGER.info("Deleted {} out of {} objects.", objectsDeleted, getObjectsToDelete());
+        ObjectFilter kind = EqualFilter.createEqual(ShadowType.F_KIND, ShadowType.class,
+                getPrismContext(), null, ShadowKindType.ACCOUNT);
 
-                    r.recordSuccess();
-                } catch (Exception ex) {
-                    r.computeStatus(getString("pageDebugList.message.singleOrgDeleteProblem"));
-                    LoggingUtils.logException(LOGGER, getString("pageDebugList.message.singleOrgDeleteProblem"), ex);
-                }
-                parentResult.addSubresult(r);
-
-                return true;
-            }
-        };
-
-        try {
-            getModelService().searchObjectsIterative(OrgType.class, null, userHandler, options, task, result);
-        } catch (Exception ex) {
-            result.computeStatus(getString("pageDebugList.message.laxativeProblem"));
-            LoggingUtils.logException(LOGGER, getString("pageDebugList.message.laxativeProblem"), ex);
+        ObjectQuery query;
+        if (deleteAccountShadows) {
+            query = ObjectQuery.createObjectQuery(kind);
+        } else {
+            query = ObjectQuery.createObjectQuery(NotFilter.createNot(kind));
         }
-    }
 
-    private void deleteAllAccountShadows(Task task, final OperationResult result, Collection<SelectorOptions<GetOperationOptions>> options,
-                                         boolean deleteAccountShadows){
-        ResultHandler<ShadowType> shadowHandler = new ResultHandler<ShadowType>() {
-
-            @Override
-            public boolean handle(PrismObject object, OperationResult parentResult) {
-                ObjectDelta delta = ObjectDelta.createDeleteDelta(ShadowType.class, object.asObjectable().getOid(), getPrismContext());
-                Task task = createSimpleTask(OPERATION_LAXATIVE_DELETE);
-                OperationResult r = result.createMinorSubresult(OPERATION_LAXATIVE_DELETE);
-
-                try {
-                    getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), ModelExecuteOptions.createRaw(), task, r);
-                    objectsDeleted++;
-
-                    if (objectsDeleted % DELETE_LOG_INTERVAL == 0)
-                        LOGGER.info("Deleted {} out of {} objects.", objectsDeleted, getObjectsToDelete());
-
-                    r.recordSuccess();
-                } catch (Exception ex) {
-                    r.computeStatus(getString("pageDebugList.message.singleShadowDeleteProblem"));
-                    LoggingUtils.logException(LOGGER, getString("pageDebugList.message.singleShadowDeleteProblem"), ex);
-                }
-                parentResult.addSubresult(r);
-                return true;
-            }
-        };
-
-        try {
-            if(deleteAccountShadows){
-                ObjectFilter filter = EqualFilter.createEqual(ShadowType.F_KIND, ShadowType.class, getPrismContext(), null, ShadowKindType.ACCOUNT);
-                ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-                getModelService().searchObjectsIterative(ShadowType.class, query, shadowHandler, options, task, result);
-            } else {
-                ObjectFilter filter = EqualFilter.createEqual(ShadowType.F_KIND, ShadowType.class, getPrismContext(), null, ShadowKindType.ACCOUNT);
-                ObjectQuery query = ObjectQuery.createObjectQuery(NotFilter.createNot(filter));
-                getModelService().searchObjectsIterative(ShadowType.class, query, shadowHandler, options, task, result);
-            }
-
-        } catch (Exception ex) {
-            result.computeStatus(getString("pageDebugList.message.laxativeProblem"));
-            LoggingUtils.logException(LOGGER, getString("pageDebugList.message.laxativeProblem"), ex);
-        }
-    }
-
-    private int getObjectsToDelete(){
-        DeleteAllDialog dialog = (DeleteAllDialog)get(ID_DELETE_ALL_DIALOG);
-        return dialog.getObjectsToDelete();
+        deleteObjectsAsync(ShadowType.COMPLEX_TYPE, query, true, result);
     }
 
     private void exportSelected(AjaxRequestTarget target, DebugObjectItem item) {
@@ -870,13 +778,34 @@ public class PageDebugList extends PageAdminConfiguration {
 
     private void deleteAllIdentities(AjaxRequestTarget target) {
         DeleteAllDialog dialog = (DeleteAllDialog) get(ID_DELETE_ALL_DIALOG);
-//        dialog.getModel().setObject(dialog.createMessage());
         dialog.show(target);
     }
 
     private void deleteAllTypeConfirmed(AjaxRequestTarget target) {
-        //todo implement [lazyman] as background task...
-        warn("Not implemented yet, will be implemented as background task.");
+        DebugSearchDto dto = searchModel.getObject();
+
+        LOGGER.debug("Deleting all of type {}", dto.getType());
+
+        OperationResult result = new OperationResult(OPERATION_DELETE_OBJECTS);
+        try {
+            ObjectQuery query = null;
+            if (ObjectTypes.USER.equals(dto.getType())) {
+                query = createDeleteAllUsersQuery();
+            }
+
+            QName type = dto.getType().getTypeQName();
+
+            deleteObjectsAsync(type, query, true, result);
+
+            info(getString("pageDebugList.messsage.deleteAllOfType", dto.getType()));
+        } catch (Exception ex) {
+            result.recomputeStatus();
+            result.recordFatalError("Couldn't delete objects of type " + dto.getType(), ex);
+
+            LoggingUtils.logException(LOGGER, "Couldn't delete objects of type " + dto.getType(), ex);
+        }
+
+        showResult(result);
         target.add(getFeedbackPanel());
     }
 
@@ -897,7 +826,7 @@ public class PageDebugList extends PageAdminConfiguration {
         target.add(getFeedbackPanel());
     }
 
-    private void clearSearchPerformed(AjaxRequestTarget target){
+    private void clearSearchPerformed(AjaxRequestTarget target) {
         DebugSearchDto dto = searchModel.getObject();
         dto.setText(null);
 
@@ -928,13 +857,63 @@ public class PageDebugList extends PageAdminConfiguration {
         String resourceOid = dto.getResource().getOid();
 
         LOGGER.debug("Deleting shadows on resource {}", resourceOid);
-        //todo implement async task
+
+        OperationResult result = new OperationResult(OPERATION_DELETE_SHADOWS);
+        try {
+            RefFilter ref = RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class,
+                    getPrismContext(), dto.getResource().getOid());
+            ObjectQuery objectQuery = ObjectQuery.createObjectQuery(ref);
+
+            QName type = ShadowType.COMPLEX_TYPE;
+
+            deleteObjectsAsync(type, objectQuery, true, result);
+
+            info(getString("pageDebugList.messsage.deleteAllShadowsStarted", dto.getResource().getName()));
+        } catch (Exception ex) {
+            result.recomputeStatus();
+            result.recordFatalError("Couldn't delete shadows.", ex);
+
+            LoggingUtils.logException(LOGGER, "Couldn't delete shadows", ex);
+        }
+
+        showResult(result);
+        target.add(getFeedbackPanel());
+    }
+
+    private void deleteObjectsAsync(QName type, ObjectQuery objectQuery, boolean raw, OperationResult result)
+            throws SchemaException, ObjectAlreadyExistsException, ObjectNotFoundException {
+
+        Task task = createSimpleTask(result.getOperation());
+        // toto this should be a constant referenced from somewhere
+        task.setHandlerUri("http://midpoint.evolveum.com/xml/ns/public/model/synchronization/task/delete/handler-3");
+
+        if (objectQuery == null) {
+            objectQuery = new ObjectQuery();
+        }
+
+        QueryType query = QueryJaxbConvertor.createQueryType(objectQuery, getPrismContext());
+
+        PrismPropertyDefinition queryDef = new PrismPropertyDefinition(SchemaConstants.MODEL_EXTENSION_OBJECT_QUERY,
+                QueryType.COMPLEX_TYPE, getPrismContext());
+        PrismProperty<QueryType> queryProp = queryDef.instantiate();
+        queryProp.setRealValue(query);
+        task.setExtensionProperty(queryProp);
+
+        PrismPropertyDefinition typeDef = new PrismPropertyDefinition(SchemaConstants.MODEL_EXTENSION_OBJECT_TYPE,
+                DOMUtil.XSD_QNAME, getPrismContext());
+        PrismProperty<QName> typeProp = typeDef.instantiate();
+        typeProp.setRealValue(type);
+        task.setExtensionProperty(typeProp);
+
+        PrismPropertyDefinition rawDef = new PrismPropertyDefinition(SchemaConstants.MODEL_EXTENSION_OPTION_RAW,
+                DOMUtil.XSD_BOOLEAN, getPrismContext());
+        PrismProperty<QName> rawProp = rawDef.instantiate();
+        rawProp.setRealValue(raw);
+        task.setExtensionProperty(rawProp);
+
+        task.savePendingModifications(result);
 
         TaskManager taskManager = getTaskManager();
-//        Task task = taskManager.createTaskInstance(OPERATION_INITIAL_OBJECTS_IMPORT);
-//        task.setChannel(SchemaConstants.CHANNEL_GUI_USER_URI);
-
-        info(getString("pageDebugList.messsage.deleteAllShadowsStarted", dto.getResource().getName()));
-        target.add(getFeedbackPanel());
+        taskManager.switchToBackground(task, result);
     }
 }
