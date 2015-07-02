@@ -71,12 +71,14 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ExclusionPolicyConstraintType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.PolicyConstraintsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
@@ -526,8 +528,9 @@ public class AssignmentEvaluator<F extends FocusType> {
 			roleAssignmentPathSegment.setOrderOneObject(orderOneObject);
 			evaluateAssignment(assignment, roleAssignmentPathSegment, evaluateOld, mode, roleType, subSourceDescription, assignmentPath, task, result);
 		}
+		
 		for(AuthorizationType authorizationType: roleType.getAuthorization()) {
-			Authorization authorization = createAuthorization(authorizationType);
+			Authorization authorization = createAuthorization(authorizationType, roleType.toString());
 			assignment.addAuthorization(authorization);
 		}
 		
@@ -574,8 +577,9 @@ public class AssignmentEvaluator<F extends FocusType> {
 	}
 
 
-	private Authorization createAuthorization(AuthorizationType authorizationType) {
+	private Authorization createAuthorization(AuthorizationType authorizationType, String sourceDesc) {
 		Authorization authorization = new Authorization(authorizationType);
+		authorization.setSourceDescription(sourceDesc);
 		return authorization;
 	}
 

@@ -3800,6 +3800,14 @@
 	            		</xsd:documentation>
 	            	</xsd:annotation>
 				</xsd:element>
+				<xsd:element name="displayNameAttribute" type="xsd:boolean" minOccurs="0">
+	            <xsd:annotation>
+	            		<xsd:documentation>
+	            			Indicated if the content of this attribute should be used as a human-readable name when
+	            			displaying resource objects of this type.
+	            		</xsd:documentation>
+	            	</xsd:annotation>
+				</xsd:element>
 	    		
 	            <xsd:element name="tolerantValuePattern" type="xsd:string" minOccurs="0" maxOccurs="unbounded">
 	            	<xsd:annotation>
@@ -6781,6 +6789,7 @@
             </xsd:appinfo>
         </xsd:annotation>
         <xsd:sequence>
+        	<xsd:element name="name" type="xsd:string" minOccurs="0"/>
         	<xsd:element ref="tns:description" minOccurs="0"/>
         	<xsd:element name="decision" minOccurs="0" type="tns:AuthorizationDecisionType" default="allow"/>
         	<xsd:element name="action" type="xsd:anyURI" minOccurs="1" maxOccurs="unbounded">
