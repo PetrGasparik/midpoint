@@ -32,14 +32,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.common.security.GuardedString.Accessor;
 import org.identityconnectors.framework.common.objects.Attribute;
+import org.identityconnectors.framework.common.objects.AttributeUtil;
 import org.identityconnectors.framework.common.objects.ConnectorObject;
+import org.identityconnectors.framework.common.objects.ConnectorObjectBuilder;
 import org.identityconnectors.framework.common.objects.ObjectClass;
 import org.identityconnectors.framework.common.objects.ObjectClassInfo;
 import org.identityconnectors.framework.common.objects.ObjectClassInfoBuilder;
@@ -52,8 +56,21 @@ import org.identityconnectors.framework.common.objects.SyncDeltaBuilder;
 import org.identityconnectors.framework.common.objects.SyncResultsHandler;
 import org.identityconnectors.framework.common.objects.SyncToken;
 import org.identityconnectors.framework.common.objects.Uid;
+import org.identityconnectors.framework.common.objects.filter.AndFilter;
+import org.identityconnectors.framework.common.objects.filter.AttributeFilter;
+import org.identityconnectors.framework.common.objects.filter.ContainsAllValuesFilter;
+import org.identityconnectors.framework.common.objects.filter.ContainsFilter;
+import org.identityconnectors.framework.common.objects.filter.EndsWithFilter;
+import org.identityconnectors.framework.common.objects.filter.EqualsFilter;
 import org.identityconnectors.framework.common.objects.filter.Filter;
 import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
+import org.identityconnectors.framework.common.objects.filter.GreaterThanFilter;
+import org.identityconnectors.framework.common.objects.filter.GreaterThanOrEqualFilter;
+import org.identityconnectors.framework.common.objects.filter.LessThanFilter;
+import org.identityconnectors.framework.common.objects.filter.LessThanOrEqualFilter;
+import org.identityconnectors.framework.common.objects.filter.NotFilter;
+import org.identityconnectors.framework.common.objects.filter.OrFilter;
+import org.identityconnectors.framework.common.objects.filter.StartsWithFilter;
 import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.Connector;
 import org.identityconnectors.framework.spi.ConnectorClass;
@@ -146,6 +163,8 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
         resource.setEnforceUniqueName(this.configuration.isEnforceUniqueName());
         resource.setTolerateDuplicateValues(this.configuration.getTolerateDuplicateValues());
         resource.setGenerateDefaultValues(this.configuration.isGenerateDefaultValues());
+		resource.setGenerateAccountDescriptionOnCreate(this.configuration.getGenerateAccountDescriptionOnCreate());
+		resource.setGenerateAccountDescriptionOnUpdate(this.configuration.getGenerateAccountDescriptionOnUpdate());
 
         resource.setUselessString(this.configuration.getUselessString());
         GuardedString uselessGuardedString = this.configuration.getUselessGuardedString();
@@ -278,6 +297,9 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		        if (account == null) {
 		        	throw new UnknownUidException("Account with UID "+uid+" does not exist on resource");
 		        }
+
+				// we do this before setting attribute values, in case when description itself would be changed
+				resource.changeDescriptionIfNeeded(account);
 		        
 		        for (Attribute attr : replaceAttributes) {
 		        	if (attr.is(Name.NAME)) {
@@ -297,19 +319,19 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 						}
 		        	} else if (attr.is(OperationalAttributes.PASSWORD_NAME)) {
 		        		changePassword(account,attr);
-		        	
+
 		        	} else if (attr.is(OperationalAttributes.ENABLE_NAME)) {
 		        		account.setEnabled(getBoolean(attr));
-		        		
+
 		        	} else if (attr.is(OperationalAttributes.ENABLE_DATE_NAME)) {
 		        		account.setValidFrom(getDate(attr));
-	
+
 		        	} else if (attr.is(OperationalAttributes.DISABLE_DATE_NAME)) {
 		        		account.setValidTo(getDate(attr));
-		        		
+
 		        	} else if (attr.is(OperationalAttributes.LOCK_OUT_NAME)) {
 		        		account.setLockout(getBoolean(attr));
-	
+
 		        	} else {
 			        	String name = attr.getName();
 			        	try {
@@ -453,6 +475,9 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		        if (account == null) {
 		        	throw new UnknownUidException("Account with UID "+uid+" does not exist on resource");
 		        }
+
+				// we could change the description here, but don't do that not to collide with ADD operation
+				// TODO add the functionality if needed
 		        
 		        for (Attribute attr : valuesToAdd) {
 		        	
@@ -594,8 +619,11 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		        if (account == null) {
 		        	throw new UnknownUidException("Account with UID "+uid+" does not exist on resource");
 		        }
-		        
-		        for (Attribute attr : valuesToRemove) {
+
+				// we could change the description here, but don't do that not to collide with REMOVE operation
+				// TODO add the functionality if needed
+
+				for (Attribute attr : valuesToRemove) {
 		        	if (attr.is(OperationalAttributeInfos.PASSWORD.getName())) {
 		        		throw new UnsupportedOperationException("Removing password value is not supported");
 		        	} else if (attr.is(OperationalAttributes.ENABLE_NAME)) {
@@ -915,7 +943,10 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		        Collection<DummyAccount> accounts = resource.listAccounts();
 		        for (DummyAccount account : accounts) {
 		        	ConnectorObject co = convertToConnectorObject(account, attributesToGet);
-		        	handler.handle(co);
+		        	if (matches(query, co)) {
+		        		co = filterOutAttributesToGet(co, attributesToGet);
+		        		handler.handle(co);
+		        	}
 		        }
 		        
 	        } else if (ObjectClass.GROUP.is(objectClass.getObjectClassValue())) {
@@ -923,7 +954,13 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 	        	Collection<DummyGroup> groups = resource.listGroups();
 		        for (DummyGroup group : groups) {
 		        	ConnectorObject co = convertToConnectorObject(group, attributesToGet);
-		        	handler.handle(co);
+		        	if (matches(query, co)) {
+		        		if (attributesToGetHasAttribute(attributesToGet, DummyGroup.ATTR_MEMBERS_NAME)) {
+		        			resource.recordGroupMembersReadCount();
+		        		}
+		        		co = filterOutAttributesToGet(co, attributesToGet);
+		        		handler.handle(co);
+		        	}
 		        }
 		        
 	        } else if (objectClass.is(OBJECTCLASS_PRIVILEGE_NAME)) {
@@ -931,7 +968,10 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 	        	Collection<DummyPrivilege> privs = resource.listPrivileges();
 		        for (DummyPrivilege priv : privs) {
 		        	ConnectorObject co = convertToConnectorObject(priv, attributesToGet);
-		        	handler.handle(co);
+		        	if (matches(query, co)) {
+		        		co = filterOutAttributesToGet(co, attributesToGet);
+		        		handler.handle(co);
+		        	}
 		        }
 	        	
 	        } else {
@@ -948,6 +988,118 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
         
         log.info("executeQuery::end");
     }
+
+	private boolean matches(Filter query, ConnectorObject co) {
+		if (query == null) {
+			return true;
+		}
+		if (configuration.getCaseIgnoreValues() || configuration.getCaseIgnoreId()) {
+			return normalize(query).accept(normalize(co));
+		}
+		return query.accept(co);
+	}
+
+	private ConnectorObject normalize(ConnectorObject co) {
+		ConnectorObjectBuilder cob = new ConnectorObjectBuilder();
+		if (configuration.getCaseIgnoreId()) {
+			cob.setUid(co.getUid().getUidValue().toLowerCase());
+			cob.setName(co.getName().getName().toLowerCase());
+		} else {
+			cob.setUid(co.getUid());
+			cob.setName(co.getName());
+		}
+        cob.setObjectClass(co.getObjectClass());
+        for (Attribute attr : co.getAttributes()) {
+        	cob.addAttribute(normalize(attr));
+        }
+        return cob.build();
+	}
+	
+    private Filter normalize(Filter filter) {
+        if (filter instanceof ContainsFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new ContainsFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof EndsWithFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new EndsWithFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof EqualsFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new EqualsFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof GreaterThanFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new GreaterThanFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof GreaterThanOrEqualFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new GreaterThanOrEqualFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof LessThanFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new LessThanFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof LessThanOrEqualFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new LessThanOrEqualFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof StartsWithFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new StartsWithFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof ContainsAllValuesFilter) {
+            AttributeFilter afilter = (AttributeFilter) filter;
+            return new ContainsAllValuesFilter(normalize(afilter.getAttribute()));
+        } else if (filter instanceof NotFilter) {
+            NotFilter notFilter = (NotFilter) filter;
+            return new NotFilter(normalize(notFilter.getFilter()));
+        } else if (filter instanceof AndFilter) {
+            AndFilter andFilter = (AndFilter) filter;
+            return new AndFilter(normalize(andFilter.getLeft()), normalize(andFilter.getRight()));
+        } else if (filter instanceof OrFilter) {
+            OrFilter orFilter = (OrFilter) filter;
+            return new OrFilter(normalize(orFilter.getLeft()), normalize(orFilter.getRight()));
+        } else {
+            return filter;
+        }
+    }
+    
+    private Attribute normalize(Attribute attr) {
+    	if (configuration.getCaseIgnoreValues()) {
+        	AttributeBuilder ab = new AttributeBuilder();
+        	ab.setName(attr.getName());
+        	for (Object value: attr.getValue()) {
+        		if (value instanceof String) {
+        			ab.addValue(((String)value).toLowerCase());
+        		} else {
+        			ab.addValue(value);
+        		}
+        	}
+        	return ab.build();
+        } else {
+        	return attr;
+        }
+    }
+
+	private ConnectorObject filterOutAttributesToGet(ConnectorObject co, Collection<String> attributesToGet) {
+		if (attributesToGet == null) {
+			return co;
+		}
+		ConnectorObjectBuilder cob = new ConnectorObjectBuilder();
+        cob.setUid(co.getUid());
+        cob.setName(co.getName());
+        cob.setObjectClass(co.getObjectClass());
+        Set<Attribute> attrs = new HashSet<Attribute>(co.getAttributes().size());
+        for (Attribute attr : co.getAttributes()) {
+            if (containsAttribute(attributesToGet,attr.getName())) {
+            	cob.addAttribute(attr);
+            }
+        }
+        cob.addAttributes(attrs);
+        return cob.build();
+	}
+
+	private boolean containsAttribute(Collection<String> attrs, String attrName) {
+		for (String attr: attrs) {
+			if (StringUtils.equalsIgnoreCase(attr, attrName)) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/**
      * {@inheritDoc}
@@ -1117,24 +1269,23 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		builder.addAttribute(Name.NAME, dummyObject.getName());
 		
 		for (String name : dummyObject.getAttributeNames()) {
-			if (attributesToGet != null) {
-				if (!attributesToGet.contains(name)) {
-					continue;
-				}
-			} else {
-				DummyAttributeDefinition attrDef = objectClass.getAttributeDefinition(name);
-				if (attrDef == null) {
-					throw new IllegalArgumentException("Unknown account attribute '"+name+"'");
-				}
-				if (!attrDef.isReturnedByDefault()) {
+			DummyAttributeDefinition attrDef = objectClass.getAttributeDefinition(name);
+			if (attrDef == null) {
+				throw new IllegalArgumentException("Unknown account attribute '"+name+"'");
+			}
+			if (!attrDef.isReturnedByDefault()) {
+				if (attributesToGet != null && !attributesToGet.contains(name)) {
 					continue;
 				}
 			}
+			// Return all attributes that are returned by default. We will filter them out later.
 			Set<Object> values = dummyObject.getAttributeValues(name, Object.class);
 			if (configuration.isVaryLetterCase()) {
 				name = varyLetterCase(name);
 			}
-			builder.addAttribute(name, values);
+			if (values != null && !values.isEmpty()) {
+				builder.addAttribute(name, values);
+			}
 		}
 		
 		if (supportActivation) {
@@ -1213,7 +1364,7 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 		builder.setObjectClass(ObjectClass.GROUP);
         return builder.build();
 	}
-	
+
 	private ConnectorObject convertToConnectorObject(DummyPrivilege priv, Collection<String> attributesToGet) {
 		ConnectorObjectBuilder builder = createConnectorObjectBuilderCommon(priv, resource.getPrivilegeObjectClass(),
 				attributesToGet, false);
@@ -1410,27 +1561,12 @@ public class DummyConnector implements PoolableConnector, AuthenticateOp, Resolv
 			}
 		});
 	}
-
-//	/* (non-Javadoc)
-//	 * @see org.identityconnectors.framework.spi.AttributeNormalizer#normalizeAttribute(org.identityconnectors.framework.common.objects.ObjectClass, org.identityconnectors.framework.common.objects.Attribute)
-//	 */
-//	@Override
-//	public Attribute normalizeAttribute(ObjectClass ObjectClass, Attribute attribute) {
-//		if (!configuration.getCaseIgnoreId()) {
-//			return attribute;
-//		}
-//		String attrName = attribute.getName();
-//		if (Uid.NAME.equals(attrName) || Name.NAME.equals(attrName)) {
-//			List<String> values = (List) attribute.getValue();
-//			AttributeBuilder builder = new AttributeBuilder();
-//			builder.setName(attrName);
-//			for (String origVal: values) {
-//				builder.addValue(StringUtils.lowerCase(origVal));
-//			}
-//			return builder.build();
-//		} else {
-//			return attribute;
-//		}
-//	}
+	
+	private boolean attributesToGetHasAttribute(Collection<String> attributesToGet, String attrName) {
+		if (attributesToGet == null) {
+			return true;
+		}
+		return attributesToGet.contains(attrName);
+	}
 
 }

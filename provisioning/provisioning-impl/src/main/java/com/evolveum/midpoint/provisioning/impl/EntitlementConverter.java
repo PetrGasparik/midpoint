@@ -297,7 +297,7 @@ class EntitlementConverter {
 	}
 
     // precondition: valueAttr has exactly one value
-	private <TV,TA> ObjectQuery createQuery(RefinedAssociationDefinition assocDefType, RefinedAttributeDefinition assocAttrDef, ResourceAttribute<TV> valueAttr) throws SchemaException{
+	private <TV,TA> ObjectQuery createQuery(RefinedAssociationDefinition assocDefType, RefinedAttributeDefinition<TA> assocAttrDef, ResourceAttribute<TV> valueAttr) throws SchemaException{
 		MatchingRule<TA> matchingRule = matchingRuleRegistry.getMatchingRule(assocDefType.getResourceObjectAssociationType().getMatchingRule(),
 				assocAttrDef.getTypeName());
 		PrismPropertyValue<TA> converted = PrismUtil.convertPropertyValue(valueAttr.getValue(0), valueAttr.getDefinition(), assocAttrDef);
@@ -728,6 +728,7 @@ class EntitlementConverter {
 			if (ResourceTypeUtil.isAvoidDuplicateValues(resource)) {
 				PrismObject<ShadowType> currentObjectShadow = operations.getCurrentShadow();
 				if (currentObjectShadow == null) {
+					LOGGER.trace("Fetching etitlement shadow {} to avoid value duplication (intent={})", entitlementIdentifiers, entitlementIntent);
 					currentObjectShadow = resourceObjectReferenceResolver.fetchResourceObject(entitlementCtx, entitlementIdentifiers, null, result);
 					operations.setCurrentShadow(currentObjectShadow);
 				}

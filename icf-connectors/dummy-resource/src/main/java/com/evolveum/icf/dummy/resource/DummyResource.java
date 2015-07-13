@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2015 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,14 +24,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.evolveum.midpoint.util.exception.SystemException;
 import org.apache.commons.lang.StringUtils;
 
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
 
 /**
  * Resource for use with dummy ICF connector.
@@ -65,7 +67,10 @@ import com.evolveum.midpoint.util.DebugUtil;
  *
  */
 public class DummyResource implements DebugDumpable {
+	
+	private static final Trace LOGGER = TraceManager.getTrace(DummyResource.class);
 
+	private String instanceName;
 	private Map<String,DummyObject> allObjects;
 	private Map<String,DummyAccount> accounts;
 	private Map<String,DummyGroup> groups;
@@ -84,14 +89,17 @@ public class DummyResource implements DebugDumpable {
 	private boolean caseIgnoreId = false;
 	private boolean caseIgnoreValues = false;
 	private int connectionCount = 0;
+	private int groupMembersReadCount = 0;
 	
 	private BreakMode schemaBreakMode = BreakMode.NONE;
 	private BreakMode getBreakMode = BreakMode.NONE;
 	private BreakMode addBreakMode = BreakMode.NONE;
 	private BreakMode modifyBreakMode = BreakMode.NONE;
 	private BreakMode deleteBreakMode = BreakMode.NONE;
-	
-	
+
+	private boolean generateAccountDescriptionOnCreate = false;		   // simulates volatile behavior (on create)
+	private boolean generateAccountDescriptionOnUpdate = false;        // simulates volatile behavior (on update)
+
 	// Following two properties are just copied from the connector
 	// configuration and can be checked later. They are otherwise
 	// completely useless.
@@ -140,11 +148,20 @@ public class DummyResource implements DebugDumpable {
 		DummyResource instance = instances.get(instanceName);
 		if (instance == null) {
 			instance = new DummyResource();
+			instance.setInstanceName(instanceName);
 			instances.put(instanceName, instance);
 		}
 		return instance;
 	}
 	
+	public String getInstanceName() {
+		return instanceName;
+	}
+
+	public void setInstanceName(String instanceName) {
+		this.instanceName = instanceName;
+	}
+
 	public boolean isTolerateDuplicateValues() {
 		return tolerateDuplicateValues;
 	}
@@ -260,7 +277,23 @@ public class DummyResource implements DebugDumpable {
 	public void setCaseIgnoreValues(boolean caseIgnoreValues) {
 		this.caseIgnoreValues = caseIgnoreValues;
 	}
-	
+
+	public boolean isGenerateAccountDescriptionOnCreate() {
+		return generateAccountDescriptionOnCreate;
+	}
+
+	public void setGenerateAccountDescriptionOnCreate(boolean generateAccountDescriptionOnCreate) {
+		this.generateAccountDescriptionOnCreate = generateAccountDescriptionOnCreate;
+	}
+
+	public boolean isGenerateAccountDescriptionOnUpdate() {
+		return generateAccountDescriptionOnUpdate;
+	}
+
+	public void setGenerateAccountDescriptionOnUpdate(boolean generateAccountDescriptionOnUpdate) {
+		this.generateAccountDescriptionOnUpdate = generateAccountDescriptionOnUpdate;
+	}
+
 	public int getConnectionCount() {
 		return connectionCount;
 	}
@@ -277,6 +310,18 @@ public class DummyResource implements DebugDumpable {
 		assert connectionCount == 0 : "Dummy resource: "+connectionCount+" connections still open";
 	}
 
+	public int getGroupMembersReadCount() {
+		return groupMembersReadCount;
+	}
+
+	public void setGroupMembersReadCount(int groupMembersReadCount) {
+		this.groupMembersReadCount = groupMembersReadCount;
+	}
+	
+	public void recordGroupMembersReadCount() {
+		groupMembersReadCount++;
+		traceOperation("groupMembersRead", groupMembersReadCount);
+	}
 
 	public DummyObjectClass getAccountObjectClass() throws ConnectException, FileNotFoundException {
 		if (schemaBreakMode == BreakMode.NONE) {
@@ -650,9 +695,15 @@ public class DummyResource implements DebugDumpable {
 			existingObject = (T) allObjects.get(id);
 		}
 		existingObject.setName(newName);
+		if (existingObject instanceof DummyAccount) {
+			changeDescriptionIfNeeded((DummyAccount) existingObject);
+		}
 	}
 	
 	public String addAccount(DummyAccount newAccount) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+		if (generateAccountDescriptionOnCreate && newAccount.getAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME) == null) {
+			newAccount.addAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME, "Description of " + newAccount.getName());
+		}
 		return addObject(accounts, newAccount);
 	}
 	
@@ -669,7 +720,17 @@ public class DummyResource implements DebugDumpable {
 			}
 		}
 	}
-	
+
+	public void changeDescriptionIfNeeded(DummyAccount account) {
+		if (generateAccountDescriptionOnCreate) {
+			try {
+				account.replaceAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME, "Updated description of " + account.getName());
+			} catch (SchemaViolationException|ConnectException|FileNotFoundException e) {
+				throw new SystemException("Couldn't replace the 'description' attribute value", e);
+			}
+		}
+	}
+
 	public String addGroup(DummyGroup newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
 		return addObject(groups, newGroup);
 	}
@@ -778,6 +839,32 @@ public class DummyResource implements DebugDumpable {
 		}
 		return result;
 	}
+	
+	private void traceOperation(String opName, long counter) {
+		LOGGER.info("MONITOR dummy '{}' {} ({})", instanceName, opName, counter);
+		if (LOGGER.isDebugEnabled()) {
+			StackTraceElement[] fullStack = Thread.currentThread().getStackTrace();
+			String immediateClass = null;
+			String immediateMethod = null;
+			StringBuilder sb = new StringBuilder();
+			for (StackTraceElement stackElement: fullStack) {
+				if (stackElement.getClassName().equals(DummyResource.class.getName()) ||
+						stackElement.getClassName().equals(Thread.class.getName())) {
+					// skip our own calls
+					continue;
+				}
+				if (immediateClass == null) {
+					immediateClass = stackElement.getClassName();
+					immediateMethod = stackElement.getMethodName();
+				}
+				sb.append(stackElement.toString());
+				sb.append("\n");
+			}
+			LOGGER.debug("MONITOR dummy '{}' {} ({}): {} {}", new Object[]{instanceName, opName, counter, immediateClass, immediateMethod});
+			LOGGER.trace("MONITOR dummy '{}' {} ({}):\n{}", new Object[]{instanceName, opName, counter, sb});
+		}
+	}
+
 	
 	@Override
 	public String debugDump() {

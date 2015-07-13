@@ -20,6 +20,7 @@ import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertNull;
 import static org.testng.AssertJUnit.assertTrue;
 
+import com.evolveum.icf.dummy.resource.DummyResource;
 import com.evolveum.midpoint.common.Clock;
 import com.evolveum.midpoint.common.crypto.CryptoUtil;
 import com.evolveum.midpoint.common.monitor.CachingStatistics;
@@ -141,6 +142,7 @@ public abstract class AbstractIntegrationTest extends AbstractTestNGSpringContex
 	private long lastScriptExecutionCount = 0;
 	private long lastConnectorOperationCount = 0;
 	private long lastConnectorSimulatedPagingSearchCount = 0;
+	private long lastDummyResourceGroupMembersReadCount = 0;
 
 	@Autowired(required = true)
 	@Qualifier("cacheRepositoryService")
@@ -755,8 +757,6 @@ public abstract class AbstractIntegrationTest extends AbstractTestNGSpringContex
 		lastScriptExecutionCount = currentCount;
 	}
 	
-	
-	
 	protected void rememberConnectorOperationCount() {
 		lastConnectorOperationCount = InternalMonitor.getConnectorOperationCount();
 	}
@@ -828,6 +828,17 @@ public abstract class AbstractIntegrationTest extends AbstractTestNGSpringContex
 		long actualIncrement = currentCount - lastShadowFetchOperationCount;
 		assertEquals("Unexpected increment in shadow fetch count", (long)expectedIncrement, actualIncrement);
 		lastShadowFetchOperationCount = currentCount;
+	}
+	
+	protected void rememberDummyResourceGroupMembersReadCount(String instanceName) {
+		lastDummyResourceGroupMembersReadCount  = DummyResource.getInstance(instanceName).getGroupMembersReadCount();
+	}
+
+	protected void assertDummyResourceGroupMembersReadCountIncrement(String instanceName, int expectedIncrement) {
+		long currentDummyResourceGroupMembersReadCount = DummyResource.getInstance(instanceName).getGroupMembersReadCount();
+		long actualIncrement = currentDummyResourceGroupMembersReadCount - lastDummyResourceGroupMembersReadCount;
+		assertEquals("Unexpected increment in group members read count count in dummy resource '"+instanceName+"'", (long)expectedIncrement, actualIncrement);
+		lastDummyResourceGroupMembersReadCount = currentDummyResourceGroupMembersReadCount;
 	}
 	
 	protected PrismObject<ShadowType> createShadow(PrismObject<ResourceType> resource, String id) throws SchemaException {
@@ -1000,5 +1011,16 @@ public abstract class AbstractIntegrationTest extends AbstractTestNGSpringContex
 		}
 	}
 
+	protected void assertShadows(int expected) throws SchemaException {
+		OperationResult result = new OperationResult("assertShadows");
+		assertShadows(expected, result);
+		result.computeStatus();
+		TestUtil.assertSuccess(result);
+	}
+	
+	protected void assertShadows(int expected, OperationResult result) throws SchemaException {
+		int actual = repositoryService.countObjects(ShadowType.class, null, result);
+		assertEquals("Unexpected number of (repository) shadows", expected, actual);
+	}
 
 }
