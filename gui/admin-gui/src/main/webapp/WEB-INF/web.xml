@@ -68,7 +68,7 @@
     </filter-mapping>
 
 	<!-- For CAS SLO integration uncomment following -->
-<!--
+
 	 <filter>
     <filter-name>characterEncodingFilter</filter-name>
     <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
@@ -84,7 +84,7 @@
   <listener>
     <listener-class>org.jasig.cas.client.session.SingleSignOutHttpSessionListener</listener-class>
   </listener>
-	-->
+	
     <filter>
         <filter-name>wicket</filter-name>
         <filter-class>org.apache.wicket.protocol.http.WicketFilter</filter-class>
