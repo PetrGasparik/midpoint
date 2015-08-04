@@ -27,17 +27,8 @@ import com.evolveum.midpoint.util.exception.SchemaException;
  * @author semancik
  *
  */
-public class Test389DsLocalhost extends AbstractLdapConnTest {
+public class Test389DsLocalhost extends Abstract389DsTest {
 
-	@Override
-	protected String getResourceOid() {
-		return "eaee8a88-ce54-11e4-a311-001e8c717e5b";
-	}
-
-	@Override
-	protected File getBaseDir() {
-		return new File(MidPointTestConstants.TEST_RESOURCES_DIR, "389ds");
-	}
 	
 	@Override
 	protected File getResourceFile() {
@@ -57,68 +48,6 @@ public class Test389DsLocalhost extends AbstractLdapConnTest {
 	@Override
 	protected String getLdapServerHost() {
 		return "localhost";
-	}
-
-	@Override
-	protected int getLdapServerPort() {
-		return 2389;
-	}
-
-	@Override
-	protected String getLdapBindDn() {
-		return "cn=directory manager";
-	}
-
-	@Override
-	protected String getLdapBindPassword() {
-		return "secret123";
-	}
-	
-	@Override
-	protected String getAccount0Cn() {
-		return "Warlaz Kunjegjul (00000000)";
-	}
-	
-	@Override
-	protected int getSearchSizeLimit() {
-		return 2000;
-	}
-	
-	@Override
-	protected String getLdapGroupObjectClass() {
-		return "groupOfUniqueNames";
-	}
-
-	@Override
-	protected String getLdapGroupMemberAttribute() {
-		return "uniqueMember";
-	}
-
-	@Override
-	protected String getSyncTaskOid() {
-		return "cd1e0ff2-0099-11e5-9e22-001e8c717e5b";
-	}
-
-	@Override
-	protected boolean isIdmAdminInteOrgPerson() {
-		return false;
-	}
-	
-	@Override
-	public String getAttributeEntryIdName() {
-		return "nsUniqueId";
-	}
-	
-	@Override
-	protected boolean syncCanDetectDelete() {
-		return false;
-	}
-
-	@Override
-	protected void assertStepSyncToken(String syncTaskOid, int step, long tsStart, long tsEnd)
-			throws ObjectNotFoundException, SchemaException {
-		// TODO Auto-generated method stub
-		
 	}
 
 }
