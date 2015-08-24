@@ -25,6 +25,7 @@ import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismReference;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.schema.DeltaConvertor;
 import com.evolveum.midpoint.schema.ObjectDeltaOperation;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
@@ -33,13 +34,17 @@ import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.MiscUtil;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectListType;
 import com.evolveum.midpoint.xml.ns._public.common.audit_3.AuditEventRecordType;
 import com.evolveum.midpoint.xml.ns._public.common.audit_3.AuditEventStageType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectDeltaOperationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
 /**
  * Audit event record describes a single event (usually data change) in a format suitable for audit.
@@ -294,23 +299,52 @@ public class AuditEventRecord implements DebugDumpable {
 	}
     
     public AuditEventRecordType createAuditEventRecordType(){
+    	return createAuditEventRecordType(false);
+	}
+    
+    public AuditEventRecordType createAuditEventRecordType(boolean tolerateInconsistencies){
     	AuditEventRecordType auditRecordType = new AuditEventRecordType();
     	auditRecordType.setChannel(channel);
     	auditRecordType.setEventIdentifier(eventIdentifier);
     	auditRecordType.setEventStage(AuditEventStage.fromAuditEventStage(eventStage));
     	auditRecordType.setEventType(AuditEventType.fromAuditEventType(eventType));
     	auditRecordType.setHostIdentifier(hostIdentifier);
-    	auditRecordType.setInitiatorRef(ObjectTypeUtil.createObjectRef(initiator));
+    	auditRecordType.setInitiatorRef(ObjectTypeUtil.createObjectRef(initiator, true));
     	auditRecordType.setMessage(message);
     	auditRecordType.setOutcome(OperationResultStatus.createStatusType(outcome));
     	auditRecordType.setParameter(parameter);
     	auditRecordType.setResult(result);
     	auditRecordType.setSessionIdentifier(sessionIdentifier);
-    	auditRecordType.setTargetOwnerRef(ObjectTypeUtil.createObjectRef(targetOwner));
-    	auditRecordType.setTargetRef(ObjectTypeUtil.createObjectRef(target));
+    	auditRecordType.setTargetOwnerRef(ObjectTypeUtil.createObjectRef(targetOwner, true));
+    	auditRecordType.setTargetRef(ObjectTypeUtil.createObjectRef(target, true));
     	auditRecordType.setTaskIdentifier(taskIdentifier);
     	auditRecordType.setTaskOID(taskOID);
     	auditRecordType.setTimestamp(MiscUtil.asXMLGregorianCalendar(timestamp));
+    	for (ObjectDeltaOperation delta : deltas){
+    		ObjectDeltaOperationType odo = new ObjectDeltaOperationType();
+    		try {
+    			odo.setObjectDelta(DeltaConvertor.toObjectDeltaType(delta.getObjectDelta()));
+    			if (delta.getExecutionResult() != null){
+    				odo.setExecutionResult(delta.getExecutionResult().createOperationResultType());
+    			}
+				auditRecordType.getDelta().add(odo);
+			} catch (Exception e) {
+				if (tolerateInconsistencies){
+					if (delta.getExecutionResult() != null){
+						delta.getExecutionResult().setMessage("Could not show audit record, bad data in delta: " + delta.getObjectDelta());
+					} else {
+						OperationResult result = new OperationResult("Create audit event record type");
+						result.setMessage("Could not show audit record, bad data in delta: " + delta.getObjectDelta());
+						odo.setExecutionResult(result.createOperationResultType());
+					}
+					continue;
+				} else {
+					throw new SystemException(e.getMessage(), e);
+				}
+				
+			}
+    	}
+    	
     	return auditRecordType;
 	}
     
