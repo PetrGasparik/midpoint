@@ -928,11 +928,7 @@ public abstract class ShadowCache {
 
 		try {
 
-			repoShadow = shadowManager.createRepositoryShadow(ctx, resourceShadow);
-			ConstraintsChecker.onShadowAddOperation(repoShadow.asObjectable());
-			String oid = repositoryService.addObject(repoShadow, null,
-					parentResult);
-			repoShadow.setOid(oid);
+			repoShadow =  shadowManager.addRepositoryShadow(ctx, resourceShadow, parentResult);
 			
 		} catch (ObjectAlreadyExistsException e) {
 			// This should not happen. We haven't supplied an OID so is should not conflict
@@ -1087,7 +1083,7 @@ public abstract class ShadowCache {
 					if (change.getObjectDelta() != null && change.getObjectDelta().isDelete()) {				
 						oldShadow = change.getOldShadow();
 						if (oldShadow == null) {
-							oldShadow = shadowManager.findOrCreateShadowFromChangeGlobalContext(ctx, change, parentResult);
+							oldShadow = shadowManager.findOrAddShadowFromChangeGlobalContext(ctx, change, parentResult);
 						}
 						if (oldShadow == null) {
 							LOGGER.debug("No old shadow for delete synchronization event {}, we probably did not know about that object anyway, so well be ignoring this event", change);
@@ -1315,7 +1311,7 @@ public abstract class ShadowCache {
 					throws SchemaException, CommunicationException, ConfigurationException, SecurityViolationException, ObjectNotFoundException, GenericConnectorException, ObjectAlreadyExistsException{
 				
 		if (oldShadow == null) {
-			oldShadow = shadowManager.findOrCreateShadowFromChange(ctx, change, parentResult);
+			oldShadow = shadowManager.findOrAddShadowFromChange(ctx, change, parentResult);
 		}
 		
 		if (oldShadow != null) {
@@ -1662,10 +1658,26 @@ public abstract class ShadowCache {
 						PrismObject<ShadowType> entitlementRepoShadow;
 						PrismObject<ShadowType> entitlementShadow = (PrismObject<ShadowType>) identifierContainer.getUserData(ResourceObjectConverter.FULL_SHADOW_KEY);
 						if (entitlementShadow == null) {
-							entitlementRepoShadow = shadowManager.lookupShadowInRepository(ctxEntitlement, identifierContainer, parentResult);
-							if (entitlementRepoShadow == null) {
-								entitlementShadow = resouceObjectConverter.locateResourceObject(ctxEntitlement, entitlementIdentifiers, parentResult); 
-								entitlementRepoShadow = createShadowInRepository(ctxEntitlement, entitlementShadow, parentResult);
+							try {
+								entitlementRepoShadow = shadowManager.lookupShadowInRepository(ctxEntitlement, identifierContainer, parentResult);
+								if (entitlementRepoShadow == null) {								
+									entitlementShadow = resouceObjectConverter.locateResourceObject(ctxEntitlement, entitlementIdentifiers, parentResult);
+									entitlementRepoShadow = createShadowInRepository(ctxEntitlement, entitlementShadow, parentResult);
+								}
+							} catch (ObjectNotFoundException e) {
+								// The entitlement to which we point is not there.
+								// Simply ignore this association value.
+								parentResult.muteLastSubresultError();
+								LOGGER.warn("The entitlement identified by {} referenced from {} does not exist. Skipping.",
+										new Object[]{associationCVal, resourceShadow});
+								continue;
+							} catch (SchemaException e) {
+								// The entitlement to which we point is not bad.
+								// Simply ignore this association value.
+								parentResult.muteLastSubresultError();
+								LOGGER.warn("The entitlement identified by {} referenced from {} violates the schema. Skipping. Original error: {}",
+										new Object[]{associationCVal, resourceShadow, e.getMessage(), e});
+								continue;
 							}
 						} else {
 							entitlementRepoShadow = lookupOrCreateShadowInRepository(ctxEntitlement, entitlementShadow, parentResult);

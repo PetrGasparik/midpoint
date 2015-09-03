@@ -65,6 +65,7 @@ import org.identityconnectors.framework.api.operations.SyncApiOp;
 import org.identityconnectors.framework.api.operations.TestApiOp;
 import org.identityconnectors.framework.api.operations.UpdateApiOp;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
+import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.Attribute;
 import org.identityconnectors.framework.common.objects.AttributeBuilder;
 import org.identityconnectors.framework.common.objects.AttributeInfo;
@@ -330,7 +331,7 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 		if (legacySchemaConfigProperty != null) {
 			legacySchema = legacySchemaConfigProperty.getRealValue();
 		}
-
+		LOGGER.trace("Legacy schema (config): {}", legacySchema);
 	}
 
 	private PrismContainerDefinition<?> getConfigurationContainerDefinition() throws SchemaException {
@@ -491,7 +492,7 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 		this.caseIgnoreAttributeNames = caseIgnoreAttributeNames;
 		
 		if (resourceSchema != null && legacySchema == null) {
-			legacySchema = isLegacySchema(resourceSchema);
+			legacySchema = detectLegacySchema(resourceSchema);
 		}
 
 		if (resourceSchema == null || capabilities == null) {
@@ -644,7 +645,10 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 		// New instance of midPoint schema object
 		setResourceSchema(new ResourceSchema(getSchemaNamespace(), prismContext));
 
-		legacySchema = isLegacySchema(icfSchema);
+		if (legacySchema == null) {
+			legacySchema = detectLegacySchema(icfSchema);
+		}
+		LOGGER.trace("Converting resource schema (legacy mode: {})", legacySchema);
 		
 		Set<ObjectClassInfo> objectClassInfoSet = icfSchema.getObjectClassInfo();
 		// Let's convert every objectclass in the ICF schema ...		
@@ -654,8 +658,11 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 			QName objectClassXsdName = icfNameMapper.objectClassToQname(new ObjectClass(objectClassInfo.getType()), getSchemaNamespace(), legacySchema);
 
 			if (!shouldBeGenerated(generateObjectClasses, objectClassXsdName)){
+				LOGGER.trace("Skipping object class {} ({})", objectClassInfo.getType(), objectClassXsdName);
 				continue;
 			}
+			
+			LOGGER.trace("Convering object class {} ({})", objectClassInfo.getType(), objectClassXsdName);
 			
 			// ResourceObjectDefinition is a midPpoint way how to represent an
 			// object class.
@@ -987,7 +994,7 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 
 	}
 
-	private boolean isLegacySchema(Schema icfSchema) {
+	private boolean detectLegacySchema(Schema icfSchema) {
 		Set<ObjectClassInfo> objectClassInfoSet = icfSchema.getObjectClassInfo();
 		for (ObjectClassInfo objectClassInfo : objectClassInfoSet) {
 			if (objectClassInfo.is(ObjectClass.ACCOUNT_NAME) || objectClassInfo.is(ObjectClass.GROUP_NAME)) {
@@ -998,7 +1005,7 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 		return false;
 	}
 	
-	private boolean isLegacySchema(ResourceSchema resourceSchema) {
+	private boolean detectLegacySchema(ResourceSchema resourceSchema) {
 		ComplexTypeDefinition accountObjectClass = resourceSchema.findComplexTypeDefinition(
 				new QName(getSchemaNamespace(), ConnectorFactoryIcfImpl.ACCOUNT_OBJECT_CLASS_LOCAL_NAME));
 		return accountObjectClass != null;
@@ -2111,7 +2118,8 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
                                                               PagedSearchCapabilityType pagedSearchCapabilityType,
                                                               SearchHierarchyConstraints searchHierarchyConstraints,
                                                               OperationResult parentResult)
-            throws CommunicationException, GenericFrameworkException, SchemaException, SecurityViolationException {
+            throws CommunicationException, GenericFrameworkException, SchemaException, SecurityViolationException,
+            			ObjectNotFoundException {
 
 		// Result type for this operation
 		final OperationResult result = parentResult.createSubresult(ConnectorInstance.class.getName()
@@ -2252,6 +2260,8 @@ public class ConnectorInstanceIcfImpl implements ConnectorInstance {
 			// exception
 			if (midpointEx instanceof CommunicationException) {
 				throw (CommunicationException) midpointEx;
+			} else if (midpointEx instanceof ObjectNotFoundException) {
+				throw (ObjectNotFoundException) midpointEx;
 			} else if (midpointEx instanceof GenericFrameworkException) {
 				throw (GenericFrameworkException) midpointEx;
 			} else if (midpointEx instanceof SchemaException) {
