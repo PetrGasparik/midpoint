@@ -762,9 +762,7 @@ public class ContextLoader {
 					if (resourceOid == null) {
 						throw new IllegalArgumentException("No resource OID in " + account);
 					}
-					ResourceType resourceType = provisioningService.getObject(ResourceType.class,
-							resourceOid, null, null, result).asObjectable();
-					context.rememberResource(resourceType);
+					ResourceType resourceType = LensUtil.getResource(context, resourceOid, provisioningService, result);
 					accountCtx.setResource(resourceType);
 				}
 				accountCtx.setFresh(true);
@@ -809,6 +807,7 @@ public class ContextLoader {
 				// slightly inefficient here and check for existing shadow existence
 				try {
 					Collection<SelectorOptions<GetOperationOptions>> opts = SelectorOptions.createCollection(GetOperationOptions.createDoNotDiscovery());
+					LOGGER.trace("Projection conflict detected, exsting: {}, new {}", projectionContext.getOid(), projection.getOid());
 					PrismObject<ShadowType> existingShadow = provisioningService.getObject(ShadowType.class, projectionContext.getOid(), opts, task, result);
 					// Maybe it is the other way around
 					try {
@@ -831,10 +830,11 @@ public class ContextLoader {
 				} catch (ObjectNotFoundException e) {
 					// This is somehow expected, fix it and we can go on
 					result.muteLastSubresultError();
+					String shadowOid = projectionContext.getOid();
 					projectionContext.getResourceShadowDiscriminator().setThombstone(true);
 					projectionContext = LensUtil.getOrCreateProjectionContext(context, rsd);
 					// We have to mark it as dead right now, otherwise the uniqueness check may fail
-					markShadowDead(projectionContext.getOid(), result);
+					markShadowDead(shadowOid, result);
 				}
 			}
 		}
@@ -1017,12 +1017,7 @@ public class ContextLoader {
 		
 		// Load resource
 		if (resourceType == null) {
-			resourceType = context.getResource(resourceOid);
-			if (resourceType == null) {
-				PrismObject<ResourceType> resource = provisioningService.getObject(ResourceType.class, resourceOid, null, null, result);
-				resourceType = resource.asObjectable();
-				context.rememberResource(resourceType);
-			}
+			resourceType = LensUtil.getResource(context, resourceOid, provisioningService, result);
 			projContext.setResource(resourceType);
 		}
 		
