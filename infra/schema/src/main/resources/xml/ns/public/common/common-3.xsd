@@ -12711,4 +12711,253 @@
             <!-- todo whether to search in upper layers (by default: yes) -->
         </xsd:sequence>
     </xsd:complexType>
+
+    <xsd:complexType name="OperationalInformationType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="provisioningStatistics" type="tns:ProvisioningStatisticsType" minOccurs="0" />
+            <xsd:element name="mappingsStatistics" type="tns:MappingsStatisticsType" minOccurs="0" />
+            <xsd:element name="notificationsStatistics" type="tns:NotificationsStatisticsType" minOccurs="0" />
+            <xsd:element name="lastMessageTimestamp" type="xsd:dateTime" minOccurs="0" />
+            <xsd:element name="lastMessage" type="xsd:string" minOccurs="0" />
+            <xsd:element name="timestamp" type="xsd:dateTime" />
+            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="ProvisioningStatisticsType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="entry" type="tns:ProvisioningStatisticsEntryType" minOccurs="0" maxOccurs="unbounded" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="ProvisioningStatisticsEntryType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="resource" type="xsd:string" minOccurs="0" />
+            <xsd:element name="objectClass" type="xsd:QName" minOccurs="0" />
+            <xsd:element name="getSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="getFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="searchSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="searchFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="createSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="createFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="updateSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="updateFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="deleteSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="deleteFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="syncSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="syncFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="scriptSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="scriptFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="otherSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="otherFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="averageTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="minTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="maxTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="totalTime" type="xsd:long" minOccurs="1" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="MappingsStatisticsType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="entry" type="tns:MappingsStatisticsEntryType" minOccurs="0" maxOccurs="unbounded" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="MappingsStatisticsEntryType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="object" type="xsd:string" minOccurs="0" />
+            <xsd:element name="count" type="xsd:int" minOccurs="1" />
+            <xsd:element name="averageTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="minTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="maxTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="totalTime" type="xsd:long" minOccurs="1" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="NotificationsStatisticsType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="entry" type="tns:NotificationsStatisticsEntryType" minOccurs="0" maxOccurs="unbounded" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="NotificationsStatisticsEntryType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="transport" type="xsd:string" minOccurs="0" />
+            <xsd:element name="countSuccess" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countFailure" type="xsd:int" minOccurs="1" />
+            <xsd:element name="averageTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="minTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="maxTime" type="xsd:long" minOccurs="0" />
+            <xsd:element name="totalTime" type="xsd:long" minOccurs="1" />
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="IterativeTaskInformationType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="lastSuccessObjectName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessObjectDisplayName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessObjectType" type="xsd:QName" minOccurs="0" />
+            <xsd:element name="lastSuccessObjectOid" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessEndTimestamp" type="xsd:dateTime" minOccurs="0" />
+            <xsd:element name="lastSuccessDuration" type="xsd:long" minOccurs="0" />
+            <xsd:element name="totalSuccessDuration" type="xsd:long" minOccurs="1" />
+            <xsd:element name="totalSuccessCount" type="xsd:int" minOccurs="1" />
+
+            <xsd:element name="lastFailureObjectName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureObjectDisplayName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureObjectType" type="xsd:QName" minOccurs="0" />
+            <xsd:element name="lastFailureObjectOid" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureEndTimestamp" type="xsd:dateTime" minOccurs="0" />
+            <xsd:element name="lastFailureDuration" type="xsd:long" minOccurs="0" />
+            <xsd:element name="totalFailureDuration" type="xsd:long" minOccurs="1" />
+            <xsd:element name="totalFailureCount" type="xsd:int" minOccurs="1" />
+            <xsd:element name="lastFailureExceptionMessage" type="xsd:string" minOccurs="0" />
+
+            <xsd:element name="currentObjectName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="currentObjectDisplayName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="currentObjectType" type="xsd:QName" minOccurs="0" />
+            <xsd:element name="currentObjectOid" type="xsd:string" minOccurs="0" />
+            <xsd:element name="currentObjectStartTimestamp" type="xsd:dateTime" minOccurs="0" />
+
+            <xsd:element name="timestamp" type="xsd:dateTime" />
+            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="SynchronizationInformationType">
+        <xsd:annotation>
+            <xsd:documentation>
+                TODO
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="countProtected" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countNoSynchronizationPolicy" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countSynchronizationDisabled" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countNotApplicableForTask" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countDeleted" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countDisputed" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countLinked" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countUnlinked" type="xsd:int" minOccurs="1" />
+            <xsd:element name="countUnmatched" type="xsd:int" minOccurs="1" />
+
+            <xsd:element name="timestamp" type="xsd:dateTime" />
+            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    
+    <xsd:complexType name="SequenceType">
+        <xsd:annotation>
+            <xsd:documentation>
+            	<p>
+	                Definition of a sequence object that produces unique values. The sequence state is
+	                persistently stored in the repository, therefore it can efficiently produce unique
+	                identifiers in a conrolled and predictable manner.
+                </p>
+                <p>
+                	The sequence is atomic. If two threads or even two nodes request a value from
+	 				the same sequence at the same time then different values will be returned. Therefore the
+	 				use of the sequence has some inherent cost (e.g. database locking overhead).
+                </p>
+                <p>
+                	The sequence produces only values of type "long". If any other type or format is needed
+                	then an expression must be used to transform the value.
+                </p>
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexContent>
+            <xsd:extension base="c:ObjectType">
+                <xsd:sequence>
+                    <xsd:element name="counter" type="xsd:long" minOccurs="1" maxOccurs="1">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Current state of the sequence. This is the next number that will be assigned
+                                from the sequence when "advance" operation is invoked and there are no unused value
+                                to re-use.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="unusedValues" type="xsd:long" minOccurs="0" maxOccurs="unbounded">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                List of values that were already assigned by the sequence but they were not used.
+                                The client can return unused values to sequence so the sequence will not advance
+                                too fast. If there are any unused values, these will be assigned from the sequence
+                                before the regular value from the counter.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="maxCounter" type="xsd:long" minOccurs="0">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Maximum value that the counter can produce. If not specified then
+                                the highest value that the "long" datatype can produce is assumed.
+                                (Please note that this may depend on the range of underlying database type)
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="allowRewind" type="xsd:boolean" minOccurs="0" default="false">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Flag that affects the behaviour in case maxCounter is exceeded. If set to true then
+                                the counter is reset to zero. If set to false then an error is produced.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="maxUnusedValues" type="xsd:int" minOccurs="0">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                The number of unused values that the squence will maintain.
+                                If set to zero then no values are maintained and therefore the
+                                use of unused values is effectively pohibited. This will make
+                                the sequence strictly monotonous. 
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
+    <xsd:element name="sequence" type="tns:SequenceType" />
 </xsd:schema>
