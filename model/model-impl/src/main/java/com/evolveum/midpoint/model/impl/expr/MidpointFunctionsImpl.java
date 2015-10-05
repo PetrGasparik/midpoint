@@ -1225,4 +1225,8 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
         ObjectDelta<ShadowType> sum = ObjectDelta.summarize(deltas);
         return DeltaConvertor.toObjectDeltaType(sum);
     }
+    
+    public long getSequenceCounter(String sequenceOid) throws ObjectNotFoundException, SchemaException {
+    	return SequentialValueExpressionEvaluator.getSequenceCounter(sequenceOid, repositoryService, getCurrentResult());
+    }
 }

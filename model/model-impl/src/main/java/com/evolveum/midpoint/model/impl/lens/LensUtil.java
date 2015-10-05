@@ -127,13 +127,13 @@ public class LensUtil {
     }
 
 	public static <F extends ObjectType> ResourceType getResource(LensContext<F> context,
-			String resourceOid, ProvisioningService provisioningService, OperationResult result) throws ObjectNotFoundException,
+																  String resourceOid, ProvisioningService provisioningService, Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
 		ResourceType resourceType = context.getResource(resourceOid);
 		if (resourceType == null) {
 			// Fetching from provisioning to take advantage of caching and
 			// pre-parsed schema
-			resourceType = provisioningService.getObject(ResourceType.class, resourceOid, null, null, result)
+			resourceType = provisioningService.getObject(ResourceType.class, resourceOid, null, task, result)
 					.asObjectable();
 			context.rememberResource(resourceType);
 		}
@@ -163,20 +163,23 @@ public class LensUtil {
 		return rObjClassDef.getIntent();
 	}
 	
-	public static <F extends FocusType> LensProjectionContext getProjectionContext(LensContext<F> context,
-			PrismObject<ShadowType> equivalentAccount, ProvisioningService provisioningService, PrismContext prismContext, OperationResult result) throws ObjectNotFoundException,
+	public static <F extends FocusType> LensProjectionContext getProjectionContext(LensContext<F> context, PrismObject<ShadowType> equivalentAccount,
+																				   ProvisioningService provisioningService, PrismContext prismContext,
+																				   Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
 		ShadowType equivalentAccountType = equivalentAccount.asObjectable();
 		ShadowKindType kind = ShadowUtil.getKind(equivalentAccountType);
 		return getProjectionContext(context, ShadowUtil.getResourceOid(equivalentAccountType),
 				kind, equivalentAccountType.getIntent(), provisioningService,
-				prismContext, result);
+				prismContext, task, result);
 	}
 	
-	public static <F extends FocusType> LensProjectionContext getProjectionContext(LensContext<F> context,
-			String resourceOid, ShadowKindType kind, String intent, ProvisioningService provisioningService, PrismContext prismContext, OperationResult result) throws ObjectNotFoundException,
+	public static <F extends FocusType> LensProjectionContext getProjectionContext(LensContext<F> context, String resourceOid,
+																				   ShadowKindType kind, String intent,
+																				   ProvisioningService provisioningService, PrismContext prismContext,
+																				   Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
-		ResourceType resource = getResource(context, resourceOid, provisioningService, result);
+		ResourceType resource = getResource(context, resourceOid, provisioningService, task, result);
 		String refinedIntent = refineProjectionIntent(kind, intent, resource, prismContext);
 		ResourceShadowDiscriminator rsd = new ResourceShadowDiscriminator(resourceOid, kind, refinedIntent);
 		return context.findProjectionContext(rsd);
@@ -245,7 +248,7 @@ public class LensUtil {
         // a single item (e.g. attribute). But this loop iterates over every potential value of that item.
         for (V value : allValues) {
         	
-        	LOGGER.trace("item existing: {}, value: {}", itemExisting, value);
+        	LOGGER.trace("item existing: {}, consolidating value: {}", itemExisting, value);
         	// Check what to do with the value using the usual "triple routine". It means that if a value is
         	// in zero set than we need no delta, plus set means add delta and minus set means delete delta.
         	// The first set that the value is present determines the result.
@@ -390,7 +393,7 @@ public class LensUtil {
                     continue;
                 }
                 if (filterExistingValues && !hasValue(itemExisting, value, valueMatcher, comparator)) {
-                	LOGGER.trace("Value {} NOT deleted to delta for item {} the item does not have that value in {} (matcher: {})",
+                	LOGGER.trace("Value {} NOT deleted from delta for item {} the item does not have that value in {} (matcher: {})",
                 			new Object[]{value, itemPath, contextDescription, valueMatcher});
                 	continue;
                 }
