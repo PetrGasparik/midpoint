@@ -46,6 +46,8 @@ import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.util.DOMUtil;
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
@@ -68,19 +70,19 @@ import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationCa
 /**
  * @author lazyman
  */
-public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, Serializable {
+public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, Serializable, DebugDumpable {
 
 	private static final Trace LOGGER = TraceManager.getTrace(ContainerWrapper.class);
 
 	private static final List<QName> INHERITED_OBJECT_ATTRIBUTES = Arrays.asList(ObjectType.F_NAME,
 			ObjectType.F_DESCRIPTION, ObjectType.F_FETCH_RESULT, ObjectType.F_PARENT_ORG,
-			ObjectType.F_PARENT_ORG_REF);
+			ObjectType.F_PARENT_ORG_REF, FocusType.F_LINK, FocusType.F_LINK_REF);
 
 	private static final String DOT_CLASS = ContainerWrapper.class.getName() + ".";
 	private static final String CREATE_PROPERTIES = DOT_CLASS + "createProperties";
 
 	private String displayName;
-	private ObjectWrapper object;
+	private ObjectWrapper<? extends ObjectType> object;
 	private T container;
 	private ContainerStatus status;
 
@@ -195,7 +197,7 @@ public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, 
 
 						definition = pageBase
 								.getModelInteractionService()
-								.getEditObjectClassDefinition(object.getObject(), resource,
+								.getEditObjectClassDefinition((PrismObject<ShadowType>) object.getObject(), resource,
 										AuthorizationPhaseType.REQUEST)
 								.toResourceAttributeContainerDefinition();
 
@@ -334,7 +336,7 @@ public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, 
 					} else if (itemDef instanceof PrismReferenceDefinition){
 						PrismReferenceDefinition def = (PrismReferenceDefinition) itemDef;
 						
-						if (FocusType.F_LINK_REF.equals(def.getName())){
+						if (INHERITED_OBJECT_ATTRIBUTES.contains(def.getName())){
 							continue;
 						}
 						
@@ -656,5 +658,40 @@ public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, 
 	public void addValue() {
 		// TODO Auto-generated method stub
 
+	}
+
+	@Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		StringBuilder sb = new StringBuilder();
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append("ContainerWrapper(\n");
+		DebugUtil.debugDumpWithLabel(sb, "displayName", displayName, indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "status", status == null?null:status.toString(), indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "main", main, indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "readonly", readonly, indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "showInheritedObjectAttributes", showInheritedObjectAttributes, indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "path", path == null?null:path.toString(), indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "containerDefinition", containerDefinition == null?null:containerDefinition.toString(), indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "container", container==null?null:container.toString(), indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "properties", properties, indent+1);
+		sb.append("\n");
+		DebugUtil.debugDumpWithLabel(sb, "result", result, indent+1);
+		sb.append("\n");
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append(")");
+		return sb.toString();
 	}
 }

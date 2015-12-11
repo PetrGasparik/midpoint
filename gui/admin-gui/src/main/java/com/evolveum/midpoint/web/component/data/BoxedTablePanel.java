@@ -54,6 +54,10 @@ public class BoxedTablePanel<T> extends SimplePanel implements Table {
     private UserProfileStorage.TableId tableId;
     private boolean showPaging;
 
+    public BoxedTablePanel(String id, ISortableDataProvider provider, List<IColumn<T, String>> columns) {
+        this(id, provider, columns, null, Integer.MAX_VALUE);
+    }
+
     public BoxedTablePanel(String id, ISortableDataProvider provider, List<IColumn<T, String>> columns,
                            UserProfileStorage.TableId tableId) {
         this(id, provider, columns, tableId, UserProfileStorage.DEFAULT_PAGING_SIZE);
@@ -96,6 +100,11 @@ public class BoxedTablePanel<T> extends SimplePanel implements Table {
     }
 
     @Override
+    public int getItemsPerPage() {
+        return (int) getDataTable().getItemsPerPage();
+    }
+
+    @Override
     public void setShowPaging(boolean show) {
         //todo make use of this [lazyman]
         this.showPaging = show;
@@ -105,6 +114,14 @@ public class BoxedTablePanel<T> extends SimplePanel implements Table {
         } else {
             setItemsPerPage(10);
         }
+    }
+
+    public WebMarkupContainer getHeader() {
+        return (WebMarkupContainer) get(ID_HEADER);
+    }
+
+    public WebMarkupContainer getFooter() {
+        return (WebMarkupContainer) get(ID_FOOTER);
     }
 
     protected WebMarkupContainer createHeader(String headerId) {
@@ -138,17 +155,24 @@ public class BoxedTablePanel<T> extends SimplePanel implements Table {
 
         private void initLayout(final Table table) {
             final DataTable dataTable = table.getDataTable();
-            BoxedPagingPanel nb2 = new BoxedPagingPanel(ID_PAGING, dataTable, true);
-            add(nb2);
-
-            Label count = new Label(ID_COUNT, new AbstractReadOnlyModel<String>() {
+            final Label count = new Label(ID_COUNT, new AbstractReadOnlyModel<String>() {
 
                 @Override
                 public String getObject() {
                     return createCountString(dataTable);
                 }
             });
+            count.setOutputMarkupId(true);
             add(count);
+
+            BoxedPagingPanel nb2 = new BoxedPagingPanel(ID_PAGING, dataTable, true) {
+
+                @Override
+                protected void onPageChanged(AjaxRequestTarget target, long page) {
+                    target.add(count);
+                }
+            };
+            add(nb2);
 
             TableConfigurationPanel menu = new TableConfigurationPanel(ID_MENU) {
 

@@ -24,10 +24,9 @@ import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.PrismReference;
 import com.evolveum.midpoint.prism.PrismValue;
+import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.schema.statistics.IterativeTaskInformation;
-import com.evolveum.midpoint.schema.statistics.OperationalInformation;
 import com.evolveum.midpoint.schema.statistics.ProvisioningOperation;
 import com.evolveum.midpoint.schema.statistics.SynchronizationInformation;
 import com.evolveum.midpoint.task.api.LightweightTaskHandler;
@@ -44,7 +43,9 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.IterativeTaskInforma
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationalInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.EnvironmentalPerformanceInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ActionsExecutedInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationStatsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ScheduleType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationInformationType;
@@ -347,6 +348,11 @@ public class SimpleTaskAdapter implements Task {
     }
 
     @Override
+    public <T> void setExtensionPropertyValueTransient(QName propertyName, T value) throws SchemaException {
+        throw new UnsupportedOperationException("not implemented yet.");
+    }
+
+    @Override
     public <T extends Containerable> void setExtensionContainerValue(QName containerName, T value)
             throws SchemaException {
         throw new UnsupportedOperationException("not implemented yet.");
@@ -376,6 +382,10 @@ public class SimpleTaskAdapter implements Task {
     public void setProgressImmediate(long progress, OperationResult parentResult)
             throws ObjectNotFoundException, SchemaException {
         throw new UnsupportedOperationException("not implemented yet.");
+    }
+
+    @Override
+    public void setProgressTransient(long value) {
     }
 
     @Override
@@ -655,36 +665,10 @@ public class SimpleTaskAdapter implements Task {
 
     @Override
     public void startLightweightHandler() {
-
     }
 
     @Override
-    public OperationalInformation getOperationalInformation() {
-        return null;
-    }
-
-    @Override
-    public SynchronizationInformation getSynchronizationInformation() {
-        return null;
-    }
-
-    @Override
-    public IterativeTaskInformation getIterativeTaskInformation() {
-        return null;
-    }
-
-    @Override
-    public OperationalInformationType getAggregateOperationalInformation() {
-        return null;
-    }
-
-    @Override
-    public IterativeTaskInformationType getAggregateIterativeTaskInformation() {
-        return null;
-    }
-
-    @Override
-    public SynchronizationInformationType getAggregateSynchronizationInformation() {
+    public OperationStatsType getAggregatedLiveOperationStats() {
         return null;
     }
 
@@ -720,7 +704,7 @@ public class SimpleTaskAdapter implements Task {
     }
 
     @Override
-    public void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation increment) {
+    public void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation.Record increment) {
     }
 
     @Override
@@ -728,7 +712,7 @@ public class SimpleTaskAdapter implements Task {
     }
 
     @Override
-    public void resetOperationalInformation(OperationalInformationType value) {
+    public void resetEnvironmentalPerformanceInformation(EnvironmentalPerformanceInformationType value) {
     }
 
     @Override
@@ -753,5 +737,45 @@ public class SimpleTaskAdapter implements Task {
 
     @Override
     public void recordIterativeOperationStart(ShadowType shadow) {
+    }
+
+    @Override
+    public void recordObjectActionExecuted(String objectName, String objectDisplayName, QName objectType, String objectOid, ChangeType changeType, String channel, Throwable exception) {
+    }
+
+    @Override
+    public void resetActionsExecutedInformation(ActionsExecutedInformationType value) {
+    }
+
+    @Override
+    public void recordObjectActionExecuted(PrismObject<? extends ObjectType> object, ChangeType changeType, Throwable exception) {
+    }
+
+    @Override
+    public <T extends ObjectType> void recordObjectActionExecuted(PrismObject<T> objectOld, Class<T> objectTypeClass, String oid, ChangeType delete, String channel, Throwable o) {
+    }
+
+    @Override
+    public void markObjectActionExecutedBoundary() {
+    }
+
+    @Override
+    public OperationStatsType getStoredOperationStats() {
+        return null;
+    }
+
+    @Override
+    public void startCollectingOperationStatsFromZero(boolean enableIterationStatistics, boolean enableSynchronizationStatistics, boolean enableActionsExecutedStatistics) {
+
+    }
+
+    @Override
+    public void startCollectingOperationStatsFromStoredValues(boolean enableIterationStatistics, boolean enableSynchronizationStatistics, boolean enableActionsExecutedStatistics) {
+
+    }
+
+    @Override
+    public void storeOperationStats() {
+
     }
 }

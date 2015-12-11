@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import javax.xml.namespace.QName;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.Component;
 import org.apache.wicket.RestartResponseException;
@@ -67,6 +69,7 @@ import com.evolveum.midpoint.web.application.AuthorizationAction;
 import com.evolveum.midpoint.web.application.PageDescriptor;
 import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.AjaxSubmitButton;
+import com.evolveum.midpoint.web.component.FocusSummaryPanel;
 import com.evolveum.midpoint.web.component.assignment.AssignmentTableDto;
 import com.evolveum.midpoint.web.component.assignment.AssignmentTablePanel;
 import com.evolveum.midpoint.web.component.form.Form;
@@ -83,12 +86,14 @@ import com.evolveum.midpoint.web.component.progress.ProgressReporter;
 import com.evolveum.midpoint.web.component.progress.ProgressReportingAwarePage;
 import com.evolveum.midpoint.web.component.util.LoadableModel;
 import com.evolveum.midpoint.web.component.util.ObjectWrapperUtil;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.page.PageTemplate;
 import com.evolveum.midpoint.web.page.admin.PageAdminAbstractRole;
 import com.evolveum.midpoint.web.page.admin.PageAdminFocus;
 import com.evolveum.midpoint.web.page.admin.users.component.ExecuteChangeOptionsDto;
 import com.evolveum.midpoint.web.page.admin.users.component.ExecuteChangeOptionsPanel;
-import com.evolveum.midpoint.web.page.admin.users.dto.FocusShadowDto;
+import com.evolveum.midpoint.web.page.admin.users.component.OrgSummaryPanel;
+import com.evolveum.midpoint.web.page.admin.users.dto.FocusProjectionDto;
 import com.evolveum.midpoint.web.page.admin.users.dto.UserDtoStatus;
 import com.evolveum.midpoint.web.resource.img.ImgResources;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
@@ -104,6 +109,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowAssociationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
@@ -117,25 +123,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 public class PageOrgUnit extends PageAdminAbstractRole<OrgType> implements ProgressReportingAwarePage {
 
 	private static final Trace LOGGER = TraceManager.getTrace(PageOrgUnit.class);
-	private static final String DOT_CLASS = PageOrgUnit.class.getName() + ".";
-
 	
-	private static final String ID_INDUCEMENTS_TABLE = "inducementsPanel";
-
-
-
-	private ProgressReporter progressReporter;
-	private ObjectDelta delta;
-
-	private LoadableModel<ExecuteChangeOptionsDto> executeOptionsModel = new LoadableModel<ExecuteChangeOptionsDto>(
-			false) {
-
-		@Override
-		protected ExecuteChangeOptionsDto load() {
-			return new ExecuteChangeOptionsDto();
-		}
-	};
-
 	public PageOrgUnit() {
 		initialize(null);
 	}
@@ -187,14 +175,6 @@ public class PageOrgUnit extends PageAdminAbstractRole<OrgType> implements Progr
 		return new OrgType();
 	}
 
-//	@Override
-//	protected void initCustomLayout(Form mainForm) {
-//		AssignmentTablePanel inducements = initInducements();
-//		mainForm.add(inducements);
-//		
-//	}
-//
-
 	
 
 	@Override
@@ -212,5 +192,12 @@ public class PageOrgUnit extends PageAdminAbstractRole<OrgType> implements Progr
 		super.initTabs(tabs);
 		
 	}
+	
+	@Override
+	protected FocusSummaryPanel<OrgType> createSummaryPanel() {
+		
+    	return new OrgSummaryPanel(ID_SUMMARY_PANEL, getFocusModel());
+    	
+    }
 
 }

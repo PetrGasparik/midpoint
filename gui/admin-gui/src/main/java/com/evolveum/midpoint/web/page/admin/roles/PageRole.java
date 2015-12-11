@@ -17,6 +17,8 @@ package com.evolveum.midpoint.web.page.admin.roles;
 
 import java.util.List;
 
+import javax.xml.namespace.QName;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
@@ -43,16 +45,20 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.application.AuthorizationAction;
 import com.evolveum.midpoint.web.application.PageDescriptor;
+import com.evolveum.midpoint.web.component.FocusSummaryPanel;
 import com.evolveum.midpoint.web.component.assignment.AssignmentEditorPanel;
 import com.evolveum.midpoint.web.component.form.Form;
 import com.evolveum.midpoint.web.component.form.multivalue.GenericMultiValueLabelEditPanel;
 import com.evolveum.midpoint.web.component.prism.ContainerStatus;
+import com.evolveum.midpoint.web.component.prism.ObjectWrapper;
 import com.evolveum.midpoint.web.component.progress.ProgressReportingAwarePage;
 import com.evolveum.midpoint.web.component.util.LoadableModel;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.page.PageTemplate;
 import com.evolveum.midpoint.web.page.admin.PageAdminAbstractRole;
 import com.evolveum.midpoint.web.page.admin.home.PageDashboard;
 import com.evolveum.midpoint.web.page.admin.roles.component.MultiplicityPolicyDialog;
+import com.evolveum.midpoint.web.page.admin.roles.component.RoleSummaryPanel;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MultiplicityPolicyConstraintType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PolicyConstraintsType;
@@ -88,10 +94,6 @@ public class PageRole extends PageAdminAbstractRole<RoleType>implements Progress
 		super.performCustomInitialization();
 
 	}
-
-	protected void initCustomLayout(Form mainForm) {
-		super.initCustomLayout(mainForm);
-	};
 
 	/**
 	 * Removes empty policy constraints from role. It was created when loading
@@ -216,7 +218,18 @@ public class PageRole extends PageAdminAbstractRole<RoleType>implements Progress
 					return new RoleMemberPanel<UserType>(panelId, getFocusWrapper().getObject().getOid(),
 							PageRole.this);
 				}
+				
+				@Override
+				public boolean isVisible() {
+					return getFocusWrapper().getStatus() != ContainerStatus.ADDING;
+				}
 			});
 		
 	}
+
+	@Override
+	protected FocusSummaryPanel<RoleType> createSummaryPanel() {
+    	return new RoleSummaryPanel(ID_SUMMARY_PANEL, getFocusModel());
+    }
+
 }

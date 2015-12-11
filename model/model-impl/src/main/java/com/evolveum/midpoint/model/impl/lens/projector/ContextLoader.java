@@ -56,6 +56,7 @@ import com.evolveum.midpoint.provisioning.api.ProvisioningService;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
+import com.evolveum.midpoint.schema.RetrieveOption;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
@@ -294,17 +295,9 @@ public class ContextLoader {
 		for (LensProjectionContext projectionContext: context.getProjectionContexts()) {
 			String projectionOid = projectionContext.getOid();
 			if (projectionOid != null) {
-                PrismObject<F> shadowOwner = null;
-                try {
-					shadowOwner = cacheRepositoryService.searchShadowOwner(projectionOid,
+                PrismObject<F> shadowOwner = cacheRepositoryService.searchShadowOwner(projectionOid,
 							SelectorOptions.createCollection(GetOperationOptions.createAllowNotFound()),
 							result);
-                } catch (ObjectNotFoundException e) {
-                    // This may happen, e.g. if the shadow is already deleted
-                    // just ignore it. pretend that it has no owner
-                	LOGGER.trace("Shadow with oid {} doesn't have owner. Continue with processing shadow.", projectionOid);
-//                    result.getLastSubresult().setStatus(OperationResultStatus.HANDLED_ERROR);
-                }
 				if (shadowOwner != null) {
 					if (focusOid == null || focusOid.equals(shadowOwner.getOid())) {
 						focusOid = shadowOwner.getOid();
@@ -354,7 +347,12 @@ public class ContextLoader {
         	throw new IllegalArgumentException("No OID in primary focus delta");
         }
 
-        PrismObject<F> object = cacheRepositoryService.getObject(focusContext.getObjectTypeClass(), userOid, null, result);
+        // Always load a complete object here, including the not-returned-by-default properties.
+        // This is temporary measure to make sure that the mappings will have all they need.
+        // See MID-2635
+        Collection<SelectorOptions<GetOperationOptions>> options = 
+        		SelectorOptions.createCollection(GetOperationOptions.createRetrieve(RetrieveOption.INCLUDE));
+		PrismObject<F> object = cacheRepositoryService.getObject(focusContext.getObjectTypeClass(), userOid, options, result);
         focusContext.setLoadedObject(object);
         focusContext.setFresh(true);
 		LOGGER.trace("Focal object loaded: {}", object);
@@ -501,6 +499,7 @@ public class ContextLoader {
 				// Using NO_FETCH so we avoid reading in a full account. This is more efficient as we don't need full account here.
 				// We need to fetch from provisioning and not repository so the correct definition will be set.
 				Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createNoFetch());
+				LOGGER.trace("Loading shadow {} from linkRef, options={}", oid, options);
 				try {
 					shadow = provisioningService.getObject(ShadowType.class, oid, options, task, result);
 				} catch (ObjectNotFoundException e) {
@@ -856,6 +855,7 @@ public class ContextLoader {
 				ShadowType.F_DEAD, true));
 		try {
 			cacheRepositoryService.modifyObject(ShadowType.class, oid, modifications, result);
+			// TODO report to task?
 		} catch (ObjectNotFoundException e) {
 			// Done already
 			result.muteLastSubresultError();
@@ -960,10 +960,20 @@ public class ContextLoader {
 					}
 				} else {
 					projContext.setExists(true);
-					GetOperationOptions rootOptions = projContext.isDoReconciliation() ? 
-							GetOperationOptions.createDoNotDiscovery() : GetOperationOptions.createNoFetch();
+					GetOperationOptions rootOptions = new GetOperationOptions();
+					if (projContext.isDoReconciliation()) {
+						if (SchemaConstants.CHANGE_CHANNEL_DISCOVERY.equals(context.getChannel())) {
+							// Avoid discovery loops
+							rootOptions.setDoNotDiscovery(true);
+						}
+					} else { 
+						rootOptions.setNoFetch(true);
+					}
 					rootOptions.setAllowNotFound(true);
 					Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(rootOptions);
+					if (LOGGER.isTraceEnabled()) {
+						LOGGER.trace("Loading projection shadow {}, options={}", projectionObjectOid, options);
+					}
 					try{
 						PrismObject<ShadowType> objectOld = provisioningService.getObject(
 								projContext.getObjectTypeClass(), projectionObjectOid, options, task, result);
@@ -1113,6 +1123,7 @@ public class ContextLoader {
 		GetOperationOptions getOptions = GetOperationOptions.createAllowNotFound();
 		if (SchemaConstants.CHANGE_CHANNEL_DISCOVERY.equals(context.getChannel())) {
 			LOGGER.trace("Loading full resource object {} from provisioning - with doNotDiscover to avoid loops", projCtx);
+			// Avoid discovery loops
 			getOptions.setDoNotDiscovery(true);
 		} else {
 			LOGGER.trace("Loading full resource object {} from provisioning (discovery enabled)", projCtx);
@@ -1150,7 +1161,7 @@ public class ContextLoader {
 							FocusType focusType = (FocusType) focusCurrent.asObjectable();
 							for (ObjectReferenceType linkRef: focusType.getLinkRef()) {
 								if (linkRef.getOid().equals(projCtx.getOid())) {
-									throw new SystemException("Internal error: the old OID still exists in the linkRef ("+focusCurrent+")");
+									throw new SystemException("Internal error: the old OID "+projCtx.getOid()+" still exists in the linkRef ("+focusCurrent+")");
 								}
 								boolean found = false;
 								for (LensProjectionContext pCtx: context.getProjectionContexts()) {

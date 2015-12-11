@@ -168,7 +168,7 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 			applicableShadow = change.getOldShadow();
 		}
 
-		SynchronizationEventInformation eventInfo = new SynchronizationEventInformation(applicableShadow, task);
+		SynchronizationEventInformation eventInfo = new SynchronizationEventInformation(applicableShadow, change.getSourceChannel(), task);
 
 		try {
 
@@ -231,9 +231,11 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 			
 			SynchronizationSituation situation = determineSituation(focusType, change, synchronizationPolicy, configuration.asObjectable(), task, subResult);
 			if (logDebug) {
-				LOGGER.debug("SYNCHRONIZATION: SITUATION: '{}', {}", situation.getSituation().value(), situation.getCorrelatedOwner());
+				LOGGER.debug("SYNCHRONIZATION: SITUATION: '{}', currentOwner={}, correlatedOwner={}", situation.getSituation().value(), 
+						situation.getCurrentOwner(), situation.getCorrelatedOwner());
 			} else {
-				LOGGER.trace("SYNCHRONIZATION: SITUATION: '{}', {}", situation.getSituation().value(), situation.getCorrelatedOwner());
+				LOGGER.trace("SYNCHRONIZATION: SITUATION: '{}', currentOwner={}, correlatedOwner={}", situation.getSituation().value(), 
+						situation.getCurrentOwner(), situation.getCorrelatedOwner());
 			}
 			eventInfo.setSituation(situation.getSituation());
 
@@ -251,7 +253,14 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 				if (StringUtils.isNotBlank(synchronizationPolicy.getIntent())){
 					modifications.add(PropertyDelta.createModificationReplaceProperty(ShadowType.F_INTENT, object.getDefinition(), synchronizationPolicy.getIntent()));
 				}
-				repositoryService.modifyObject(ShadowType.class, object.getOid(), modifications, subResult);
+				try {
+					repositoryService.modifyObject(ShadowType.class, object.getOid(), modifications, subResult);
+					task.recordObjectActionExecuted(object, ChangeType.MODIFY, null);
+				} catch (Throwable t) {
+					task.recordObjectActionExecuted(object, ChangeType.MODIFY, t);
+				} finally {
+					task.markObjectActionExecutedBoundary();
+				}
 				subResult.recordSuccess();
 				eventInfo.record(task);
 				return;
@@ -259,7 +268,7 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 			
 			//must be here, because when the reaction has no action, the situation will be not set.
 			PrismObject<ShadowType> newCurrentShadow = saveSyncMetadata((PrismObject<ShadowType>) currentShadow, 
-					situation, change, synchronizationPolicy, parentResult);
+					situation, change, synchronizationPolicy, task, parentResult);
 			if (newCurrentShadow != null) {
 				change.setCurrentShadow(newCurrentShadow);
 			}
@@ -273,6 +282,7 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 			subResult.recordFatalError(ex);
 			throw new SystemException(ex);
 		} finally {
+			task.markObjectActionExecutedBoundary();
 //			if (LOGGER.isTraceEnabled()) {
 //				LOGGER.trace(subResult.dump());
 //			}
@@ -453,14 +463,7 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 		try {
 			String shadowOid = getOidFromChange(change);
 			Validate.notEmpty(shadowOid, "Couldn't get resource object shadow oid from change.");
-			PrismObject<F> owner = null;
-			try {
-				owner = repositoryService.searchShadowOwner(shadowOid, SelectorOptions.createCollection(GetOperationOptions.createAllowNotFound()), subResult);
-			} catch (ObjectNotFoundException e) {
-				// Shadow is gone. This should not normally happen. But if it does then it is no
-				// tragedy. If the shadow is gone then it has no owner and the situation is quite clear.
-//				subResult.getLastSubresult().setStatus(OperationResultStatus.NOT_APPLICABLE);
-			}
+			PrismObject<F> owner = repositoryService.searchShadowOwner(shadowOid, SelectorOptions.createCollection(GetOperationOptions.createAllowNotFound()), subResult);
 
 			if (owner != null) {
 				F ownerType = owner.asObjectable();
@@ -488,9 +491,6 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 		} finally {
 			subResult.computeStatus();
 		}
-
-		LOGGER.trace("checkSituation::end - {}, {}", new Object[] {
-				(situation.getCorrelatedOwner() == null ? "null" : situation.getCorrelatedOwner().getOid()), situation.getSituation() });
 
 		return situation;
 	}
@@ -675,21 +675,22 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 					lensContext.debugDump());
 		}
 		
-		executeActions(reactionDefinition, lensContext, situation, BeforeAfterType.BEFORE, resource, 
-				logDebug, task, parentResult);
-		
-				
 		if (willSynchronize) {
 
+			// there's no point in calling executeAction without context - so the actions are executed only if synchronize == true
+			executeActions(reactionDefinition, lensContext, situation, BeforeAfterType.BEFORE, resource,
+					logDebug, task, parentResult);
+
 			clockwork.run(lensContext, task, parentResult);
-			
+
+			// note: actions "AFTER" seem to be useless here (basically they modify lens context - which is relevant only if followed by clockwork run)
+			executeActions(reactionDefinition, lensContext, situation, BeforeAfterType.AFTER, resource,
+					logDebug, task, parentResult);
+
 		} else {
-			LOGGER.trace("Skipping clockwork run on {} for situation {}, sychronize is set to false.",
+			LOGGER.trace("Skipping clockwork run on {} for situation {}, synchronize is set to false.",
 					new Object[] { resource, situation.getSituation() });
 		}
-
-		executeActions(reactionDefinition, lensContext, situation, BeforeAfterType.AFTER, resource, 
-				logDebug, task, parentResult);
 
 	}
 
@@ -903,8 +904,8 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 	 * Saves situation, timestamps, kind and intent (if needed) 
 	 */
 	private PrismObject<ShadowType> saveSyncMetadata(PrismObject<ShadowType> shadow,
-			SynchronizationSituation situation, ResourceObjectShadowChangeDescription change, ObjectSynchronizationType synchronizationPolicy,
-			OperationResult parentResult) {
+													 SynchronizationSituation situation, ResourceObjectShadowChangeDescription change, ObjectSynchronizationType synchronizationPolicy,
+													 Task task, OperationResult parentResult) {
 		if (shadow == null) {
 			return null;
 		}
@@ -944,13 +945,16 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 		try {
 			repositoryService.modifyObject(shadowType.getClass(), shadow.getOid(), deltas, parentResult);
 			ItemDelta.applyTo(deltas, shadow);
+			task.recordObjectActionExecuted(shadow, ChangeType.MODIFY, null);
 			return shadow;
 		} catch (ObjectNotFoundException ex) {
+			task.recordObjectActionExecuted(shadow, ChangeType.MODIFY, ex);
 			// This may happen e.g. during some recon-livesync interactions.
 			// If the shadow is gone then it is gone. No point in recording the situation any more.
 			LOGGER.debug("Could not update situation in account, because shadow {} does not exist any more (this may be harmless)", shadow.getOid());
 			parentResult.getLastSubresult().setStatus(OperationResultStatus.HANDLED_ERROR);
 		} catch (ObjectAlreadyExistsException|SchemaException ex) {
+			task.recordObjectActionExecuted(shadow, ChangeType.MODIFY, ex);
 			LoggingUtils.logException(LOGGER,
 					"### SYNCHRONIZATION # notifyChange(..): Save of synchronization situation failed: could not modify shadow "
 							+ shadow.getOid() + ": "+ex.getMessage(), ex);
@@ -958,6 +962,9 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 					+ shadow.getOid() + ": "+ex.getMessage(), ex);
 			throw new SystemException("Save of synchronization situation failed: could not modify shadow "
 							+ shadow.getOid() + ": "+ex.getMessage(), ex);
+		} catch (Throwable t) {
+			task.recordObjectActionExecuted(shadow, ChangeType.MODIFY, t);
+			throw t;
 		}
 
 		return null;
@@ -1025,10 +1032,12 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 		private String objectOid;
 		private Throwable exception;
 		private long started;
+		private String channel;
 
-		private SynchronizationInformation increment = new SynchronizationInformation();		// quite a hack TODO replace by something appropriate
+		private SynchronizationInformation.Record increment = new SynchronizationInformation.Record();
 
-		public SynchronizationEventInformation(PrismObject<? extends ShadowType> currentShadow, Task task) {
+		public SynchronizationEventInformation(PrismObject<? extends ShadowType> currentShadow, String channel, Task task) {
+			this.channel = channel;
 			started = System.currentTimeMillis();
 			if (currentShadow != null) {
 				final ShadowType shadow = currentShadow.asObjectable();
@@ -1037,6 +1046,10 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 				objectOid = currentShadow.getOid();
 			}
 			task.recordSynchronizationOperationStart(objectName, objectDisplayName, ShadowType.COMPLEX_TYPE, objectOid);
+			if (SchemaConstants.CHANGE_CHANNEL_LIVE_SYNC_URI.equals(channel)) {
+				// livesync processing is not controlled via model -> so we cannot do this in upper layers
+				task.recordIterativeOperationStart(objectName, objectDisplayName, ShadowType.COMPLEX_TYPE, objectOid);
+			}
 		}
 
 		public void setProtected() {
@@ -1073,6 +1086,10 @@ public class SynchronizationService implements ResourceObjectChangeListener {
 
 		public void record(Task task) {
 			task.recordSynchronizationOperationEnd(objectName, objectDisplayName, ShadowType.COMPLEX_TYPE, objectOid, started, exception, increment);
+			if (SchemaConstants.CHANGE_CHANNEL_LIVE_SYNC_URI.equals(channel)) {
+				// livesync processing is not controlled via model -> so we cannot do this in upper layers
+				task.recordIterativeOperationEnd(objectName, objectDisplayName, ShadowType.COMPLEX_TYPE, objectOid, started, exception);
+			}
 		}
 
 	}

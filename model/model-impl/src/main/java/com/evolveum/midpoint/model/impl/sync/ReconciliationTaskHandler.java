@@ -21,7 +21,9 @@ import java.util.List;
 import javax.annotation.PostConstruct;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.repo.cache.RepositoryCache;
+import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
@@ -71,7 +73,6 @@ import com.evolveum.midpoint.task.api.TaskHandler;
 import com.evolveum.midpoint.task.api.TaskManager;
 import com.evolveum.midpoint.task.api.TaskRunResult;
 import com.evolveum.midpoint.task.api.TaskRunResult.TaskRunResultStatus;
-import com.evolveum.midpoint.util.Handler;
 import com.evolveum.midpoint.util.Holder;
 import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.CommunicationException;
@@ -157,11 +158,11 @@ public class ReconciliationTaskHandler implements TaskHandler {
 	@Override
 	public TaskRunResult run(Task coordinatorTask) {
 		LOGGER.trace("ReconciliationTaskHandler.run starting");
-		TaskHandlerUtil.initAllStatistics(coordinatorTask);
+		coordinatorTask.startCollectingOperationStatsFromZero(true, true, true);
 		try {
 			return runInternal(coordinatorTask);
 		} finally {
-			TaskHandlerUtil.storeAllStatistics(coordinatorTask);
+			coordinatorTask.storeOperationStats();
 		}
 	}
 
@@ -474,7 +475,7 @@ public class ReconciliationTaskHandler implements TaskHandler {
 
 			handler.createWorkerThreads(coordinatorTask, searchResult);
 			provisioningService.searchObjectsIterative(ShadowType.class, query, null, handler, coordinatorTask, searchResult);               // note that progress is incremented within the handler, as it extends AbstractSearchIterativeResultHandler
-			handler.completeProcessing(searchResult);
+			handler.completeProcessing(coordinatorTask, searchResult);
 
 			interrupted = !coordinatorTask.canRun();
 
@@ -545,23 +546,31 @@ public class ReconciliationTaskHandler implements TaskHandler {
 		
 		final Holder<Long> countHolder = new Holder<Long>(0L);
 
-		Handler<PrismObject<ShadowType>> handler = new Handler<PrismObject<ShadowType>>() {
+		ResultHandler<ShadowType> handler = new ResultHandler<ShadowType>() {
 			@Override
-			public boolean handle(PrismObject<ShadowType> shadow) {
+			public boolean handle(PrismObject<ShadowType> shadow, OperationResult parentResult) {
 				if ((objectclassDef instanceof RefinedObjectClassDefinition) && !((RefinedObjectClassDefinition)objectclassDef).matches(shadow.asObjectable())) {
 					return true;
 				}
 				if (LOGGER.isTraceEnabled()) {
 					LOGGER.trace("Shadow reconciliation of {}, fullSynchronizationTimestamp={}", shadow, shadow.asObjectable().getFullSynchronizationTimestamp());
 				}
-				reconcileShadow(shadow, resource, task);
+				long started = System.currentTimeMillis();
+				try {
+					task.recordIterativeOperationStart(shadow.asObjectable());
+					reconcileShadow(shadow, resource, task);
+					task.recordIterativeOperationEnd(shadow.asObjectable(), started, null);
+				} catch (Throwable t) {
+					task.recordIterativeOperationEnd(shadow.asObjectable(), started, t);
+					throw t;
+				}
 				countHolder.setValue(countHolder.getValue() + 1);
                 incrementAndRecordProgress(task, new OperationResult("dummy"));     // reconcileShadow writes to its own dummy OperationResult, so we do the same here
                 return task.canRun();
 			}
 		};
 
-		Utils.searchIterative(repositoryService, ShadowType.class, query, handler , BLOCK_SIZE, opResult);
+		repositoryService.searchObjectsIterative(ShadowType.class, query, handler, null, true, opResult);
         interrupted = !task.canRun();
 		
 		// for each try the operation again
@@ -591,7 +600,7 @@ public class ReconciliationTaskHandler implements TaskHandler {
 			provisioningService.getObject(ShadowType.class, shadow.getOid(), options, task, opResult);
 		} catch (ObjectNotFoundException e) {
 			// Account is gone
-			reactShadowGone(shadow, resource, task, opResult);
+			reactShadowGone(shadow, resource, task, opResult);		// actually, for deleted objects here is the recon code called second time
 			if (opResult.isUnknown()) {
 				opResult.setStatus(OperationResultStatus.HANDLED_ERROR);
 			}
@@ -690,11 +699,14 @@ public class ReconciliationTaskHandler implements TaskHandler {
 								shadow.getDefinition(), shadow.asObjectable().getAttemptNumber() + 1);
 				try {
                     repositoryService.modifyObject(ShadowType.class, shadow.getOid(), modifications,
-                            provisioningResult);
+							provisioningResult);
+					task.recordObjectActionExecuted(shadow, null, null, ChangeType.MODIFY, SchemaConstants.CHANGE_CHANNEL_RECON_URI, null);
 				} catch(Exception e) {
+					task.recordObjectActionExecuted(shadow, null, null, ChangeType.MODIFY, SchemaConstants.CHANGE_CHANNEL_RECON_URI, e);
                     LoggingUtils.logException(LOGGER, "Failed to record finish operation failure with shadow: " + ObjectTypeUtil.toShortString(shadow.asObjectable()), e);
 				}
 			} finally {
+				task.markObjectActionExecutedBoundary();
 				RepositoryCache.exit();
 			}
 
@@ -705,6 +717,8 @@ public class ReconciliationTaskHandler implements TaskHandler {
                 break;
             }
 		}
+
+		task.setExpectedTotal(null);		// for next phases, it looks strangely to see progress e.g. 2/1
 
 		// for each try the operation again
 

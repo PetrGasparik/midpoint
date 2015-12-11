@@ -30,7 +30,6 @@ import com.evolveum.midpoint.model.api.hooks.ChangeHook;
 import com.evolveum.midpoint.model.api.hooks.HookOperationMode;
 import com.evolveum.midpoint.model.api.hooks.HookRegistry;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
-import com.evolveum.midpoint.model.common.expression.evaluator.caching.AbstractSearchExpressionEvaluatorCache;
 import com.evolveum.midpoint.model.common.expression.evaluator.caching.AssociationSearchExpressionEvaluatorCache;
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpression;
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpressionFactory;
@@ -40,6 +39,9 @@ import com.evolveum.midpoint.model.impl.lens.projector.FocusConstraintsChecker;
 import com.evolveum.midpoint.model.impl.lens.projector.Projector;
 import com.evolveum.midpoint.model.impl.sync.RecomputeTaskHandler;
 import com.evolveum.midpoint.prism.Containerable;
+import com.evolveum.midpoint.prism.Item;
+import com.evolveum.midpoint.prism.PrismContainer;
+import com.evolveum.midpoint.prism.PrismContainerDefinition;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismProperty;
@@ -89,6 +91,7 @@ import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationDecisionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationPhaseType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.HookListType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.HookType;
@@ -112,9 +115,9 @@ import javax.xml.namespace.QName;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 /**
  * @author semancik
@@ -182,6 +185,7 @@ public class Clockwork {
 	private static final int DEFAULT_MAX_CLICKS = 200;
 
 	public <F extends ObjectType> HookOperationMode run(LensContext<F> context, Task task, OperationResult result) throws SchemaException, PolicyViolationException, ExpressionEvaluationException, ObjectNotFoundException, ObjectAlreadyExistsException, CommunicationException, ConfigurationException, SecurityViolationException {
+		LOGGER.trace("Running clockwork for context {}", context);
 		if (InternalsConfig.consistencyChecks) {
 			context.checkConsistence();
 		}
@@ -696,7 +700,7 @@ public class Clockwork {
 		} else {
 			Collection<LensProjectionContext> projectionContexts = context.getProjectionContexts();
 			if (projectionContexts == null || projectionContexts.isEmpty()) {
-				throw new IllegalStateException("No focus and no projectstions in "+context);
+				throw new IllegalStateException("No focus and no projections in "+context);
 			}
 			if (projectionContexts.size() > 1) {
 				throw new IllegalStateException("No focus and more than one projection in "+context);
@@ -733,7 +737,9 @@ public class Clockwork {
 		auditRecord.setChannel(context.getChannel());
 		
 		if (stage == AuditEventStage.REQUEST) {
-			auditRecord.addDeltas(ObjectDeltaOperation.cloneDeltaCollection(context.getPrimaryChanges()));
+			Collection<ObjectDeltaOperation<? extends ObjectType>> clonedDeltas = ObjectDeltaOperation.cloneDeltaCollection(context.getPrimaryChanges());
+			checkNamesArePresent(clonedDeltas, primaryObject);
+			auditRecord.addDeltas(clonedDeltas);
 		} else if (stage == AuditEventStage.EXECUTION) {
 			auditRecord.setOutcome(result.getComputeStatus());
 			Collection<ObjectDeltaOperation<? extends ObjectType>> unauditedExecutedDeltas = context.getUnauditedExecutedDeltas();
@@ -741,7 +747,9 @@ public class Clockwork {
 				// No deltas, nothing to audit in this wave
 				return;
 			}
-			auditRecord.addDeltas(ObjectDeltaOperation.cloneCollection(unauditedExecutedDeltas));
+			Collection<ObjectDeltaOperation<? extends ObjectType>> clonedDeltas = ObjectDeltaOperation.cloneCollection(unauditedExecutedDeltas);
+			checkNamesArePresent(clonedDeltas, primaryObject);
+			auditRecord.addDeltas(clonedDeltas);
 		} else {
 			throw new IllegalStateException("Unknown audit stage "+stage);
 		}
@@ -764,7 +772,17 @@ public class Clockwork {
 			throw new IllegalStateException("Unknown audit stage "+stage);
 		}
 	}
-	
+
+	private void checkNamesArePresent(Collection<ObjectDeltaOperation<? extends ObjectType>> deltas, PrismObject<? extends ObjectType> primaryObject) {
+		if (primaryObject != null) {
+            for (ObjectDeltaOperation<? extends ObjectType> delta : deltas) {
+                if (delta.getObjectName() == null) {
+                    delta.setObjectName(primaryObject.getName());
+                }
+            }
+        }
+	}
+
 	/**
 	 * Adds a message to the record by pulling the messages from individual delta results.
 	 */
@@ -961,6 +979,7 @@ public class Clockwork {
 		ObjectDelta<O> primaryDelta = elementContext.getPrimaryDelta();
 		// If there is no delta then there is no request to authorize
 		if (primaryDelta != null) {
+			primaryDelta = primaryDelta.clone();
 			PrismObject<O> object = elementContext.getObjectNew();
 			if (primaryDelta.isDelete()) {
 				object = elementContext.getObjectCurrent();
@@ -995,7 +1014,6 @@ public class Clockwork {
 					}
 					// assignments were authorized explicitly. Therefore we need to remove them from primary delta to avoid another
 					// authorization
-					primaryDelta = primaryDelta.clone();
 					if (primaryDelta.isAdd()) {
 						PrismObject<O> objectToAdd = primaryDelta.getObjectToAdd();
 						objectToAdd.removeContainer(FocusType.F_ASSIGNMENT);
@@ -1004,7 +1022,47 @@ public class Clockwork {
 					}
 				}
 			}
+
+			// Process credential changes explicitly. There is a special authorization for that.
 			
+			if (!primaryDelta.isDelete()) {
+				if (primaryDelta.isAdd()) {
+					PrismObject<O> objectToAdd = primaryDelta.getObjectToAdd();
+					PrismContainer<CredentialsType> credentialsContainer = objectToAdd.findContainer(UserType.F_CREDENTIALS);
+					if (credentialsContainer != null) {
+						for (Item<?,?> item: credentialsContainer.getValue().getItems()) {
+							ContainerDelta<?> cdelta = new ContainerDelta(item.getPath(), (PrismContainerDefinition)item.getDefinition(), prismContext);
+							cdelta.addValuesToAdd(((PrismContainer)item).getValue().clone());
+							AuthorizationDecisionType cdecision = evaluateCredentialDecision(securityConstraints, cdelta);
+							LOGGER.trace("AUTZ: credential add {} decision: {}", item.getPath(), cdecision);
+							if (cdecision == AuthorizationDecisionType.ALLOW) {
+								// Remove it from primary delta, so it will not be evaluated later
+								objectToAdd.removeContainer(item.getPath());
+							} else if (cdecision == AuthorizationDecisionType.DENY) {
+								throw new AuthorizationException("Access denied");
+							} else {
+								// Do nothing. The access will be evaluated later in a normal way
+							}
+						}
+					}
+				} else {
+					// modify
+					Collection<? extends ItemDelta<?, ?>> credentialChanges = primaryDelta.findItemDeltasSubPath(new ItemPath(UserType.F_CREDENTIALS));
+					for (ItemDelta credentialChange: credentialChanges) {
+						AuthorizationDecisionType cdecision = evaluateCredentialDecision(securityConstraints, credentialChange);
+						LOGGER.trace("AUTZ: credential delta {} decision: {}", credentialChange.getPath(), cdecision);
+						if (cdecision == AuthorizationDecisionType.ALLOW) {
+							// Remove it from primary delta, so it will not be evaluated later
+							primaryDelta.removeModification(credentialChange);
+						} else if (cdecision == AuthorizationDecisionType.DENY) {
+							throw new AuthorizationException("Access denied");
+						} else {
+							// Do nothing. The access will be evaluated later in a normal way
+						}
+					}
+				}
+			}
+
 			if (primaryDelta != null && !primaryDelta.isEmpty()) {
 				// TODO: optimize, avoid evaluating the constraints twice
 				securityEnforcer.authorize(operationUrl, AuthorizationPhaseType.REQUEST, object, primaryDelta, null, ownerResolver, result);
@@ -1014,6 +1072,11 @@ public class Clockwork {
 		} else {
 			return null;
 		}
+	}
+
+	private AuthorizationDecisionType evaluateCredentialDecision(ObjectSecurityConstraints securityConstraints, ItemDelta credentialChange) {
+		return securityConstraints.findItemDecision(credentialChange.getPath(),
+				ModelAuthorizationAction.CHANGE_CREDENTIALS.getUrl(), AuthorizationPhaseType.REQUEST);
 	}
 
 	private <F extends FocusType> void authorizeAssignmentRequest(String actionUrl, PrismObject object,

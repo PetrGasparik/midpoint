@@ -23,8 +23,8 @@ import java.util.List;
 import javax.xml.namespace.QName;
 
 import com.evolveum.midpoint.prism.Item;
-
 import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,7 +79,6 @@ import com.evolveum.midpoint.provisioning.ucf.api.ConnectorInstance;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
 import com.evolveum.midpoint.provisioning.ucf.api.PropertyModificationOperation;
 import com.evolveum.midpoint.provisioning.ucf.api.ResultHandler;
-import com.evolveum.midpoint.provisioning.util.ProvisioningUtil;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.DeltaConvertor;
 import com.evolveum.midpoint.schema.GetOperationOptions;
@@ -94,6 +93,7 @@ import com.evolveum.midpoint.schema.processor.ResourceAttributeContainer;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeContainerDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.schema.util.SchemaDebugUtil;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
@@ -299,7 +299,11 @@ public abstract class ShadowCache {
 				
 				resourceShadow = handleError(ctx, ex, repositoryShadow, FailedOperation.GET, null, isCompensate(rootOptions),
 						parentResult);
-				
+				if (parentResult.getStatus() == OperationResultStatus.FATAL_ERROR) {
+					// We are going to return an object. Therefore this cannot be fatal error, as at least some information
+					// is returned
+					parentResult.setStatus(OperationResultStatus.PARTIAL_ERROR);
+				}
 				return resourceShadow;
 
 			} catch (GenericFrameworkException e) {
@@ -1358,7 +1362,7 @@ public abstract class ShadowCache {
 		ResourceAttributeContainer newSecondaryIdentifiers = ShadowUtil.getAttributesContainer(currentShadowType);
 		
 		//remember name before normalizing attributes
-		PolyString currentShadowName = ProvisioningUtil.determineShadowName(currentShadowType);
+		PolyString currentShadowName = ShadowUtil.determineShadowName(currentShadowType);
 		currentShadowType.setName(new PolyStringType(currentShadowName));
 		
 		Iterator<ResourceAttribute<?>> oldSecondaryIterator = oldSecondaryIdentifiers.iterator();
@@ -1587,7 +1591,7 @@ public abstract class ShadowCache {
 			resultShadowType.setObjectClass(resourceAttributesContainer.getDefinition().getTypeName());
 		}
 		if (resultShadowType.getName() == null) {
-			resultShadowType.setName(new PolyStringType(ProvisioningUtil.determineShadowName(resourceShadow)));
+			resultShadowType.setName(new PolyStringType(ShadowUtil.determineShadowName(resourceShadow)));
 		}
 		if (resultShadowType.getResource() == null) {
 			resultShadowType.setResourceRef(ObjectTypeUtil.createObjectRef(ctx.getResource()));

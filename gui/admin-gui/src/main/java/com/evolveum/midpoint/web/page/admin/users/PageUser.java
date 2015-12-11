@@ -19,43 +19,31 @@ package com.evolveum.midpoint.web.page.admin.users;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.lang.StringUtils;
+import javax.xml.namespace.QName;
+
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.markup.html.WebMarkupContainer;
-import org.apache.wicket.markup.html.basic.Label;
-import org.apache.wicket.markup.html.image.Image;
-import org.apache.wicket.model.AbstractReadOnlyModel;
-import org.apache.wicket.model.IModel;
 import org.apache.wicket.request.mapper.parameter.PageParameters;
-import org.apache.wicket.request.resource.AbstractResource;
-import org.apache.wicket.request.resource.ByteArrayResource;
-import org.apache.wicket.request.resource.ContextRelativeResource;
 import org.apache.wicket.util.string.StringValue;
 
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.application.AuthorizationAction;
 import com.evolveum.midpoint.web.application.PageDescriptor;
+import com.evolveum.midpoint.web.component.FocusSummaryPanel;
 import com.evolveum.midpoint.web.component.data.TablePanel;
-import com.evolveum.midpoint.web.component.form.Form;
-import com.evolveum.midpoint.web.component.prism.ObjectWrapper;
 import com.evolveum.midpoint.web.component.progress.ProgressReporter;
 import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.PrismPropertyModel;
-import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.web.page.PageTemplate;
 import com.evolveum.midpoint.web.page.admin.PageAdminFocus;
 import com.evolveum.midpoint.web.page.admin.home.PageDashboard;
 import com.evolveum.midpoint.web.page.admin.server.dto.TaskDtoProvider;
 import com.evolveum.midpoint.web.page.admin.users.component.ExecuteChangeOptionsDto;
-import com.evolveum.midpoint.web.page.admin.users.dto.FocusShadowDto;
+import com.evolveum.midpoint.web.page.admin.users.component.UserSummaryPanel;
+import com.evolveum.midpoint.web.page.admin.users.dto.FocusProjectionDto;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 /**
@@ -68,30 +56,16 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
         @AuthorizationAction(actionUri = AuthorizationConstants.AUTZ_UI_USER_URL,
                 label = "PageUser.auth.user.label",
                 description = "PageUser.auth.user.description")})
-public class PageUser extends PageAdminFocus {
+public class PageUser extends PageAdminFocus<UserType> {
 
     public static final String PARAM_RETURN_PAGE = "returnPage";
     private static final String DOT_CLASS = PageUser.class.getName() + ".";
-  
 
-
-    private static final String ID_MAIN_FORM = "mainForm";
-  
+    private static final String ID_MAIN_FORM = "mainForm";  
     private static final String ID_TASK_TABLE = "taskTable";
- 
-  
     private static final String ID_TASKS = "tasks";
- 
-    private static final String ID_SUMMARY_PANEL = "summaryPanel";
-    private static final String ID_SUMMARY_NAME = "summaryName";
-    private static final String ID_SUMMARY_FULL_NAME = "summaryFullName";
-    private static final String ID_SUMMARY_GIVEN_NAME = "summaryGivenName";
-    private static final String ID_SUMMARY_FAMILY_NAME = "summaryFamilyName";
-    private static final String ID_SUMMARY_PHOTO = "summaryPhoto";
 
     private static final Trace LOGGER = TraceManager.getTrace(PageUser.class);
-
-    private IModel<PrismObject<UserType>> summaryUser;
 
     private LoadableModel<ExecuteChangeOptionsDto> executeOptionsModel
             = new LoadableModel<ExecuteChangeOptionsDto>(false) {
@@ -118,59 +92,9 @@ public class PageUser extends PageAdminFocus {
         initialize(userToEdit);
     }
 
-    private void initSummaryInfo(Form mainForm){
-
-        WebMarkupContainer summaryContainer = new WebMarkupContainer(ID_SUMMARY_PANEL);
-        summaryContainer.setOutputMarkupId(true);
-
-        summaryContainer.add(new VisibleEnableBehaviour(){
-
-            @Override
-            public boolean isVisible(){
-                if(getPageParameters().get(OnePageParameterEncoder.PARAMETER).isEmpty()){
-                    return false;
-                } else {
-                    return true;
-                }
-            }
-        });
-
-        mainForm.add(summaryContainer);
-
-        summaryUser = new AbstractReadOnlyModel<PrismObject<UserType>>() {
-
-            @Override
-            public PrismObject<UserType> getObject() {
-                ObjectWrapper user = getFocusWrapper();
-                return user.getObject();
-            }
-        };
-
-        summaryContainer.add(new Label(ID_SUMMARY_NAME, new PrismPropertyModel<>(summaryUser, UserType.F_NAME)));
-        summaryContainer.add(new Label(ID_SUMMARY_FULL_NAME, new PrismPropertyModel<>(summaryUser, UserType.F_FULL_NAME)));
-        summaryContainer.add(new Label(ID_SUMMARY_GIVEN_NAME, new PrismPropertyModel<>(summaryUser, UserType.F_GIVEN_NAME)));
-        summaryContainer.add(new Label(ID_SUMMARY_FAMILY_NAME, new PrismPropertyModel<>(summaryUser, UserType.F_FAMILY_NAME)));
-
-        Image img = new Image(ID_SUMMARY_PHOTO, new AbstractReadOnlyModel<AbstractResource>() {
-
-            @Override
-            public AbstractResource getObject() {
-                if(summaryUser.getObject().asObjectable().getJpegPhoto() != null){
-                    return new ByteArrayResource("image/jpeg", summaryUser.getObject().asObjectable().getJpegPhoto());
-                } else {
-                    return new ContextRelativeResource("img/placeholder.png");
-                }
-
-            }
-        });
-        summaryContainer.add(img);
-    }
-
-
-
-    private boolean isEditingUser() {
-        StringValue userOid = getPageParameters().get(OnePageParameterEncoder.PARAMETER);
-        return userOid != null && StringUtils.isNotEmpty(userOid.toString());
+    @Override
+    protected FocusSummaryPanel<UserType> createSummaryPanel() {
+    	return new UserSummaryPanel(ID_SUMMARY_PANEL, getFocusModel());
     }
 
     protected void cancelPerformed(AjaxRequestTarget target) {
@@ -199,26 +123,24 @@ public class PageUser extends PageAdminFocus {
             setResponsePage(getSessionStorage().getPreviousPage());
         } else if (getPreviousPage() != null) {
             goBack(PageDashboard.class);        // the class parameter is not necessary, is previousPage is set
-        } else if (getSessionStorage() != null && getSessionStorage().getPreviousPage() != null){
-            setResponsePage(getSessionStorage().getPreviousPage());
+        } else if (getSessionStorage() != null){
+        	if (getSessionStorage().getPreviousPageInstance() != null){
+        		setResponsePage(getSessionStorage().getPreviousPageInstance());
+        	} else if (getSessionStorage().getPreviousPage() != null){
+        		setResponsePage(getSessionStorage().getPreviousPage());
+        	} else {
+        		setResponsePage(PageUsers.class);
+        	}
         } else {
         	setResponsePage(PageUsers.class);
         }
     }
 
+    private List<FocusProjectionDto> getSelectedAccounts() {
+        List<FocusProjectionDto> selected = new ArrayList<FocusProjectionDto>();
 
-
-    protected void reviveCustomModels() throws SchemaException {
-        WebMiscUtil.revive(summaryUser, getPrismContext());
-    }
-
-
-
-    private List<FocusShadowDto> getSelectedAccounts() {
-        List<FocusShadowDto> selected = new ArrayList<FocusShadowDto>();
-
-        List<FocusShadowDto> all = getFocusShadows();
-        for (FocusShadowDto account : all) {
+        List<FocusProjectionDto> all = getFocusShadows();
+        for (FocusProjectionDto account : all) {
             if (account.isLoadedOK() && account.getObject().isSelected()) {
                 selected.add(account);
             }
@@ -226,8 +148,6 @@ public class PageUser extends PageAdminFocus {
 
         return selected;
     }
-
-
  
 
     // many things could change (e.g. assignments, tasks) - here we deal only with tasks
@@ -242,16 +162,9 @@ public class PageUser extends PageAdminFocus {
     }
 
 	@Override
-	protected FocusType createNewFocus() {
+	protected UserType createNewFocus() {
 		return new UserType();
 	}
-
-	@Override
-	protected void initCustomLayout(Form mainForm) {
-		initSummaryInfo(mainForm);
-	}
-
-	
 	
 	@Override
 	protected Class getRestartResponsePage() {

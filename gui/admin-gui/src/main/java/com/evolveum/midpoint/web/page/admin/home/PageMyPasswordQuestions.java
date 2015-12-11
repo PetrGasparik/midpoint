@@ -5,6 +5,8 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
+import com.evolveum.midpoint.security.api.AuthorizationConstants;
+import com.evolveum.midpoint.web.page.self.PageSelfDashboard;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.wicket.RestartResponseException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
@@ -94,6 +96,11 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 
 	}
 
+    public PageMyPasswordQuestions(IModel<PasswordQuestionsDto> model){
+        this.model = model;
+        initLayout();
+    }
+
 	public PageMyPasswordQuestions(final PrismObject<UserType> userToEdit) {
 		userModel = new LoadableModel<ObjectWrapper>(false) {
 
@@ -137,39 +144,38 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 
 	public List<SecurityQuestionAnswerDTO> createUsersSecurityQuestionsList(PrismObject<UserType> user){
 		LOGGER.debug("Security Questions Loading for user: "+ user.getOid());
-		List<SecurityQuestionAnswerType> secQuestAnsList= user.asObjectable().getCredentials().getSecurityQuestions().getQuestionAnswer();
+        if (user.asObjectable().getCredentials() != null && user.asObjectable().getCredentials().getSecurityQuestions() != null) {
+            List<SecurityQuestionAnswerType> secQuestAnsList = user.asObjectable().getCredentials().getSecurityQuestions().getQuestionAnswer();
 
-		if (secQuestAnsList!=null){
-			
-			LOGGER.debug("User SecurityQuestion ANswer List is Not null");
-			List<SecurityQuestionAnswerDTO> secQuestAnswListDTO =new ArrayList<SecurityQuestionAnswerDTO>();
-			for (Iterator iterator = secQuestAnsList.iterator(); iterator
-					.hasNext();) {
-				SecurityQuestionAnswerType securityQuestionAnswerType = (SecurityQuestionAnswerType) iterator
-						.next();
-				
-				Protector protector = getPrismContext().getDefaultProtector();
-				String decoded="";
-				if (securityQuestionAnswerType.getQuestionAnswer().getEncryptedDataType() != null) {
-					try {
-						decoded = protector.decryptString(securityQuestionAnswerType.getQuestionAnswer());
+            if (secQuestAnsList != null) {
 
-					} catch (EncryptionException e) {
-						LoggingUtils.logException(LOGGER, "Couldn't decrypt user answer", e);
-						
-					}
-				}
-				//LOGGER.debug("SecAnswerIdentifier:"+securityQuestionAnswerType.getQuestionIdentifier());
-				secQuestAnswListDTO.add(new SecurityQuestionAnswerDTO(securityQuestionAnswerType.getQuestionIdentifier(), decoded)); 
-			}
+                LOGGER.debug("User SecurityQuestion ANswer List is Not null");
+                List<SecurityQuestionAnswerDTO> secQuestAnswListDTO = new ArrayList<SecurityQuestionAnswerDTO>();
+                for (Iterator iterator = secQuestAnsList.iterator(); iterator
+                        .hasNext(); ) {
+                    SecurityQuestionAnswerType securityQuestionAnswerType = (SecurityQuestionAnswerType) iterator
+                            .next();
 
-			return secQuestAnswListDTO;
-		}
-		else{
-			return null;
-		}
+                    Protector protector = getPrismContext().getDefaultProtector();
+                    String decoded = "";
+                    if (securityQuestionAnswerType.getQuestionAnswer().getEncryptedDataType() != null) {
+                        try {
+                            decoded = protector.decryptString(securityQuestionAnswerType.getQuestionAnswer());
 
-	}
+                        } catch (EncryptionException e) {
+                            LoggingUtils.logException(LOGGER, "Couldn't decrypt user answer", e);
+
+                        }
+                    }
+                    //LOGGER.debug("SecAnswerIdentifier:"+securityQuestionAnswerType.getQuestionIdentifier());
+                    secQuestAnswListDTO.add(new SecurityQuestionAnswerDTO(securityQuestionAnswerType.getQuestionIdentifier(), decoded));
+                }
+
+                return secQuestAnswListDTO;
+            }
+        }
+        return null;
+    }
 
 
 	public void initLayout(){
@@ -194,11 +200,15 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 		
 		//	PrismObject<SecurityPolicyType> securityPolicy = getModelService().getObject(SecurityPolicyType.class,config.asObjectable().getGlobalSecurityPolicyRef().getOid(), null, task, subResult);
 			//Global Policy set question numbers
-			questionNumber=	credPolicy.getSecurityQuestions().getQuestionNumber();
-			
-			// Actual Policy Question List										
-			policyQuestionList = credPolicy.getSecurityQuestions().getQuestion();
-			
+                if (credPolicy != null && credPolicy.getSecurityQuestions() != null) {
+                    questionNumber = credPolicy.getSecurityQuestions().getQuestionNumber();
+
+                    // Actual Policy Question List
+                    policyQuestionList = credPolicy.getSecurityQuestions().getQuestion();
+                } else {
+                    questionNumber = 0;
+                    policyQuestionList = new ArrayList<SecurityQuestionDefinitionType>();
+                }
 			}catch(Exception ex){
 				ex.printStackTrace();
 						
@@ -436,8 +446,13 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 	}
 
 	private void cancelPerformed(AjaxRequestTarget target){
-		setResponsePage(PageDashboard.class);		
-	}
+        if (WebMiscUtil.isAuthorized(AuthorizationConstants.AUTZ_UI_DASHBOARD_URL,
+                AuthorizationConstants.AUTZ_UI_HOME_ALL_URL)) {
+            setResponsePage(PageDashboard.class);
+        } else {
+            setResponsePage(PageSelfDashboard.class);
+        }
+    }
 
 	private ObjectWrapper loadUserWrapper(PrismObject<UserType> userToEdit) {
 		OperationResult result = new OperationResult(OPERATION_LOAD_USER);

@@ -197,13 +197,13 @@ public class UserBrowserDialog<T extends FocusType> extends ModalWindow {
 	            @Override
 	            public void onClick(AjaxRequestTarget target) {
 	            	DataTable table = getTable().getDataTable();
-	            	List<SelectableBean> availableData = ((ObjectDataProvider)table.getDataProvider()).getAvailableData();
-	            	List<T> selected = new ArrayList<>();
-	            	for (SelectableBean o : availableData){
-	            		if (o.isSelected()){
-	            			selected.add((T)o.getValue());
-	            		}
-	            	}
+	            	List<T> selected = ((ObjectDataProvider)table.getDataProvider()).getSelectedData();
+//	            	List<T> selected = new ArrayList<>();
+//	            	for (SelectableBean o : availableData){
+//	            		if (o.isSelected()){
+//	            			selected.add((T)o.getValue());
+//	            		}
+//	            	}
 	                addPerformed(target, selected);
 	            }
 	        };
@@ -220,9 +220,24 @@ public class UserBrowserDialog<T extends FocusType> extends ModalWindow {
     private TablePanel createTable(){
     	List<IColumn<SelectableBean<T>, String>> columns = initColumns();
         TablePanel table = new TablePanel<>(ID_TABLE,
-                new ObjectDataProvider(getPageBase(), type), columns);
+                new ObjectDataProvider(getPageBase(), type){
+        	
+        	@Override
+        	public ObjectQuery getQuery() {
+        		ObjectQuery customQuery = createContentQuery();
+        		if (customQuery == null){
+        			return super.getQuery();
+        		}
+        		return customQuery;
+        	}
+        	
+        }, columns);
         table.setOutputMarkupId(true);
         return table;
+    }
+    
+    protected ObjectQuery createContentQuery(){
+    	return null;
     }
     private PageBase getPageBase() {
         return (PageBase) getPage();

@@ -1,8 +1,6 @@
 package com.evolveum.midpoint.web.page.self;
 
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.schema.GetOperationOptions;
-import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
 import com.evolveum.midpoint.security.api.MidPointPrincipal;
@@ -17,7 +15,6 @@ import com.evolveum.midpoint.web.component.SecurityContextAwareCallable;
 import com.evolveum.midpoint.web.component.util.CallableResult;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.component.wf.WorkItemsPanel;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.SystemConfigurationDto;
 import com.evolveum.midpoint.web.page.admin.home.component.AsyncDashboardPanel;
 import com.evolveum.midpoint.web.page.admin.home.component.DashboardColor;
 import com.evolveum.midpoint.web.page.admin.home.dto.AccountCallableResult;
@@ -40,7 +37,6 @@ import org.apache.wicket.model.PropertyModel;
 import org.springframework.security.core.Authentication;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -66,45 +62,26 @@ public class PageSelfDashboard extends PageSelf {
     private static final int MAX_WORK_ITEMS = 1000;
     private static final int MAX_REQUESTS = 1000;
     private final Model<PrismObject<UserType>> principalModel = new Model<PrismObject<UserType>>();
+    private IModel<List<RichHyperlinkType>> linksPanelModel = null;
     private static final String OPERATION_LOAD_USER = DOT_CLASS + "loadUser";
     private static final String TASK_GET_SYSTEM_CONFIG = DOT_CLASS + "getSystemConfiguration";
 
     public PageSelfDashboard() {
         principalModel.setObject(loadUser());
+        createLinksPanelModel();
         initLayout();
     }
 
     private void initLayout(){
         DashboardSearchPanel dashboardSearchPanel = new DashboardSearchPanel(ID_SEARCH_PANEL, null);
         add(dashboardSearchPanel);
-        final AsyncDashboardPanel<Object, List<RichHyperlinkType>> linksPanel =
-                new AsyncDashboardPanel<Object, List<RichHyperlinkType>>(ID_LINKS_PANEL, null,
-                        "", DashboardColor.GRAY) {
-
-                   @Override
-                    protected SecurityContextAwareCallable<CallableResult<List<RichHyperlinkType>>> createCallable(
-                            Authentication auth, IModel callableParameterModel) {
-
-                        return new SecurityContextAwareCallable<CallableResult<List<RichHyperlinkType>>>(
-                                getSecurityEnforcer(), auth) {
-
-                            @Override
-                            public CallableResult<List<RichHyperlinkType>> callWithContextPrepared() throws Exception {
-                                return loadLinksList();
-                            }
-                        };
-                    }
-
-                    @Override
-                    protected Component getMainComponent(String markupId) {
-                        LinksPanel panel = new LinksPanel(markupId, new PropertyModel<List<RichHyperlinkType>>(getModel(), CallableResult.F_VALUE));
-                        WebMarkupContainer dashboardTitle = (WebMarkupContainer) get(
-                                createComponentPath(AsyncDashboardPanel.ID_DASHBOARD_PARENT, AsyncDashboardPanel.ID_DASHBOARD_TITLE));
-                        dashboardTitle.setVisible(false);
-
-                        return panel;
-                    }
-                };
+        if (! WebMiscUtil.isAuthorized(AuthorizationConstants.AUTZ_UI_USERS_ALL_URL,
+                AuthorizationConstants.AUTZ_UI_USERS_URL, AuthorizationConstants.AUTZ_UI_RESOURCES_ALL_URL,
+                AuthorizationConstants.AUTZ_UI_RESOURCES_URL, AuthorizationConstants.AUTZ_UI_TASKS_ALL_URL,
+                AuthorizationConstants.AUTZ_UI_TASKS_URL)) {
+            dashboardSearchPanel.setVisible(false);
+        }
+        LinksPanel linksPanel = new LinksPanel(ID_LINKS_PANEL, linksPanelModel, linksPanelModel.getObject());
         add(linksPanel);
 
         AsyncDashboardPanel<Object, List<WorkItemDto>> workItemsPanel =
@@ -233,7 +210,12 @@ public class PageSelfDashboard extends PageSelf {
 
         try {
             List<WfProcessInstanceType> processInstanceTypes = getWorkflowService().listProcessInstancesRelatedToUser(user.getOid(),
-             false, false, false, 0, MAX_REQUESTS, result);
+             true, false, false, 0, MAX_REQUESTS, result);
+            List<WfProcessInstanceType> processInstanceTypesFinished = getWorkflowService().listProcessInstancesRelatedToUser(user.getOid(),
+             true, false, true, 0, MAX_REQUESTS, result);
+            if (processInstanceTypes != null && processInstanceTypesFinished != null){
+                processInstanceTypes.addAll(processInstanceTypesFinished);
+            }
             for (WfProcessInstanceType processInstanceType : processInstanceTypes) {
                 ProcessInstanceState processInstanceState = (ProcessInstanceState) processInstanceType.getState();
                 Task shadowTask = null;
@@ -243,6 +225,7 @@ public class PageSelfDashboard extends PageSelf {
                         shadowTask = getTaskManager().getTask(shadowTaskOid, result);
                     } catch (ObjectNotFoundException e) {
                         // task is already deleted, no problem here
+                        result.muteLastSubresultError();
                     }
                 }
 
@@ -267,9 +250,10 @@ public class PageSelfDashboard extends PageSelf {
             throw new IllegalArgumentException("No OID in principal: "+principal);
         }
 
-        OperationResult result = new OperationResult(OPERATION_LOAD_USER);
+        Task task = createSimpleTask(OPERATION_LOAD_USER);
+        OperationResult result = task.getResult();
         PrismObject<UserType> user = WebModelUtils.loadObject(UserType.class,
-                principal.getOid(), result, PageSelfDashboard.this);
+                principal.getOid(), PageSelfDashboard.this, task, result);
         result.computeStatus();
 
         if (!WebMiscUtil.isSuccessOrHandledError(result)) {
@@ -279,36 +263,44 @@ public class PageSelfDashboard extends PageSelf {
         return user;
     }
 
-    private CallableResult<List<RichHyperlinkType>> loadLinksList(){
-        CallableResult callableResult = new CallableResult();
+    private List<RichHyperlinkType> loadLinksList(){
         List<RichHyperlinkType> list = new ArrayList<RichHyperlinkType>();
 
         PrismObject<UserType> user = principalModel.getObject();
         if (user == null) {
-            return callableResult;
+            return list;
         }
 
         OperationResult result = new OperationResult(OPERATION_LOAD_WORK_ITEMS);
-        callableResult.setResult(result);
 
         Task task = createSimpleTask(TASK_GET_SYSTEM_CONFIG);
-        Collection<SelectorOptions<GetOperationOptions>> options =
-                SelectorOptions.createCollection(GetOperationOptions.createResolve(),
-                        SystemConfigurationType.F_DEFAULT_USER_TEMPLATE ,SystemConfigurationType.F_GLOBAL_PASSWORD_POLICY);
-        SystemConfigurationDto dto = null;
         try{
-            PrismObject<SystemConfigurationType> systemConfig = getModelService().getObject(SystemConfigurationType.class,
-                    SystemObjectsType.SYSTEM_CONFIGURATION.value(), options, task, result);
-
-            dto = new SystemConfigurationDto(systemConfig);
-            list = dto.getUserDashboardLink();
-            callableResult.setValue(list);
+            AdminGuiConfigurationType adminGuiConfig = getModelInteractionService().getAdminGuiConfiguration(task, result);
+            list = adminGuiConfig.getUserDashboardLink();
             result.recordSuccess();
         } catch(Exception ex){
             LoggingUtils.logException(LOGGER, "Couldn't load system configuration", ex);
             result.recordFatalError("Couldn't load system configuration.", ex);
         }
-        return callableResult;
+        return list;
     }
 
+    private void createLinksPanelModel(){
+        linksPanelModel = new IModel<List<RichHyperlinkType>>() {
+            @Override
+            public List<RichHyperlinkType> getObject() {
+                return loadLinksList();
+            }
+
+            @Override
+            public void setObject(List<RichHyperlinkType> richHyperlinkTypes) {
+
+            }
+
+            @Override
+            public void detach() {
+
+            }
+        };
+    }
 }

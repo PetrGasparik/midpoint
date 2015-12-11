@@ -58,7 +58,7 @@ public abstract class ItemRestriction<T extends ValueFilter> extends Restriction
     private static final Trace LOGGER = TraceManager.getTrace(ItemRestriction.class);
 
     @Override
-    public boolean canHandle(ObjectFilter filter, QueryContext context) throws QueryException {
+    public boolean canHandle(ObjectFilter filter) throws QueryException {
         Validate.notNull(filter, "Object filter must not be null.");
         if (!(filter instanceof ValueFilter)) {
             return false;
@@ -67,7 +67,7 @@ public abstract class ItemRestriction<T extends ValueFilter> extends Restriction
     }
 
     @Override
-    public Criterion interpret(T filter) throws QueryException {
+    public Criterion interpret() throws QueryException {
 
 //        ItemPath path = RUtil.createFullPath(filter);
     	ItemPath path = filter.getFullPath();
@@ -179,6 +179,10 @@ public abstract class ItemRestriction<T extends ValueFilter> extends Restriction
             if (ObjectType.F_METADATA.equals(qname)) {
                 continue;
             }
+            // ugly hack: construction/resourceRef -> resourceRef
+            if (QNameUtil.match(AssignmentType.F_CONSTRUCTION, qname)) {
+                continue;
+            }
 
             // create new property path
             propPathSegments.add(new NameItemPathSegment(qname));
@@ -260,6 +264,10 @@ public abstract class ItemRestriction<T extends ValueFilter> extends Restriction
         for (ItemPathSegment segment : segments) {
             QName qname = ItemPath.getName(segment);
             if (ObjectType.F_METADATA.equals(qname)) {
+                continue;
+            }
+            // ugly hack: construction/resourceRef -> resourceRef
+            if (QNameUtil.match(AssignmentType.F_CONSTRUCTION, qname)) {
                 continue;
             }
             // create new property path
@@ -557,6 +565,9 @@ public abstract class ItemRestriction<T extends ValueFilter> extends Restriction
         for (ItemPathSegment segment : segments) {
             QName qname = ItemPath.getName(segment);
             if (ObjectType.F_METADATA.equals(qname)) {          // todo not QNameUtil.match? [mederly]
+                continue;
+            }
+            if (QNameUtil.match(AssignmentType.F_CONSTRUCTION, qname)) {     // ugly hack: construction/resourceRef -> resourceRef
                 continue;
             }
 

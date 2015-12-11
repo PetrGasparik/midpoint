@@ -46,7 +46,7 @@
             <a href="https://wiki.evolveum.com/display/midPoint/Data+Model">https://wiki.evolveum.com/display/midPoint/Data+Model</a>
             for more details.
 
-            <p>Version: 3.3-SNAPSHOT</p>
+            <p>Version: 3.3</p>
 
             <p>Recommended namespace prefix: (default), c</p>
         </xsd:documentation>
@@ -370,7 +370,7 @@
                     	<a:displayOrder>250</a:displayOrder>
             		</xsd:appinfo>
                 </xsd:annotation>
-            </xsd:element>
+            </xsd:element>            
         </xsd:sequence>
        
         <xsd:attribute name="oid" type="xsd:string" use="optional">
@@ -1336,6 +1336,13 @@
                             </xsd:documentation>
                         </xsd:annotation>
                     </xsd:element>
+                    <xsd:element name="operationStats" type="tns:OperationStatsType" minOccurs="0">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Operation statistics/state.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
                     <xsd:element name="stalledSince" type="xsd:dateTime" minOccurs="0">
                         <xsd:annotation>
                             <xsd:documentation>
@@ -1412,6 +1419,41 @@
     </xsd:complexType>
 
     <xsd:element name="task" type="tns:TaskType" substitutionGroup="c:object"/>
+
+    <xsd:complexType name="OperationStatsType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Operation execution statistics/state. Contains various statistical and state information about execution
+                of the operation or operations that are carried out in the scope of the task.
+
+                Not all parts of this structure are relevant for all task types. TODO handle this by subtyping - later.
+
+                EXPERIMENTAL.
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="environmentalPerformanceInformation" type="tns:EnvironmentalPerformanceInformationType" minOccurs="0"/>
+            <xsd:element name="iterativeTaskInformation" type="tns:IterativeTaskInformationType" minOccurs="0"/>
+            <xsd:element name="synchronizationInformation" type="tns:SynchronizationInformationType" minOccurs="0"/>
+            <xsd:element name="actionsExecutedInformation" type="tns:ActionsExecutedInformationType" minOccurs="0"/>
+
+            <xsd:element name="timestamp" type="xsd:dateTime" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        When this information was collected from the "living" task.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="liveInformation" type="xsd:boolean" minOccurs="1">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Source of the information - is it from repository or directly from the "living" task?
+                        TRANSIENT INFORMATION, not stored in the repository. Filled in by task manager when fetching the task.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:complexType>
 
     <xsd:simpleType name="TaskExecutionStatusType">
         <xsd:annotation>
@@ -5200,6 +5242,20 @@
                 </xsd:annotation>
             </xsd:element>
             <xsd:element name="returnMultiplicity" type="tns:ExpressionReturnMultiplicityType" minOccurs="0"></xsd:element>
+            <xsd:element name="allowEmptyValues" type="xsd:boolean" minOccurs="0" default="false">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        TODO
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="queryInterpretationOfNoValue" type="tns:QueryInterpretationOfNoValueType" minOccurs="0" default="filterEqualNull">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        TODO
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
             <xsd:element ref="tns:expressionEvaluator" minOccurs="1" maxOccurs="unbounded">
             	<xsd:annotation>
             		<xsd:documentation>
@@ -5251,6 +5307,72 @@
                     </xsd:documentation>
                     <xsd:appinfo>
                         <jaxb:typesafeEnumMember name="MULTI"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+        </xsd:restriction>
+    </xsd:simpleType>
+    
+    <xsd:simpleType name="QueryInterpretationOfNoValueType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Defined how the expression will be interpreted in queries when it returns
+                empty (or null) values.
+            </xsd:documentation>
+            <xsd:appinfo>
+                <jaxb:typesafeEnumClass/>
+            </xsd:appinfo>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="filterEqualNull">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        The expression will be intepreted as an EQUAL filter
+                        that looks for entries with no (null) value.
+                    </xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="FILTER_EQUAL_NULL"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="filterUndefined">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        The expression will be intepreted as an UNDEFINED filter.
+                    </xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="FILTER_UNDEFINED"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="filterNone">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        The expression will be intepreted as an NONE filter.
+                    </xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="FILTER_NONE"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="filterAll">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        The expression will be intepreted as an NONE filter.
+                    </xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="FILTER_ALL"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="error">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Error will be thrown if the expression results in
+                        empty (null) values.
+                    </xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="ERROR"/>
                     </xsd:appinfo>
                 </xsd:annotation>
             </xsd:enumeration>
@@ -5437,8 +5559,11 @@
             <xsd:element name="allowEmptyValues" type="xsd:boolean" minOccurs="0" default="false">
                 <xsd:annotation>
                     <xsd:documentation>
-                        TODO
+                        DEPECATED. Used allowEmptyValues in ExpressionType instead.
                     </xsd:documentation>
+                    <xsd:appinfo>
+                    	<a:deprecated>true</a:deprecated>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
         </xsd:sequence>
@@ -8704,6 +8829,17 @@
                 <xsd:annotation>
                     <xsd:documentation>
                     	Human-readable label to display with the link (or a key to the localization file).
+                    	The label should be quite short (several words). It is meant to be displayed as a menu item
+                    	label, launcher label, etc.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="description" type="xsd:string" minOccurs="0" maxOccurs="1">
+                <xsd:annotation>
+                    <xsd:documentation>
+                    	Human-readable desciption to display with the link (or a key to the localization file).
+                    	The description can be longer (several sentences). It is mean to be displayed as a multi-line
+                    	description, tooltip, etc. 
                     </xsd:documentation>
                 </xsd:annotation>
             </xsd:element>
@@ -8721,12 +8857,12 @@
                     </xsd:documentation>
                 </xsd:annotation>
             </xsd:element>
-            <xsd:element name="authorization" type="xsd:string" minOccurs="0" maxOccurs="1">
+            <xsd:element name="authorization" type="xsd:string" minOccurs="0" maxOccurs="unbounded">
                 <xsd:annotation>
                     <xsd:documentation>
-                        Authorization needed to display this link. If specified, the the link will be displayed
-                        only if the active user has the authorization. If not specified then the link will be
-                        always displayed.
+                        Authorizations needed to display this link. If specified, the the link will be displayed
+                        only if the active user has one of the specified the authorizations.
+                         If no authorization is specified then the link will be always displayed.
                     </xsd:documentation>
                 </xsd:annotation>
             </xsd:element>
@@ -9389,8 +9525,53 @@
 		<xsd:sequence>
 			<xsd:element name="resetMethod" type="c:CredentialsResetMethodType" minOccurs="0" maxOccurs="1">
 			</xsd:element>
+			<xsd:element name="propagationUserControl" type="c:CredentialsPropagationUserControlType" minOccurs="0" maxOccurs="1" default="userChoice">
+				<xsd:annotation>
+					<xsd:documentation>
+						Constraintes that define how propagation of the credentials can be controled by the
+						user. E.g. if user can choose where the password change will be propagated.
+					</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
 		</xsd:sequence>
 	</xsd:complexType>
+	
+	<xsd:simpleType name="CredentialsPropagationUserControlType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Constraintes that define how propagation of credentials can be controled by the
+						user. E.g. if user can choose where the password change will be propagated.
+            </xsd:documentation>
+            <xsd:appinfo>
+                <jaxb:typesafeEnumClass/>
+            </xsd:appinfo>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="mapping">
+                <xsd:annotation>
+                	<xsd:documentation>
+                		Credentials propagation will be determined by the mappings.
+                		User cannot choose where the credentials will be propagated.
+                		The credentials propagation dialog will not be shown.
+                	</xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="MAPPING"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="userChoice">
+                <xsd:annotation>
+                	<xsd:documentation>
+                		The user can choose where the credentials will be propagated.
+                		The propagation dialog will be shown.
+                	</xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="USER_CHOICE"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+        </xsd:restriction>
+    </xsd:simpleType>
 	
 	<xsd:complexType name="CredentialsResetMethodType">
 		<xsd:annotation>
@@ -9476,10 +9657,52 @@
 							</xsd:appinfo>
 					    </xsd:annotation>
 					</xsd:element>
+					<xsd:element name="passwordChangeSecurity" type="c:PasswordChangeSecurityType" minOccurs="0" default="oldPassword">
+						<xsd:annotation>
+							<xsd:documentation>
+								Additional security applied when changing a password.
+								This applies when user is changing his own password. It does NOT apply
+								when administrator changes password of other user.
+							</xsd:documentation>
+						</xsd:annotation>
+					</xsd:element>
 				</xsd:sequence>
 			</xsd:extension>
 		</xsd:complexContent>
 	</xsd:complexType>
+	
+	<xsd:simpleType name="PasswordChangeSecurityType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Additional security applied when changing a password.
+            </xsd:documentation>
+            <xsd:appinfo>
+                <jaxb:typesafeEnumClass/>
+            </xsd:appinfo>
+        </xsd:annotation>
+        <xsd:restriction base="xsd:string">
+            <xsd:enumeration value="none">
+                <xsd:annotation>
+                	<xsd:documentation>
+                		No additional security. Password can be changed by supplying new value.
+                	</xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="NONE"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+            <xsd:enumeration value="oldPassword">
+                <xsd:annotation>
+                	<xsd:documentation>
+                		User must supply old password to change the password.
+                	</xsd:documentation>
+                    <xsd:appinfo>
+                        <jaxb:typesafeEnumMember name="OLD_PASSWORD"/>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:enumeration>
+        </xsd:restriction>
+    </xsd:simpleType>
 	
 	<xsd:complexType name="SecurityQuestionsCredentialsPolicyType">
 		<xsd:annotation>
@@ -10271,6 +10494,34 @@
         <xsd:sequence>
             <xsd:element name="objectDelta" type="t:ObjectDeltaType" minOccurs="0"/>
             <xsd:element name="executionResult" type="tns:OperationResultType" minOccurs="0"/>
+            <xsd:element name="objectName" type="t:PolyStringType" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Name of the object that was the target of this delta, if known.
+                        As for other similar attributes, it may become obsolete.
+                        Useful for informational purposes, typically in audit records.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="resourceOid" type="xsd:string" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        OID of the resource that is related to this operation - typically
+                        if the object being processed is a shadow of a resource object.
+                        Useful for informational purposes, typically in audit records.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="resourceName" type="t:PolyStringType" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Name of the resource that is related to this operation - typically
+                        if the object being processed is a shadow of a resource object.
+                        As for other similar attributes, it may become obsolete.
+                        Useful for informational purposes, typically in audit records.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
         </xsd:sequence>
     </xsd:complexType>
 
@@ -11353,6 +11604,39 @@
                     </xsd:element>
                     <xsd:element name="configuration" type="tns:ReportConfigurationType" minOccurs="0"/>
                     <xsd:element name="configurationSchema" type="tns:XmlSchemaType" minOccurs="0"/>
+                    <xsd:element name="virtualizer" type="xsd:string" minOccurs="0" maxOccurs="1">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                <p>
+                                    Optional name of Jasper virtualizer class.
+                                </p>
+                            </xsd:documentation>
+                            <xsd:appinfo>
+                                <a:operational/>
+                            </xsd:appinfo>
+                        </xsd:annotation>                
+                    </xsd:element>
+                    <xsd:element name="virtualizerKickOn" type="xsd:int" minOccurs="0" maxOccurs="1">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Number of pages after Jasper virtualizer kicks on.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="maxPages" type="xsd:int" minOccurs="0" maxOccurs="1">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Number of pages after Jasper cancels report execution.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="timeout" type="xsd:int" minOccurs="0" maxOccurs="1">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Timeout in [ms] after Jasper cancels report execution.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
             	</xsd:sequence>
             </xsd:extension>
         </xsd:complexContent>
@@ -12391,13 +12675,13 @@
         <xsd:documentation>
             E.g. kind+intent of a resource object (if target is a resource).
 
-            TargetRef + targetQualification are used to group cases e.g. by role, by roleType,
-            by resource, by resource object ... We could add more similar properties,
-            as requirements evolve.
-        </xsd:documentation>
-    </xsd:annotation>
-</xsd:element>
--->
+                        TargetRef + targetQualification are used to group cases e.g. by role, by roleType,
+                        by resource, by resource object ... We could add more similar properties,
+                        as requirements evolve.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            -->
             <xsd:element name="reviewRequestedTimestamp" type="xsd:dateTime">
                 <xsd:annotation>
                     <xsd:documentation>
@@ -12897,10 +13181,17 @@
         </xsd:sequence>
     </xsd:complexType>
 
-    <xsd:complexType name="OperationalInformationType">
+    <xsd:complexType name="EnvironmentalPerformanceInformationType">
         <xsd:annotation>
             <xsd:documentation>
-                TODO
+                Statistics related to performance and state of external environment, namely provisioning via connectors,
+                mappings (as these might contain code that invokes external systems), and notifications.
+
+                These are meant to diagnose performance problems that could stem from factors that are outside midPoint.
+
+                LastMessage can be used to diagnose seemingly "frozen" midPoint that waits e.g. for completion of an external operation.
+                These messages contain information about start and end of external calls: ICF operations, mappings invocation, notification
+                invocation.
             </xsd:documentation>
         </xsd:annotation>
         <xsd:sequence>
@@ -12909,8 +13200,6 @@
             <xsd:element name="notificationsStatistics" type="tns:NotificationsStatisticsType" minOccurs="0" />
             <xsd:element name="lastMessageTimestamp" type="xsd:dateTime" minOccurs="0" />
             <xsd:element name="lastMessage" type="xsd:string" minOccurs="0" />
-            <xsd:element name="timestamp" type="xsd:dateTime" />
-            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
         </xsd:sequence>
     </xsd:complexType>
 
@@ -13015,7 +13304,15 @@
     <xsd:complexType name="IterativeTaskInformationType">
         <xsd:annotation>
             <xsd:documentation>
-                TODO
+                High-level information about execution of actions that are carried out iteratively on a set of objects.
+                This may be any iterative task: live sync, reconciliation, focus recomputation, etc.
+                Even bulk actions can be seen as iterative tasks, even though they can contain multiple nested or subsequent
+                iterations.
+                In future, GUI actions on a set of selected objects can be also described in this structure.
+
+                This type describes processing of the objects as individual and atomic items: it says how many objects
+                were processed successfully or not, how long did it take, and what was last object in each category.
+                Also what is the currently processed object.
             </xsd:documentation>
         </xsd:annotation>
         <xsd:sequence>
@@ -13043,16 +13340,14 @@
             <xsd:element name="currentObjectType" type="xsd:QName" minOccurs="0" />
             <xsd:element name="currentObjectOid" type="xsd:string" minOccurs="0" />
             <xsd:element name="currentObjectStartTimestamp" type="xsd:dateTime" minOccurs="0" />
-
-            <xsd:element name="timestamp" type="xsd:dateTime" />
-            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
         </xsd:sequence>
     </xsd:complexType>
 
     <xsd:complexType name="SynchronizationInformationType">
         <xsd:annotation>
             <xsd:documentation>
-                TODO
+                Information about synchronization situations of objects processed by synchronization-related tasks:
+                live sync, import, reconciliation. Currently it shows just counters for possible sync situations.
             </xsd:documentation>
         </xsd:annotation>
         <xsd:sequence>
@@ -13065,29 +13360,85 @@
             <xsd:element name="countLinked" type="xsd:int" minOccurs="1" />
             <xsd:element name="countUnlinked" type="xsd:int" minOccurs="1" />
             <xsd:element name="countUnmatched" type="xsd:int" minOccurs="1" />
-
-            <xsd:element name="timestamp" type="xsd:dateTime" />
-            <xsd:element name="fromMemory" type="xsd:boolean" minOccurs="0"/>
         </xsd:sequence>
     </xsd:complexType>
 
+    <xsd:complexType name="ActionsExecutedInformationType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Shows what actions were executed. Currently there are only basic actions (ADD, MODIFY, DELETE) carried out on
+                basic categories of objects (object types, e.g. UserType, RoleType, OrgType, ShadowType, ...).
+
+                This gives a quick overview what e.g. import, livesync or reconciliation task is really doing.
+                For example, if it really creates new users, or if it deletes anything, etc.
+
+                Two categories of statistics are described: "all" and "resulting".
+                The former describes all operations carried out, whereas the latter describes only the "high-level" or "externally visible" ones.
+                An example: if a live sync task detects a new resource objects, creates appropriate user, and modifies it twice (because of
+                outbound/inbound/template/etc interplay), the "all" category would contain 1xADD and 2xMODIFY for that user. However,
+                the "resulting" category shows what the external observer would expect - that 1 user was added (so, 1xADD).
+                Note that the behavior of "resulting" action determination is still experimental, and need to be specified more
+                precisely, e.g. with regards to operation failures.
+
+                In future it would be nice to distinguish e.g. between shadows on different resources.
+
+                Also, the semantics of operations on ShadowType should be defined more precisely - namely,
+                whether an operation means "operation on repository shadow" or "operation on resource object".
+                Currently, it means both of them. And some of the shadow related operations are not counted,
+                namely those that are carried out autonomously by the provisioning module - e.g. creating repo
+                shadows when resource objects are discovered. Also, displaying the result of operations that
+                are handled by consistency mechanism is defined quite well.
+
+                Overall, while counters related to focal objects (users, roles, orgs) are relatively well defined,
+                counters related to shadows need some clarification.
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="objectActionsEntry" type="tns:ObjectActionsExecutedEntryType" minOccurs="0" maxOccurs="unbounded"/>
+            <xsd:element name="resultingObjectActionsEntry" type="tns:ObjectActionsExecutedEntryType" minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+    </xsd:complexType>
+
+    <xsd:complexType name="ObjectActionsExecutedEntryType">
+        <xsd:annotation>
+            <xsd:documentation>
+                Actions executed on a given object type, with given operation (change type) and via given channel.
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="objectType" type="xsd:QName" />
+            <xsd:element name="operation" type="t:ChangeTypeType" />
+            <xsd:element name="channel" type="xsd:string" minOccurs="0" />
+            <xsd:element name="totalSuccessCount" type="xsd:int" />
+            <xsd:element name="lastSuccessObjectName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessObjectDisplayName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessObjectOid" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastSuccessTimestamp" type="xsd:dateTime" minOccurs="0" />
+            <xsd:element name="totalFailureCount" type="xsd:int"  />
+            <xsd:element name="lastFailureObjectName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureObjectDisplayName" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureObjectOid" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureExceptionMessage" type="xsd:string" minOccurs="0" />
+            <xsd:element name="lastFailureTimestamp" type="xsd:dateTime" minOccurs="0" />
+        </xsd:sequence>
+    </xsd:complexType>
     
     <xsd:complexType name="SequenceType">
         <xsd:annotation>
             <xsd:documentation>
-            	<p>
-	                Definition of a sequence object that produces unique values. The sequence state is
-	                persistently stored in the repository, therefore it can efficiently produce unique
-	                identifiers in a controlled and predictable manner.
+                <p>
+                    Definition of a sequence object that produces unique values. The sequence state is
+                    persistently stored in the repository, therefore it can efficiently produce unique
+                    identifiers in a controlled and predictable manner.
                 </p>
                 <p>
-                	The sequence is atomic. If two threads or even two nodes request a value from
-	 				the same sequence at the same time then different values will be returned. Therefore the
-	 				use of the sequence has some inherent cost (e.g. database locking overhead).
+                    The sequence is atomic. If two threads or even two nodes request a value from
+                    the same sequence at the same time then different values will be returned. Therefore the
+                    use of the sequence has some inherent cost (e.g. database locking overhead).
                 </p>
                 <p>
-                	The sequence produces only values of type "long". If any other type or format is needed
-                	then an expression must be used to transform the value.
+                    The sequence produces only values of type "long". If any other type or format is needed
+                    then an expression must be used to transform the value.
                 </p>
             </xsd:documentation>
         </xsd:annotation>
@@ -13147,256 +13498,256 @@
     <xsd:element name="sequence" type="tns:SequenceType" />
     
     <xsd:complexType name="FormType">
-		<xsd:annotation>
-			<xsd:documentation>
-				<p>
-					Form definition. Forms define how a certain user interface form or
-					dialog is presented.
-				</p>
-				<p>
-					Forms inherently define presentation logic. The forms may contain
-					expression or other
-					dynamic parts. However, these parts are provided only for the purpose of
-					improved
-					user experience. The data that the form computes should only help the
-					user to fill out
-					the form or provide a value preview. The data produced by form
-					expressions are NOT
-					authoritative.
-				</p>
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:complexContent>
-			<xsd:extension base="c:ObjectType">
-				<xsd:sequence>
-					<xsd:element name="includeRef" type="tns:ObjectReferenceType"
-						minOccurs="0" maxOccurs="unbounded">
-						<xsd:annotation>
-							<xsd:documentation>
-								Included form.
-							</xsd:documentation>
-							<xsd:appinfo>
-								<a:objectReferenceTargetType>tns:FormType</a:objectReferenceTargetType>
-							</xsd:appinfo>
-						</xsd:annotation>
-					</xsd:element>
-					<xsd:element name="formDefinition" type="tns:FormDefinitionType" minOccurs="1">
-						<!-- This is a prism limitation. This is a polymorphic and ordered type.
-						     It has to be a prism property. -->
-					</xsd:element>
-				</xsd:sequence>
-			</xsd:extension>
-		</xsd:complexContent>
-	</xsd:complexType>
-	<xsd:element name="form" type="tns:FormType" />
+        <xsd:annotation>
+            <xsd:documentation>
+                <p>
+                    Form definition. Forms define how a certain user interface form or
+                    dialog is presented.
+                </p>
+                <p>
+                    Forms inherently define presentation logic. The forms may contain
+                    expression or other
+                    dynamic parts. However, these parts are provided only for the purpose of
+                    improved
+                    user experience. The data that the form computes should only help the
+                    user to fill out
+                    the form or provide a value preview. The data produced by form
+                    expressions are NOT
+                    authoritative.
+                </p>
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexContent>
+            <xsd:extension base="c:ObjectType">
+                <xsd:sequence>
+                    <xsd:element name="includeRef" type="tns:ObjectReferenceType"
+                                 minOccurs="0" maxOccurs="unbounded">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                Included form.
+                            </xsd:documentation>
+                            <xsd:appinfo>
+                                <a:objectReferenceTargetType>tns:FormType</a:objectReferenceTargetType>
+                            </xsd:appinfo>
+                        </xsd:annotation>
+                    </xsd:element>
+                    <xsd:element name="formDefinition" type="tns:FormDefinitionType" minOccurs="1">
+                        <!-- This is a prism limitation. This is a polymorphic and ordered type.
+                        It has to be a prism property. -->
+                    </xsd:element>
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
+    <xsd:element name="form" type="tns:FormType" />
 
-	<xsd:complexType name="FormDefinitionType">
-		<xsd:annotation>
-			<xsd:documentation>
-				<p>
-					This part defines the actual form presentation and layout.
-				</p>
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:sequence>
-			<xsd:element name="display" type="tns:FormDisplayType" minOccurs="0">
-				<xsd:annotation>
-					<xsd:documentation>
-						Display characteristics of the form.
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-			<xsd:element ref="tns:formItem" minOccurs="0" maxOccurs="unbounded">
-				<xsd:annotation>
-					<xsd:documentation>
-						List of form items.
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-		</xsd:sequence>
-	</xsd:complexType>
+    <xsd:complexType name="FormDefinitionType">
+        <xsd:annotation>
+            <xsd:documentation>
+                <p>
+                    This part defines the actual form presentation and layout.
+                </p>
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="display" type="tns:FormDisplayType" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Display characteristics of the form.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element ref="tns:formItem" minOccurs="0" maxOccurs="unbounded">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        List of form items.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:complexType>
 
-	<xsd:complexType name="AbstractDisplayType" abstract="true">
-		<xsd:sequence>
-			<!-- basic properties -->
-			<xsd:element name="label" type="xsd:string" minOccurs="0" />
-			<xsd:element name="tooltip" type="xsd:string" minOccurs="0" />
-			<xsd:element name="help" type="xsd:string" minOccurs="0" />
-			<!-- style properties -->
-			<xsd:element name="cssStyle" type="xsd:string" minOccurs="0" />
-			<xsd:element name="cssClass" type="xsd:string" minOccurs="0" />
-		</xsd:sequence>
-	</xsd:complexType>
+    <xsd:complexType name="AbstractDisplayType" abstract="true">
+        <xsd:sequence>
+            <!-- basic properties -->
+            <xsd:element name="label" type="xsd:string" minOccurs="0" />
+            <xsd:element name="tooltip" type="xsd:string" minOccurs="0" />
+            <xsd:element name="help" type="xsd:string" minOccurs="0" />
+            <!-- style properties -->
+            <xsd:element name="cssStyle" type="xsd:string" minOccurs="0" />
+            <xsd:element name="cssClass" type="xsd:string" minOccurs="0" />
+        </xsd:sequence>
+    </xsd:complexType>
 
-	<xsd:complexType name="FormDisplayType">
-		<xsd:complexContent>
-			<xsd:extension base="tns:AbstractDisplayType">
-				<xsd:sequence>
-					<xsd:element name="theme" type="xsd:string" minOccurs="0" />
-				</xsd:sequence>
-			</xsd:extension>
-		</xsd:complexContent>
-	</xsd:complexType>
+    <xsd:complexType name="FormDisplayType">
+        <xsd:complexContent>
+            <xsd:extension base="tns:AbstractDisplayType">
+                <xsd:sequence>
+                    <xsd:element name="theme" type="xsd:string" minOccurs="0" />
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
 
-	<xsd:complexType name="FormItemDisplayType">
-		<xsd:complexContent>
-			<xsd:extension base="tns:AbstractDisplayType">
-				<xsd:sequence>
-					<xsd:element name="minOccurs" type="xsd:string" minOccurs="0" />
-					<xsd:element name="maxOccurs" type="xsd:string" minOccurs="0" />
-					<xsd:element name="size" type="xsd:integer" minOccurs="0" />
-					<xsd:element name="maxSize" type="xsd:integer" minOccurs="0" />
-					<xsd:element name="newLine" type="xsd:boolean" minOccurs="0" default="true">
-						<xsd:annotation>
-							<xsd:documentation>
-								displayable form component position (if true, field/group/loop will be
-								placed on new line)
-							</xsd:documentation>
-						</xsd:annotation>
-					</xsd:element>
-				</xsd:sequence>
-			</xsd:extension>
-		</xsd:complexContent>
-	</xsd:complexType>
+    <xsd:complexType name="FormItemDisplayType">
+        <xsd:complexContent>
+            <xsd:extension base="tns:AbstractDisplayType">
+                <xsd:sequence>
+                    <xsd:element name="minOccurs" type="xsd:string" minOccurs="0" />
+                    <xsd:element name="maxOccurs" type="xsd:string" minOccurs="0" />
+                    <xsd:element name="size" type="xsd:integer" minOccurs="0" />
+                    <xsd:element name="maxSize" type="xsd:integer" minOccurs="0" />
+                    <xsd:element name="newLine" type="xsd:boolean" minOccurs="0" default="true">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                displayable form component position (if true, field/group/loop will be
+                                placed on new line)
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
 
-	<xsd:complexType name="AbstractFormItemType" abstract="true">
-		<xsd:annotation>
-			<xsd:documentation>
-				Abstract supertype for all form items.
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:sequence>
-			<xsd:element name="name" type="xsd:string" minOccurs="0"></xsd:element>
-			<xsd:element ref="tns:description" minOccurs="0" />
-			<xsd:element name="ref" type="t:ItemPathType" minOccurs="0">
-				<xsd:annotation>
-					<xsd:documentation>
-						Reference to an item of the backing object that is behind the form.
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-			<xsd:element name="type" type="xsd:QName" minOccurs="0">
-				<xsd:annotation>
-					<xsd:documentation>
-						Type override. Normally the field type will be determined
-						by the type of backing item. This field can be used as type
-						override if a different presenation is required.
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-			<xsd:element name="display" type="tns:FormItemDisplayType" minOccurs="0" />
-			<xsd:element name="widget" type="xsd:string" minOccurs="0">
-				<xsd:annotation>
-					<xsd:documentation>
-						Name of the UI widget that should be used to display this item.
-						Normally, the widget will be chosen automatically based on the type
-						of the backing item (see "ref" element). The "widget" element can be
-						used to override this default behavior. It is used for default included
-						types like text, label, combo, password, checkbox, etc. or class name for
-						custom implementation.
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-			<xsd:element name="availableValues" type="c:ExpressionType" minOccurs="0" />
-			<xsd:element name="validation" type="tns:FormItemValidationType" minOccurs="0" />
-			<!-- TODO: condition -->
-		</xsd:sequence>
-	</xsd:complexType>
-	<xsd:element name="formItem" type="tns:AbstractFormItemType" />
+    <xsd:complexType name="AbstractFormItemType" abstract="true">
+        <xsd:annotation>
+            <xsd:documentation>
+                Abstract supertype for all form items.
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="name" type="xsd:string" minOccurs="0"></xsd:element>
+            <xsd:element ref="tns:description" minOccurs="0" />
+            <xsd:element name="ref" type="t:ItemPathType" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Reference to an item of the backing object that is behind the form.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="type" type="xsd:QName" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Type override. Normally the field type will be determined
+                        by the type of backing item. This field can be used as type
+                        override if a different presenation is required.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="display" type="tns:FormItemDisplayType" minOccurs="0" />
+            <xsd:element name="widget" type="xsd:string" minOccurs="0">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        Name of the UI widget that should be used to display this item.
+                        Normally, the widget will be chosen automatically based on the type
+                        of the backing item (see "ref" element). The "widget" element can be
+                        used to override this default behavior. It is used for default included
+                        types like text, label, combo, password, checkbox, etc. or class name for
+                        custom implementation.
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="availableValues" type="c:ExpressionType" minOccurs="0" />
+            <xsd:element name="validation" type="tns:FormItemValidationType" minOccurs="0" />
+            <!-- TODO: condition -->
+        </xsd:sequence>
+    </xsd:complexType>
+    <xsd:element name="formItem" type="tns:AbstractFormItemType" />
 
-	<xsd:complexType name="FormItemValidationType">
-		<xsd:sequence>
-			<xsd:element name="server" type="xsd:string" minOccurs="0" maxOccurs="unbounded">
-				<xsd:annotation>
-					<xsd:documentation>
-						<!--TODO -->
-					</xsd:documentation>
-				</xsd:annotation>
-			</xsd:element>
-			<xsd:element name="client" type="tns:FormItemClientValidationType" minOccurs="0" />
-		</xsd:sequence>
-	</xsd:complexType>
+    <xsd:complexType name="FormItemValidationType">
+        <xsd:sequence>
+            <xsd:element name="server" type="xsd:string" minOccurs="0" maxOccurs="unbounded">
+                <xsd:annotation>
+                    <xsd:documentation>
+                        <!--TODO -->
+                    </xsd:documentation>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element name="client" type="tns:FormItemClientValidationType" minOccurs="0" />
+        </xsd:sequence>
+    </xsd:complexType>
 
-	<xsd:complexType name="FormItemClientValidationType">
-		<xsd:annotation>
-			<xsd:documentation>
-				<!--TODO -->
-				javascript stuff, we replate ${this} with proper input id, probably
-				some jQuery black magic
+    <xsd:complexType name="FormItemClientValidationType">
+        <xsd:annotation>
+            <xsd:documentation>
+                <!--TODO -->
+                javascript stuff, we replate ${this} with proper input id, probably
+                some jQuery black magic
 
-				TODO: add event type attribute to client element for this validator
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:sequence>
-			<xsd:element name="event" type="xsd:string" minOccurs="1" maxOccurs="unbounded" />
-			<xsd:element name="script" type="xsd:string" minOccurs="1" />
-		</xsd:sequence>
-	</xsd:complexType>
+                TODO: add event type attribute to client element for this validator
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:sequence>
+            <xsd:element name="event" type="xsd:string" minOccurs="1" maxOccurs="unbounded" />
+            <xsd:element name="script" type="xsd:string" minOccurs="1" />
+        </xsd:sequence>
+    </xsd:complexType>
 
-	<xsd:complexType name="FormFieldType">
-		<xsd:annotation>
-			<xsd:documentation>
-				A single form field. This definition is expected to render a short,
-				compact
-				visual representation of a single item (property, reference or container).
-				If a container is represented as a field, it has to be a very
-				compart representation
-				of the container, usually be using custom widget that creates a pop-up
-				when clicked.
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:complexContent>
-			<xsd:extension base="tns:AbstractFormItemType">
-				<xsd:sequence>
-					<!-- Nothing to add now -->
-				</xsd:sequence>
-			</xsd:extension>
-		</xsd:complexContent>
+    <xsd:complexType name="FormFieldType">
+        <xsd:annotation>
+            <xsd:documentation>
+                A single form field. This definition is expected to render a short,
+                compact
+                visual representation of a single item (property, reference or container).
+                If a container is represented as a field, it has to be a very
+                compart representation
+                of the container, usually be using custom widget that creates a pop-up
+                when clicked.
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexContent>
+            <xsd:extension base="tns:AbstractFormItemType">
+                <xsd:sequence>
+                    <!-- Nothing to add now -->
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
 
-		<!-- TODO: some kind of renderer, probably something like IChoiceRenderer 
-			in wicket to translate real value to display value and after edit to translate 
-			displayed value to real value -->
+        <!-- TODO: some kind of renderer, probably something like IChoiceRenderer 
+        in wicket to translate real value to display value and after edit to translate 
+        displayed value to real value -->
 
-	</xsd:complexType>
-	<xsd:element name="formField" type="tns:FormFieldType" substitutionGroup="tns:formItem" />
+    </xsd:complexType>
+    <xsd:element name="formField" type="tns:FormFieldType" substitutionGroup="tns:formItem" />
 
-	<xsd:complexType name="FormFieldGroupType">
-		<xsd:annotation>
-			<xsd:documentation>
-				<p>
-					A group of fields. The group is rendered in a such a way that it will be obvious
-					that the fields belong together and form a a logical group (e.g. by using box
-					with a border). This can be used to display value of complex containers.
-					But it may also be used to visualy group together a set of
-					related properties that are not in the same container.
-				</p>
-				<p>
-					The group is NOT meant to automatically generate fields for every container item.
-					Individual fields must be defined as sub-items of this group.
-				</p>
-				<p>
-					If ref element is used it MUST point to PrismContainer. In that case subitems of this
-					group must point to the container value items.
-				</p>
-				<p>
-					The group may not have any ref element. In that case the subfields may
-					refer to any property.
-				</p>
-			</xsd:documentation>
-		</xsd:annotation>
-		<xsd:complexContent>
-			<xsd:extension base="tns:AbstractFormItemType">
-				<xsd:sequence>
-					<xsd:element ref="tns:formItem" minOccurs="0" maxOccurs="unbounded">
-						<xsd:annotation>
-							<xsd:documentation>
-								List of group subitems.
-							</xsd:documentation>
-						</xsd:annotation>
-					</xsd:element>
-				</xsd:sequence>
-			</xsd:extension>
-		</xsd:complexContent>
-	</xsd:complexType>
+    <xsd:complexType name="FormFieldGroupType">
+        <xsd:annotation>
+            <xsd:documentation>
+                <p>
+                    A group of fields. The group is rendered in a such a way that it will be obvious
+                    that the fields belong together and form a a logical group (e.g. by using box
+                    with a border). This can be used to display value of complex containers.
+                    But it may also be used to visualy group together a set of
+                    related properties that are not in the same container.
+                </p>
+                <p>
+                    The group is NOT meant to automatically generate fields for every container item.
+                    Individual fields must be defined as sub-items of this group.
+                </p>
+                <p>
+                    If ref element is used it MUST point to PrismContainer. In that case subitems of this
+                    group must point to the container value items.
+                </p>
+                <p>
+                    The group may not have any ref element. In that case the subfields may
+                    refer to any property.
+                </p>
+            </xsd:documentation>
+        </xsd:annotation>
+        <xsd:complexContent>
+            <xsd:extension base="tns:AbstractFormItemType">
+                <xsd:sequence>
+                    <xsd:element ref="tns:formItem" minOccurs="0" maxOccurs="unbounded">
+                        <xsd:annotation>
+                            <xsd:documentation>
+                                List of group subitems.
+                            </xsd:documentation>
+                        </xsd:annotation>
+                    </xsd:element>
+                </xsd:sequence>
+            </xsd:extension>
+        </xsd:complexContent>
+    </xsd:complexType>
     
 </xsd:schema>

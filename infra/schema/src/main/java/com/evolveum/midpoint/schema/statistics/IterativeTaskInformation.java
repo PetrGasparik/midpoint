@@ -18,7 +18,6 @@ package com.evolveum.midpoint.schema.statistics;
 
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.IterativeTaskInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationInformationType;
 
 import javax.xml.datatype.DatatypeConstants;
 import javax.xml.namespace.QName;
@@ -29,7 +28,13 @@ import java.util.Date;
  */
 public class IterativeTaskInformation {
 
-    protected IterativeTaskInformationType startValue;
+    /*
+     * Thread safety: Just like EnvironmentalPerformanceInformation, instances of this class may be accessed from
+     * more than one thread at once. Updates are invoked in the context of the thread executing the task.
+     * Queries are invoked either from this thread, or from some observer (task manager or GUI thread).
+     */
+
+    protected final IterativeTaskInformationType startValue;
 
     protected String lastSuccessObjectName;
     protected String lastSuccessObjectDisplayName;
@@ -69,16 +74,14 @@ public class IterativeTaskInformation {
         return startValue;
     }
 
-    public IterativeTaskInformationType getDeltaValue() {
+    public synchronized IterativeTaskInformationType getDeltaValue() {
         IterativeTaskInformationType rv = toIterativeTaskInformationType();
-        rv.setTimestamp(XmlTypeConverter.createXMLGregorianCalendar(new Date()));
         return rv;
     }
 
-    public IterativeTaskInformationType getAggregatedValue() {
+    public synchronized IterativeTaskInformationType getAggregatedValue() {
         IterativeTaskInformationType delta = toIterativeTaskInformationType();
         IterativeTaskInformationType rv = aggregate(startValue, delta);
-        rv.setTimestamp(XmlTypeConverter.createXMLGregorianCalendar(new Date()));
         return rv;
     }
 
@@ -92,13 +95,13 @@ public class IterativeTaskInformation {
         return rv;
     }
 
-    protected IterativeTaskInformationType toIterativeTaskInformationType() {
+    private IterativeTaskInformationType toIterativeTaskInformationType() {
         IterativeTaskInformationType rv = new IterativeTaskInformationType();
         toJaxb(rv);
         return rv;
     }
 
-    public void recordOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception) {
+    public synchronized void recordOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception) {
         if (exception != null) {
             lastFailureObjectName = objectName;
             lastFailureObjectDisplayName = objectDisplayName;
@@ -127,7 +130,7 @@ public class IterativeTaskInformation {
         currentObjectStartTimestamp = null;
     }
 
-    public void recordOperationStart(String objectName, String objectDisplayName, QName objectType, String objectOid) {
+    public synchronized void recordOperationStart(String objectName, String objectDisplayName, QName objectType, String objectOid) {
         currentObjectName = objectName;
         currentObjectDisplayName = objectDisplayName;
         currentObjectType = objectType;
@@ -135,7 +138,7 @@ public class IterativeTaskInformation {
         currentObjectStartTimestamp = new Date();
     }
 
-    public void toJaxb(IterativeTaskInformationType rv) {
+    private void toJaxb(IterativeTaskInformationType rv) {
         rv.setLastSuccessObjectName(lastSuccessObjectName);
         rv.setLastSuccessObjectDisplayName(lastSuccessObjectDisplayName);
         rv.setLastSuccessObjectType(lastSuccessObjectType);

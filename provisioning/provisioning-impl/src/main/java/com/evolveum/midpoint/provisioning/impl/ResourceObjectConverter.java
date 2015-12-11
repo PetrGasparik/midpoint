@@ -869,7 +869,7 @@ public class ResourceObjectConverter {
 //				if (!newName.equals(shadow.asObjectable().getName().getOrig())){
 					
 					PropertyDelta<?> shadowNameDelta = PropertyDelta.createModificationReplaceProperty(ShadowType.F_NAME, shadow.getDefinition(), 
-							ProvisioningUtil.determineShadowName(shadow));
+							ShadowUtil.determineShadowName(shadow));
 					operation = new PropertyModificationOperation(shadowNameDelta);
 		  			// TODO matchingRuleQName handling - but it should not be necessary here
 					deltas.add(operation);
@@ -1699,7 +1699,7 @@ public class ResourceObjectConverter {
 					ObjectTypeUtil.toShortString(resource));
 			if (parentResult != null) {
 				parentResult.recordPartialError("The " + ObjectTypeUtil.toShortString(resource)
-						+ " has native activation capability but noes not provide value for DISABLE attribute");
+						+ " has native activation capability but does not provide value for DISABLE attribute");
 			}
 
 			return;

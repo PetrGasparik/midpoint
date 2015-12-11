@@ -53,6 +53,8 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemObjectsType;
 
 /**
  * @author semancik
@@ -216,7 +218,7 @@ public class ModelObjectResolver implements ObjectResolver {
 		if (ObjectTypes.isClassManagedByProvisioning(type)) {
 			provisioning.searchObjectsIterative(type, query, options, handler, (Task) task, parentResult);
 		} else {
-			cacheRepositoryService.searchObjectsIterative(type, query, handler, options, parentResult);
+			cacheRepositoryService.searchObjectsIterative(type, query, handler, options, false, parentResult);		// TODO pull up into resolver interface
 		}
 	}
 	
@@ -227,5 +229,19 @@ public class ModelObjectResolver implements ObjectResolver {
 			return cacheRepositoryService.countObjects(type, query, parentResult);
 		}
 	}
+	
+	public PrismObject<SystemConfigurationType> getSystemConfiguration(OperationResult result) throws ObjectNotFoundException, SchemaException {
+        PrismObject<SystemConfigurationType> config = cacheRepositoryService.getObject(SystemConfigurationType.class,
+                SystemObjectsType.SYSTEM_CONFIGURATION.value(), null, result);
+
+        if (LOGGER.isTraceEnabled()) {
+        	if (config == null) {
+        		LOGGER.warn("No system configuration object");
+        	} else {
+        		LOGGER.trace("System configuration version read from repo: " + config.getVersion());
+        	}
+        }
+        return config;
+    }
 	
 }

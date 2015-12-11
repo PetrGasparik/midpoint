@@ -106,7 +106,7 @@ public class InboundProcessor {
     private ContextLoader contextLoader;
     
     @Autowired(required = true)
-    private MappingEvaluationHelper mappingEvaluatorHelper;
+    private MappingEvaluator mappingEvaluator;
     
     @Autowired(required = true)
     private Protector protector;
@@ -315,7 +315,7 @@ public class InboundProcessor {
 //   		 we don't need to do inbound if account was deleted
 			return;
 		}
-        processSpecialPropertyInbound(accountDefinition.getCredentialsInbound(), SchemaConstants.PATH_PASSWORD_VALUE,
+        processSpecialPropertyInbound(accountDefinition.getPasswordInbound(), SchemaConstants.PATH_PASSWORD_VALUE,
         		context.getFocusContext().getObjectNew(), projContext, accountDefinition, context, task, now, result);
         
         processSpecialPropertyInbound(accountDefinition.getActivationBidirectionalMappingType(ActivationType.F_ADMINISTRATIVE_STATUS), SchemaConstants.PATH_ACTIVATION_ADMINISTRATIVE_STATUS,
@@ -418,7 +418,7 @@ public class InboundProcessor {
         
         PropertyDelta<U> outputUserPropertydelta = new PropertyDelta<U>(targetFocusPropertyPath, targetPropertyDef, prismContext);
     	
-        LensUtil.evaluateMapping(mapping, context, task, result);
+        mappingEvaluator.evaluateMapping(mapping, context, task, result);
         
     	
     	PrismValueDeltaSetTriple<PrismPropertyValue<U>> triple = mapping.getOutputTriple();
@@ -726,7 +726,7 @@ public class InboundProcessor {
 			}
 		};
         
-        MappingEvaluatorHelperParams<PrismValue, ItemDefinition, F, F> params = new MappingEvaluatorHelperParams<>();
+        MappingEvaluatorParams<PrismValue, ItemDefinition, F, F> params = new MappingEvaluatorParams<>();
         params.setMappingTypes(inboundMappingTypes);
         params.setMappingDesc("inbound mapping for " + sourcePath + " in " + accContext.getResource());
         params.setNow(now);
@@ -739,7 +739,7 @@ public class InboundProcessor {
         params.setEvaluateCurrent(true);
         params.setContext(context);
         params.setHasFullTargetObject(true);
-		mappingEvaluatorHelper.evaluateMappingSetProjection(params, task, opResult);
+		mappingEvaluator.evaluateMappingSetProjection(params, task, opResult);
         
 //        MutableBoolean strongMappingWasUsed = new MutableBoolean();
 //        PrismValueDeltaSetTriple<? extends PrismPropertyValue<?>> outputTriple = mappingEvaluatorHelper.evaluateMappingSetProjection(

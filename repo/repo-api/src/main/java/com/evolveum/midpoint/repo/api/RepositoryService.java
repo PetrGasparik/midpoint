@@ -288,6 +288,9 @@ public interface RepositoryService {
 	 *            search query
 	 * @param handler
 	 *            result handler
+	 * @param strictlySequential
+	 * 			  takes care not to skip any object nor to process objects more than once;
+	 * 			  currently requires paging NOT to be used - uses its own paging
 	 * @param parentResult
 	 *            parent OperationResult (in/out)
 	 * @return all objects of specified type that match search criteria (subject
@@ -300,7 +303,8 @@ public interface RepositoryService {
 	 */
 
 	<T extends ObjectType> SearchResultMetadata searchObjectsIterative(Class<T> type, ObjectQuery query,
-			ResultHandler<T> handler, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult parentResult)
+			ResultHandler<T> handler, Collection<SelectorOptions<GetOperationOptions>> options, boolean strictlySequential,
+			OperationResult parentResult)
 			throws SchemaException;
 
 	/**
@@ -430,6 +434,12 @@ public interface RepositoryService {
 	 * which may be less efficient that following a direct association. Hence it
 	 * is called "search" to indicate that there may be non-negligible overhead.
 	 * </p>
+	 * <p>
+	 * This method should not die even if the specified shadow does not exist.
+	 * Even if the shadow is gone, it still may be used in some linkRefs. This
+	 * method should be able to find objects with such linkeRefs otherwise we
+	 * will not be able to do proper cleanup.
+	 * </p>
 	 *
 	 * @param shadowOid
 	 *            OID of shadow
@@ -437,13 +447,10 @@ public interface RepositoryService {
 	 *            parentResult parent OperationResult (in/out)
 	 * @return Object representing owner of specified account (subclass of FocusType)
 	 *
-	 * @throws ObjectNotFoundException
-	 *             specified shadow does not exist
 	 * @throws IllegalArgumentException
 	 *             wrong OID format
 	 */
-	<F extends FocusType> PrismObject<F> searchShadowOwner(String shadowOid, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult parentResult)
-			throws ObjectNotFoundException;
+	<F extends FocusType> PrismObject<F> searchShadowOwner(String shadowOid, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult parentResult);
 
 	/**
 	 * <p>Search for resource object shadows of a specified type that belong to the

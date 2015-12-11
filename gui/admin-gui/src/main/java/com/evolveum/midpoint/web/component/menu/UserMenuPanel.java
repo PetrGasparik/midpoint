@@ -16,40 +16,153 @@
 
 package com.evolveum.midpoint.web.component.menu;
 
+import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.crypto.EncryptionException;
+import com.evolveum.midpoint.prism.crypto.Protector;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.RetrieveOption;
+import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.security.api.MidPointPrincipal;
+import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.util.BaseSimplePanel;
+import com.evolveum.midpoint.web.component.util.LoadableModel;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.web.page.admin.home.PageMyPasswordQuestions;
-import com.evolveum.midpoint.web.page.admin.home.PageMyPasswords;
+import com.evolveum.midpoint.web.page.admin.home.component.MyPasswordQuestionsPanel;
+import com.evolveum.midpoint.web.page.admin.home.dto.PasswordQuestionsDto;
+import com.evolveum.midpoint.web.page.admin.home.dto.SecurityQuestionAnswerDTO;
+import com.evolveum.midpoint.web.security.SecurityUtils;
 import com.evolveum.midpoint.web.util.WebMiscUtil;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import org.apache.wicket.AttributeModifier;
+import org.apache.wicket.Page;
 import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.markup.html.WebMarkupContainer;
+import org.apache.wicket.markup.html.WebPage;
 import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.image.ContextImage;
+import org.apache.wicket.markup.html.image.Image;
 import org.apache.wicket.markup.html.link.ExternalLink;
 import org.apache.wicket.model.AbstractReadOnlyModel;
+import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.apache.wicket.request.cycle.RequestCycle;
+import org.apache.wicket.request.resource.AbstractResource;
+import org.apache.wicket.request.resource.ByteArrayResource;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * @author lazyman
  */
 public class UserMenuPanel extends BaseSimplePanel {
 
+    private static final Trace LOGGER = TraceManager.getTrace(UserMenuPanel.class);
     private static final String ID_USERNAME_LINK = "usernameLink";
     private static final String ID_LOGOUT_LINK = "logoutLink";
 
     private static final String ID_USERNAME = "username";
 
     private static final String ID_EDIT_PROFILE = "editProfile";
-    private static final String ID_RESET_PASSWORD = "resetPassword";
     private static final String ID_PASSWORD_QUESTIONS = "passwordQuestions";
+    private IModel<PasswordQuestionsDto> passwordQuestionsDtoIModel;
+    private IModel<List<SecurityQuestionDefinitionType>> securityPolicyQuestionsModel;
+//    private PrismObject<UserType> userModel;
+    private Model<PrismObject<UserType>> userModel = new Model<PrismObject<UserType>>();
+    private static final String DOT_CLASS = UserMenuPanel.class.getName() + ".";
+    private static final String OPERATION_LOAD_USER = DOT_CLASS + "loaduser";
+    private static final String OPERATION_LOAD_QUESTION_POLICY = DOT_CLASS + "LOAD Question Policy";
+    private static final String ID_ICON_BOX = "menuIconBox";
+    private static final String ID_PHOTO = "menuPhoto";
+    private static final String ID_ICON = "menuIcon";
+    private static final String ID_PANEL_ICON_BOX = "menuPanelIconBox";
+    private static final String ID_PANEL_PHOTO = "menuPanelPhoto";
+    private static final String ID_PANEL_ICON = "menuPanelIcon";
+
+    private boolean isUserModelLoaded = false;
+    private boolean isPasswordModelLoaded = false;
+    private  byte[] jpegPhoto = null;
+    private List<SecurityQuestionDefinitionType> securityPolicyQuestions = new ArrayList<>();
 
     public UserMenuPanel(String id) {
         super(id);
+        if (!isPasswordModelLoaded) {
+            passwordQuestionsDtoIModel = new LoadableModel<PasswordQuestionsDto>(false) {
+
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                protected PasswordQuestionsDto load() {
+                    return loadModel();
+                }
+            };
+            isPasswordModelLoaded = true;
+        }
+        securityPolicyQuestionsModel = new LoadableModel<List<SecurityQuestionDefinitionType>>(false) {
+
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            protected List<SecurityQuestionDefinitionType> load() {
+                return loadSecurityPloicyQuestionsModel();
+            }
+        };
     }
 
     @Override
     protected void initLayout() {
+        if (userModel != null && userModel.getObject() == null){
+            loadModel();
+        }
+        WebMarkupContainer iconBox = new WebMarkupContainer(ID_ICON_BOX);
+        add(iconBox);
+
+        Image img = new Image(ID_PHOTO, new AbstractReadOnlyModel<AbstractResource>() {
+
+            @Override
+            public AbstractResource getObject() {
+                if(jpegPhoto == null) {
+                    return null;
+                } else {
+                    return new ByteArrayResource("image/jpeg",jpegPhoto);
+                }
+            }
+        });
+        img.add(new VisibleEnableBehaviour(){
+            @Override
+            public boolean isVisible(){
+                if (userModel != null && userModel.getObject() == null){
+                    loadModel();
+                }
+                return jpegPhoto != null;
+            }
+        });
+        iconBox.add(img);
+
+        ContextImage icon = new ContextImage(ID_ICON, "img/placeholder.png");
+        icon.add(new VisibleEnableBehaviour(){
+            @Override
+            public boolean isVisible(){
+                if (userModel != null && userModel.getObject() == null){
+                    loadModel();
+                }
+                return jpegPhoto == null;
+
+
+            }
+        });
+        iconBox.add(icon);
+
         Label usernameLink = new Label(ID_USERNAME_LINK, new AbstractReadOnlyModel<String>() {
 
             @Override
@@ -58,6 +171,44 @@ public class UserMenuPanel extends BaseSimplePanel {
             }
         });
         add(usernameLink);
+
+
+        WebMarkupContainer panelIconBox = new WebMarkupContainer(ID_PANEL_ICON_BOX);
+        add(panelIconBox);
+
+        Image panelImg = new Image(ID_PANEL_PHOTO, new AbstractReadOnlyModel<AbstractResource>() {
+
+            @Override
+            public AbstractResource getObject() {
+                if(jpegPhoto == null) {
+                    return null;
+                } else {
+                    return new ByteArrayResource("image/jpeg",jpegPhoto);
+                }
+            }
+        });
+        panelImg.add(new VisibleEnableBehaviour(){
+            @Override
+            public boolean isVisible(){
+                if (userModel != null && userModel.getObject() == null){
+                    loadModel();
+                }
+                return jpegPhoto != null;
+            }
+        });
+        panelIconBox.add(panelImg);
+
+        ContextImage panelIcon = new ContextImage(ID_PANEL_ICON,"img/placeholder.png");
+        panelIcon.add(new VisibleEnableBehaviour(){
+            @Override
+            public boolean isVisible(){
+                if (userModel != null && userModel.getObject() == null){
+                    loadModel();
+                }
+                return jpegPhoto == null;
+            }
+        });
+        panelIconBox.add(panelIcon);
 
         Label username = new Label(ID_USERNAME, new AbstractReadOnlyModel<String>() {
 
@@ -74,25 +225,50 @@ public class UserMenuPanel extends BaseSimplePanel {
                 createStringResource("UserMenuPanel.logout"));
         add(logoutLink);
 
-        AjaxButton resetPasswords = new AjaxButton(ID_RESET_PASSWORD,
-                createStringResource("UserMenuPanel.resetPasswords")) {
-
-            @Override
-            public void onClick(AjaxRequestTarget target) {
-                setResponsePage(PageMyPasswords.class);
-            }
-        };
-        add(resetPasswords);
-
         AjaxButton editPasswordQ = new AjaxButton(ID_PASSWORD_QUESTIONS,
                 createStringResource("UserMenuPanel.editPasswordQuestions")) {
 
             @Override
             public void onClick(AjaxRequestTarget target) {
-                setResponsePage(PageMyPasswordQuestions.class);
+                PageMyPasswordQuestions myPasswordQuestions = new PageMyPasswordQuestions(passwordQuestionsDtoIModel);
+                setResponsePage(myPasswordQuestions);
             }
+
         };
         add(editPasswordQ);
+
+        if (!isUserModelLoaded) {
+            loadModel();
+
+        }
+        if (!isPasswordModelLoaded ){
+            passwordQuestionsDtoIModel = new LoadableModel<PasswordQuestionsDto>(false) {
+
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                protected PasswordQuestionsDto load() {
+                    return loadModel();
+                }
+            };
+            isPasswordModelLoaded = true;
+        }
+        securityPolicyQuestionsModel = new LoadableModel<List<SecurityQuestionDefinitionType>>(false) {
+            @Override
+            protected List<SecurityQuestionDefinitionType> load() {
+                return loadSecurityPloicyQuestionsModel();
+            }
+        };
+        editPasswordQ.add(new VisibleEnableBehaviour() {
+            @Override
+            public boolean isVisible() {
+                if (securityPolicyQuestionsModel == null || securityPolicyQuestionsModel.getObject() == null) {
+                    loadSecurityPloicyQuestionsModel();
+                }
+                return hasQuestions() || (securityPolicyQuestionsModel.getObject() != null &&
+                        securityPolicyQuestionsModel.getObject().size() > 0);
+            }
+        });
     }
 
     private String getShortUserName() {
@@ -109,5 +285,102 @@ public class UserMenuPanel extends BaseSimplePanel {
         }
 
         return principal.toString();
+    }
+
+    private PasswordQuestionsDto loadModel() {
+        LOGGER.trace("Loading user for Security Question Page.");
+
+        PasswordQuestionsDto dto =new PasswordQuestionsDto();
+        OperationResult result = new OperationResult(OPERATION_LOAD_USER);
+        try{
+
+
+            String userOid = SecurityUtils.getPrincipalUser().getOid();
+            Task task = ((PageBase)getPage()).createSimpleTask(OPERATION_LOAD_USER);
+            OperationResult subResult = result.createSubresult(OPERATION_LOAD_USER);
+
+            Collection options = SelectorOptions.createCollection(UserType.F_JPEG_PHOTO,
+                    GetOperationOptions.createRetrieve(RetrieveOption.INCLUDE));
+            PrismObject<UserType> user = ((PageBase)getPage()).getModelService().getObject(UserType.class, userOid, options, task, subResult);
+            userModel.setObject(user);
+            jpegPhoto = user == null ? null :
+                    (user.asObjectable() == null ? null : user.asObjectable().getJpegPhoto());
+            dto.setSecurityAnswers(createUsersSecurityQuestionsList(user));
+
+            subResult.recordSuccessIfUnknown();
+
+        }
+        catch (Exception ex) {
+            LoggingUtils.logExceptionOnDebugLevel(LOGGER, "Couldn't get user Questions, Probably not set yet", ex);
+
+        } finally {
+            result.recomputeStatus();
+            isUserModelLoaded = true;
+        }
+        return dto;
+    }
+
+    public List<SecurityQuestionAnswerDTO> createUsersSecurityQuestionsList(PrismObject<UserType> user) {
+
+        SecurityQuestionsCredentialsType credentialsPolicyType = user.asObjectable().getCredentials()
+                .getSecurityQuestions();
+        if (credentialsPolicyType == null) {
+            return null;
+        }
+        List<SecurityQuestionAnswerType> secQuestAnsList = credentialsPolicyType.getQuestionAnswer();
+
+        if (secQuestAnsList != null) {
+            List<SecurityQuestionAnswerDTO> secQuestAnswListDTO = new ArrayList<SecurityQuestionAnswerDTO>();
+            for (Iterator iterator = secQuestAnsList.iterator(); iterator.hasNext();) {
+                SecurityQuestionAnswerType securityQuestionAnswerType = (SecurityQuestionAnswerType) iterator
+                        .next();
+                Protector protector = ((PageBase) getPage()).getPrismContext().getDefaultProtector();
+                String decoded = "";
+                if (securityQuestionAnswerType.getQuestionAnswer().getEncryptedDataType() != null) {
+                    try {
+                        decoded = protector.decryptString(securityQuestionAnswerType.getQuestionAnswer());
+                    } catch (EncryptionException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                }
+
+                secQuestAnswListDTO.add(new SecurityQuestionAnswerDTO(securityQuestionAnswerType
+                        .getQuestionIdentifier(), decoded));
+            }
+
+            return secQuestAnswListDTO;
+
+        } else {
+            return null;
+        }
+
+    }
+
+
+    private List<SecurityQuestionDefinitionType> loadSecurityPloicyQuestionsModel() {
+        List<SecurityQuestionDefinitionType> questionList = new ArrayList<SecurityQuestionDefinitionType>();
+        OperationResult result = new OperationResult(OPERATION_LOAD_QUESTION_POLICY);
+        try {
+            Task task = ((PageBase) getPage()).createSimpleTask(OPERATION_LOAD_QUESTION_POLICY);
+            CredentialsPolicyType credPolicy = ((PageBase) getPage()).getModelInteractionService().getCredentialsPolicy(null, task, result);
+            if (credPolicy != null && credPolicy.getSecurityQuestions() != null) {
+                // Actual Policy Question List
+                questionList = credPolicy.getSecurityQuestions().getQuestion();
+            }
+        } catch (Exception ex) {
+            result.recordFatalError("Couldn't load system security policy" + ex.getMessage(), ex);
+            LoggingUtils.logException(LOGGER, "Couldn't load system security policy", ex);
+        }finally {
+            result.computeStatus();
+        }
+        return questionList;
+    }
+
+    private boolean hasQuestions(){
+        return passwordQuestionsDtoIModel != null &&
+                (passwordQuestionsDtoIModel.getObject() != null &&
+                        (passwordQuestionsDtoIModel.getObject().getPwdQuestion() != null
+                                && !passwordQuestionsDtoIModel.getObject().getPwdQuestion().trim().equals("")));
     }
 }

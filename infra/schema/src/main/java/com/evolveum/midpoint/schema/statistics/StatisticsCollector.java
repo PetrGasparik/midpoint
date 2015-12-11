@@ -16,12 +16,13 @@
 
 package com.evolveum.midpoint.schema.statistics;
 
-import com.evolveum.midpoint.schema.statistics.IterativeTaskInformation;
-import com.evolveum.midpoint.schema.statistics.OperationalInformation;
-import com.evolveum.midpoint.schema.statistics.ProvisioningOperation;
-import com.evolveum.midpoint.schema.statistics.SynchronizationInformation;
+import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.IterativeTaskInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationalInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.EnvironmentalPerformanceInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ActionsExecutedInformationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationStatsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationInformationType;
 
@@ -40,24 +41,10 @@ import javax.xml.namespace.QName;
 public interface StatisticsCollector {
 
     /**
-     * Gets information from the current task.
-     */
-
-    OperationalInformation getOperationalInformation();
-
-    SynchronizationInformation getSynchronizationInformation();
-
-    IterativeTaskInformation getIterativeTaskInformation();
-
-    /**
      * Gets information from the current task and its transient subtasks (aka worker threads).
      */
 
-    OperationalInformationType getAggregateOperationalInformation();
-
-    IterativeTaskInformationType getAggregateIterativeTaskInformation();
-
-    SynchronizationInformationType getAggregateSynchronizationInformation();
+    OperationStatsType getAggregatedLiveOperationStats();
 
     /**
      * Records various kinds of operational information.
@@ -89,15 +76,30 @@ public interface StatisticsCollector {
 
     void recordSynchronizationOperationStart(String objectName, String objectDisplayName, QName objectType, String objectOid);
 
-    void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation increment);
+    void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation.Record increment);
+
+    /**
+     * Records information about repository (focal) events.
+     */
+
+    void recordObjectActionExecuted(String objectName, String objectDisplayName, QName objectType, String objectOid, ChangeType changeType, String channel, Throwable exception);
+
+    void recordObjectActionExecuted(PrismObject<? extends ObjectType> object, ChangeType changeType, Throwable exception);
+
+    <T extends ObjectType> void recordObjectActionExecuted(PrismObject<T> object, Class<T> objectTypeClass, String defaultOid, ChangeType changeType, String channel, Throwable exception);
+
+    void markObjectActionExecutedBoundary();
 
     /**
      * Sets initial values for statistics.
      */
 
-    void resetOperationalInformation(OperationalInformationType value);
+    void resetEnvironmentalPerformanceInformation(EnvironmentalPerformanceInformationType value);
 
     void resetSynchronizationInformation(SynchronizationInformationType value);
 
     void resetIterativeTaskInformation(IterativeTaskInformationType value);
+
+    void resetActionsExecutedInformation(ActionsExecutedInformationType value);
+
 }

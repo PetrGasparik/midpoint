@@ -27,7 +27,10 @@ import javax.xml.bind.JAXBElement;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.prism.polystring.PolyString;
+import com.evolveum.midpoint.prism.polystring.PrismDefaultPolyStringNormalizer;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
 
 import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.mutable.MutableBoolean;
@@ -575,33 +578,6 @@ public class LensUtil {
 			}
 		}
 	}
-	
-	public static <V extends PrismValue, D extends ItemDefinition, F extends ObjectType> void evaluateMapping(
-			Mapping<V,D> mapping, LensContext<F> lensContext, Task task, OperationResult parentResult) throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException {
-		ModelExpressionThreadLocalHolder.pushLensContext(lensContext);
-		ModelExpressionThreadLocalHolder.pushCurrentResult(parentResult);
-		ModelExpressionThreadLocalHolder.pushCurrentTask(task);
-		String objectOid = mapping.getOriginObject() != null ? mapping.getOriginObject().getOid() : null;
-		String objectName = mapping.getOriginObject() != null ? String.valueOf(mapping.getOriginObject().getName()) : null;
-		String mappingName = mapping.getItemName() != null ? mapping.getItemName().getLocalPart() : null;
-		long start = System.currentTimeMillis();
-		try {
-			task.recordState("Started evaluation of mapping " + mapping.getMappingContextDescription() + ".");
-			mapping.evaluate(task, parentResult);
-			task.recordState("Successfully finished evaluation of mapping " + mapping.getMappingContextDescription() + " in " + (System.currentTimeMillis()-start) + " ms.");
-		} catch (IllegalArgumentException e) {
-			task.recordState("Evaluation of mapping " + mapping.getMappingContextDescription() + " finished with error in " + (System.currentTimeMillis()-start) + " ms.");
-			throw new IllegalArgumentException(e.getMessage()+" in "+mapping.getContextDescription(), e);
-		} finally {
-			task.recordMappingOperation(objectOid, objectName, mappingName, System.currentTimeMillis() - start);
-			ModelExpressionThreadLocalHolder.popLensContext();
-			ModelExpressionThreadLocalHolder.popCurrentResult();
-			ModelExpressionThreadLocalHolder.popCurrentTask();
-			if (lensContext.getDebugListener() != null) {
-				lensContext.getDebugListener().afterMappingEvaluation(lensContext, mapping);
-			}
-		}
-	}
 
     public static <V extends PrismValue, F extends ObjectType> void evaluateScript(
             ScriptExpression scriptExpression, LensContext<F> lensContext, ExpressionVariables variables, String shortDesc, Task task, OperationResult parentResult) throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException {
@@ -619,7 +595,6 @@ public class LensUtil {
 //			}
         }
     }
-
 
 	public static Object getIterationVariableValue(LensProjectionContext accCtx) {
 		Integer iterationOld = null;
@@ -1297,6 +1272,72 @@ public class LensUtil {
 		if (itemDelta.getEstimatedOldValues() != null) {
 			return;
 		}
-		PrismUtil.setDeltaOldValue(ctx.getObjectOld(), itemDelta);
+		if (ctx.getObjectOld() != null) {
+			Item<PrismValue, ItemDefinition> itemOld = ctx.getObjectOld().findItem(itemDelta.getPath());
+			if (itemOld != null) {
+				itemDelta.setEstimatedOldValues((Collection) PrismValue.cloneCollection(itemOld.getValues()));
+			} else {
+				// get the old data from current object. Still better estimate than nothing
+				if (ctx.getObjectCurrent() != null) {
+					 itemOld = ctx.getObjectCurrent().findItem(itemDelta.getPath());
+					 if (itemOld != null) {
+						 itemDelta.setEstimatedOldValues((Collection) PrismValue.cloneCollection(itemOld.getValues()));
+					 }
+				}
+			}
+		}
+	}
+	
+	public static <O extends ObjectType> void setDeltaOldValue(LensElementContext<O> ctx, ObjectDelta<O> objectDelta) {
+		if (objectDelta == null) {
+			return;
+		}
+		if (!objectDelta.isModify()) {
+			return;
+		}
+		for (ItemDelta<?, ?> modification: objectDelta.getModifications()) {
+			setDeltaOldValue(ctx, modification);
+		}
+	}
+
+	public static <F extends ObjectType> LensObjectDeltaOperation<F> createObjectDeltaOperation(ObjectDelta<F> focusDelta, OperationResult result,
+																								LensElementContext<F> focusContext, LensProjectionContext projCtx) {
+		return createObjectDeltaOperation(focusDelta, result, focusContext, projCtx, null);
+	}
+
+	// projCtx may or may not be present (object itself can be focus or projection)
+	public static <T extends ObjectType> LensObjectDeltaOperation<T> createObjectDeltaOperation(ObjectDelta<T> objectDelta, OperationResult result,
+																								LensElementContext<T> objectContext,
+																								LensProjectionContext projCtx,
+																								ResourceType resource) {
+		LensObjectDeltaOperation<T> objectDeltaOp = new LensObjectDeltaOperation<T>(objectDelta.clone());
+		objectDeltaOp.setExecutionResult(result);
+		PrismObject<T> object = objectContext.getObjectAny();
+		if (object != null) {
+			PolyString name = object.getName();
+			if (name == null && object.asObjectable() instanceof ShadowType) {
+				try {
+					name = ShadowUtil.determineShadowName((PrismObject<ShadowType>) object);
+					if (name == null) {
+						LOGGER.debug("No name for shadow:\n{}", object.debugDump());
+					} else if (name.getNorm() == null) {
+						name.recompute(new PrismDefaultPolyStringNormalizer());
+					}
+				} catch (SchemaException e) {
+					LoggingUtils.logUnexpectedException(LOGGER, "Couldn't determine name for shadow -- continuing with no name; shadow:\n{}", e, object.debugDump());
+				}
+			}
+			objectDeltaOp.setObjectName(name);
+		}
+		if (resource == null && projCtx != null) {
+			resource = projCtx.getResource();
+		}
+		if (resource != null) {
+			objectDeltaOp.setResourceOid(resource.getOid());
+			objectDeltaOp.setResourceName(PolyString.toPolyString(resource.getName()));
+		} else if (objectContext instanceof LensProjectionContext) {
+			objectDeltaOp.setResourceOid(((LensProjectionContext) objectContext).getResourceOid());
+		}
+		return objectDeltaOp;
 	}
 }

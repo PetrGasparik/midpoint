@@ -555,6 +555,15 @@ public interface Task extends DebugDumpable, StatisticsCollector {
     <T> void setExtensionPropertyValue(QName propertyName, T value) throws SchemaException;
 
     /**
+     * Sets (i.e., replaces) the value of the given property in task extension - without writing to repo.
+     * @param propertyName name of the property
+     * @param value value of the property
+     * @param <T>
+     * @throws SchemaException
+     */
+    <T> void setExtensionPropertyValueTransient(QName propertyName, T value) throws SchemaException;
+
+    /**
      * Sets a reference in the extension - replaces existing value(s), if any, by the one(s) provided.
      * @param reference
      * @throws SchemaException
@@ -733,6 +742,10 @@ public interface Task extends DebugDumpable, StatisticsCollector {
      * "Immediate" version of the above method.
      */
     public void setProgressImmediate(long progress, OperationResult parentResult) throws ObjectNotFoundException, SchemaException;
+
+    void setProgressTransient(long value);
+
+    public OperationStatsType getStoredOperationStats();
 
     /**
      * Returns expected total progress.
@@ -934,4 +947,10 @@ public interface Task extends DebugDumpable, StatisticsCollector {
      */
     void startLightweightHandler();
 
+
+    void startCollectingOperationStatsFromZero(boolean enableIterationStatistics, boolean enableSynchronizationStatistics, boolean enableActionsExecutedStatistics);
+
+    void startCollectingOperationStatsFromStoredValues(boolean enableIterationStatistics, boolean enableSynchronizationStatistics, boolean enableActionsExecutedStatistics);
+
+    void storeOperationStats();
 }

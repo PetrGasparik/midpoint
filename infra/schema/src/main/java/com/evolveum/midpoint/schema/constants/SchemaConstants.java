@@ -152,6 +152,7 @@ public abstract class SchemaConstants {
 	public static final String CHANGE_CHANNEL_RECON_URI = QNameUtil.qNameToUri(CHANGE_CHANNEL_RECON);
 	public static final QName CHANGE_CHANNEL_RECOMPUTE = new QName(NS_PROVISIONING_CHANNEL, "recompute");
 	public static final QName CHANGE_CHANNEL_DISCOVERY = new QName(NS_PROVISIONING_CHANNEL, "discovery");
+	public static final String CHANGE_CHANNEL_DISCOVERY_URI = QNameUtil.qNameToUri(CHANGE_CHANNEL_DISCOVERY);
 	public static final QName CHANGE_CHANNEL_IMPORT = new QName(NS_PROVISIONING_CHANNEL, "import");
 
 	public static final String NS_MODEL = NS_MIDPOINT_PUBLIC + "/model";
@@ -178,9 +179,6 @@ public abstract class SchemaConstants {
     public static final QName MODEL_EXTENSION_INTENT = new QName(NS_MODEL_EXTENSION, "intent");
     public static final QName OBJECTCLASS_PROPERTY_NAME = new QName(NS_MODEL_EXTENSION, "objectclass");
 	public static final QName MODEL_EXTENSION_LAST_SCAN_TIMESTAMP_PROPERTY_NAME = new QName(NS_MODEL_EXTENSION, "lastScanTimestamp");
-	public static final QName MODEL_EXTENSION_OPERATIONAL_INFORMATION_PROPERTY_NAME = new QName(NS_MODEL_EXTENSION, "operationalInformation");
-	public static final QName MODEL_EXTENSION_SYNCHRONIZATION_INFORMATION_PROPERTY_NAME = new QName(NS_MODEL_EXTENSION, "synchronizationInformation");
-	public static final QName MODEL_EXTENSION_ITERATIVE_TASK_INFORMATION_PROPERTY_NAME = new QName(NS_MODEL_EXTENSION, "iterativeTaskInformation");
 
 	public static final String NS_MODEL_DISABLE_REASON = NS_MODEL + "/disableReason";
 	public static final String MODEL_DISABLE_REASON_EXPLICIT = QNameUtil.qNameToUri(new QName(NS_MODEL_DISABLE_REASON, "explicit"));
@@ -196,6 +194,7 @@ public abstract class SchemaConstants {
 	public static final QName MODEL_EXTENSION_DIAGNOSE = new QName(NS_MODEL_EXTENSION, "diagnose");
 	public static final QName MODEL_EXTENSION_FIX = new QName(NS_MODEL_EXTENSION, "fix");
 	public static final QName MODEL_EXTENSION_DUPLICATE_SHADOWS_RESOLVER = new QName(NS_MODEL_EXTENSION, "duplicateShadowsResolver");
+	public static final QName MODEL_EXTENSION_CHECK_DUPLICATES_ON_PRIMARY_IDENTIFIERS_ONLY = new QName(NS_MODEL_EXTENSION, "checkDuplicatesOnPrimaryIdentifiersOnly");
 
     public static final String NS_GUI = NS_MIDPOINT_PUBLIC + "/gui";
 	public static final String NS_GUI_CHANNEL = NS_GUI + "/channels-3";

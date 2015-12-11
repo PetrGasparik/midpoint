@@ -123,7 +123,14 @@ public class PageResources extends PageAdminResources {
     }
 
     public PageResources(boolean clearSessionPaging) {
+        this(clearSessionPaging, "");
+    }
 
+    public PageResources(String searchText){
+        this(true, searchText);
+    }
+
+    public PageResources(boolean clearSessionPaging, final String searchText){
         searchModel = new LoadableModel<ResourceSearchDto>() {
 
             @Override
@@ -134,7 +141,9 @@ public class PageResources extends PageAdminResources {
                 if(dto == null){
                     dto = new ResourceSearchDto();
                 }
-
+                if (searchText != null && !searchText.trim().equals("")) {
+                    dto.setText(searchText);
+                }
                 return dto;
             }
         };
@@ -193,21 +202,21 @@ public class PageResources extends PageAdminResources {
         });
     }
 
-    private void initSearchForm(Form searchForm){
-        BasicSearchPanel<ResourceSearchDto> basicSearch = new BasicSearchPanel<ResourceSearchDto>(ID_BASIC_SEARCH){
+    private void initSearchForm(Form searchForm) {
+        BasicSearchPanel<ResourceSearchDto> basicSearch = new BasicSearchPanel<ResourceSearchDto>(ID_BASIC_SEARCH) {
 
             @Override
-            protected IModel<String> createSearchTextModel(){
+            protected IModel<String> createSearchTextModel() {
                 return new PropertyModel<>(searchModel, ResourceSearchDto.F_TEXT);
             }
 
             @Override
-            protected void searchPerformed(AjaxRequestTarget target){
+            protected void searchPerformed(AjaxRequestTarget target) {
                 PageResources.this.searchPerformed(target);
             }
 
             @Override
-            protected void clearSearchPerformed(AjaxRequestTarget target){
+            protected void clearSearchPerformed(AjaxRequestTarget target) {
                 PageResources.this.clearSearchPerformed(target);
             }
         };
@@ -239,9 +248,11 @@ public class PageResources extends PageAdminResources {
             }
         };
 
-        Collection<SelectorOptions<GetOperationOptions>> options =
-                SelectorOptions.createCollection(ResourceType.F_CONNECTOR, GetOperationOptions.createResolve());
-        provider.setOptions(options);
+        //fixes MID-2534;
+        // connector reference is set in the ResourceDto constructor
+//        Collection<SelectorOptions<GetOperationOptions>> options =
+//                SelectorOptions.createCollection(ResourceType.F_CONNECTOR, GetOperationOptions.createResolve());
+//        provider.setOptions(options);
         provider.setQuery(createQuery());
 
         return provider;
@@ -306,7 +317,7 @@ public class PageResources extends PageAdminResources {
         };
         columns.add(column);
 
-        columns.add(new PropertyColumn(createStringResource("pageResources.bundle"), "bundle"));
+        columns.add(new PropertyColumn(createStringResource("pageResources.connectorType"), "type"));
         columns.add(new PropertyColumn(createStringResource("pageResources.version"), "version"));
 
         column = new LinkIconColumn<ResourceDto>(createStringResource("pageResources.status")) {
@@ -652,12 +663,12 @@ public class PageResources extends PageAdminResources {
         }
     }
 
-    private  ObjectQuery createQuery(){
+    private  ObjectQuery createQuery() {
         ResourceSearchDto dto = searchModel.getObject();
         ObjectQuery query = null;
         String searchText = dto.getText();
 
-        if(StringUtils.isEmpty(dto.getText())){
+        if(StringUtils.isEmpty(dto.getText())) {
             return null;
         }
 
@@ -670,7 +681,7 @@ public class PageResources extends PageAdminResources {
             query = new ObjectQuery();
             query.setFilter(substring);
 
-        } catch(Exception e){
+        } catch (Exception e) {
             error(getString("pageResources.message.queryError") + " " + e.getMessage());
             LoggingUtils.logException(LOGGER, "Couldn't create query filter.", e);
         }
@@ -678,7 +689,7 @@ public class PageResources extends PageAdminResources {
         return query;
     }
 
-    private void searchPerformed(AjaxRequestTarget target){
+    private void searchPerformed(AjaxRequestTarget target) {
         ObjectQuery query = createQuery();
         target.add(getFeedbackPanel());
 
@@ -686,6 +697,7 @@ public class PageResources extends PageAdminResources {
         DataTable table = panel.getDataTable();
         ObjectDataProvider provider = (ObjectDataProvider) table.getDataProvider();
         provider.setQuery(query);
+        provider.setOptions(SelectorOptions.createCollection(GetOperationOptions.createNoFetch()));
 
         ResourcesStorage storage = getSessionStorage().getResources();
         storage.setResourceSearch(searchModel.getObject());
@@ -694,7 +706,7 @@ public class PageResources extends PageAdminResources {
         target.add((Component) panel);
     }
 
-    private void deleteResourceSyncTokenPerformed(AjaxRequestTarget target, IModel<ResourceDto> model){
+    private void deleteResourceSyncTokenPerformed(AjaxRequestTarget target, IModel<ResourceDto> model) {
         deleteSyncTokenPerformed(target, model);
     }
 

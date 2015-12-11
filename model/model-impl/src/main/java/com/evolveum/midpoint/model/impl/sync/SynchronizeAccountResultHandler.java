@@ -33,6 +33,7 @@ import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.task.api.TaskManager;
 import com.evolveum.midpoint.util.QNameUtil;
+import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
@@ -73,7 +74,8 @@ public class SynchronizeAccountResultHandler extends AbstractSearchIterativeResu
 		this.resourceOid = resource.getOid();
 		this.objectClass = objectClass;
 		forceAdd = false;
-		setRecordIterationStatistics(false);
+		setRecordIterationStatistics(false);		// we do statistics ourselves in handler, because in case of reconciliation
+													// we are not called via AbstractSearchIterativeResultHandler.processRequest
 	}
 
 	public boolean isForceAdd() {
@@ -120,6 +122,24 @@ public class SynchronizeAccountResultHandler extends AbstractSearchIterativeResu
 	 */
 	@Override
 	protected boolean handleObject(PrismObject<ShadowType> accountShadow, Task workerTask, OperationResult result) {
+		long started = System.currentTimeMillis();
+		try {
+			workerTask.recordIterativeOperationStart(accountShadow.asObjectable());
+			boolean rv = handleObjectInternal(accountShadow, workerTask, result);
+			result.computeStatusIfUnknown();
+			if (result.isError()) {
+				workerTask.recordIterativeOperationEnd(accountShadow.asObjectable(), started, getException(result));
+			} else {
+				workerTask.recordIterativeOperationEnd(accountShadow.asObjectable(), started, null);
+			}
+			return rv;
+		} catch (Throwable t) {
+			workerTask.recordIterativeOperationEnd(accountShadow.asObjectable(), started, t);
+			throw t;
+		}
+	}
+
+	protected boolean handleObjectInternal(PrismObject<ShadowType> accountShadow, Task workerTask, OperationResult result) {
 
 		ShadowType newShadowType = accountShadow.asObjectable();
 		if (newShadowType.isProtectedObject() != null && newShadowType.isProtectedObject()) {

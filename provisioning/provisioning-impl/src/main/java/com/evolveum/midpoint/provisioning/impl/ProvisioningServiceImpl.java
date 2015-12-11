@@ -991,6 +991,8 @@ public class ProvisioningServiceImpl implements ProvisioningService {
 				getShadowCache(Mode.RECON).modifyShadow(shadow, shadow.getOid(), new ArrayList<ItemDelta>(), null, options, task, result);
 			} else if (FailedOperationTypeType.DELETE == shadowType.getFailedOperationType()){
 				getShadowCache(Mode.RECON).deleteShadow(shadow, options, null, task, result);
+			} else {
+				result.recordWarning("Missing or unknown type of operation to finish: " + shadowType.getFailedOperationType());
 			}
 		} catch (CommunicationException e) {
 			ProvisioningUtil.recordFatalError(LOGGER, result, "Couldn't finish operation: communication problem: " + e.getMessage(), e);
@@ -1104,7 +1106,7 @@ public class ProvisioningServiceImpl implements ProvisioningService {
 			SearchResultMetadata metadata = null;
 			try {
 				
-				metadata = getCacheRepositoryService().searchObjectsIterative(type, query, internalHandler, null, result);
+				metadata = getCacheRepositoryService().searchObjectsIterative(type, query, internalHandler, null, false, result);	// TODO think about strictSequential flag
 				
 				result.computeStatus();
 				result.recordSuccessIfUnknown();
