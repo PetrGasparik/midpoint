@@ -41,7 +41,7 @@ http://www.springframework.org/schema/security/spring-security-3.2.xsd">
     <http pattern="/wicket/resource/**" security="none"/>
 
 	<!-- add following: entry-point-ref="casEntryPoint"  to the http element before create-session attribute -->
-    <http create-session="never" auto-config="true" use-expressions="false" access-decision-manager-ref="accessDecisionManager">
+    <http entry-point-ref="casEntryPoint" create-session="never" auto-config="true" use-expressions="false" access-decision-manager-ref="accessDecisionManager">
         <intercept-url pattern="/j_spring_security_check" />
         <intercept-url pattern="/spring_security_login" />
 
@@ -78,7 +78,7 @@ http://www.springframework.org/schema/security/spring-security-3.2.xsd">
     </beans:bean>
     
     <beans:bean id="logoutHandler" class="com.evolveum.midpoint.web.security.AuditedLogoutHandler">
-        <beans:property name="defaultTargetUrl" value="/"/>
+        <beans:property name="defaultTargetUrl" value="https://heslo.ami.cz/cas/logout?service=https%3A%2F%2Fheslo.ami.cz%2Fidm"/>
     </beans:bean>
 
     <beans:bean id="midPointAuthenticationProvider"
