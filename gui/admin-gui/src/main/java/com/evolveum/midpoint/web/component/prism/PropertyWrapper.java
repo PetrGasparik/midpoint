@@ -16,24 +16,17 @@
 
 package com.evolveum.midpoint.web.component.prism;
 
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
-import com.evolveum.midpoint.schema.SchemaConstantsGenerated;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
-
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.Validate;
+import com.evolveum.midpoint.util.PrettyPrinter;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -42,105 +35,30 @@ import java.util.List;
 /**
  * @author lazyman
  */
-public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable {
+public class PropertyWrapper<I extends Item<? extends PrismValue, ID>, ID extends ItemDefinition> extends PropertyOrReferenceWrapper<I, ID> implements Serializable, DebugDumpable {
 
-    private ContainerWrapper container;
-    private PrismProperty property;
-    private ValueStatus status;
-    private List<ValueWrapper> values;
-    private String displayName;
-    private boolean readonly;
-    private PrismPropertyDefinition itemDefinition;
+	private static final long serialVersionUID = -6347026284758253783L;
 
-    public PropertyWrapper(ContainerWrapper container, PrismProperty property, boolean readonly, ValueStatus status) {
-        Validate.notNull(property, "Property must not be null.");
-        Validate.notNull(status, "Property status must not be null.");
+	public PropertyWrapper(@Nullable ContainerWrapper container, I property, boolean readonly, ValueStatus status) {
+		super(container, property, readonly, status);
 
-        this.container = container;
-        this.property = property;
-        this.status = status;
-        this.readonly = readonly;
-        this.itemDefinition = getItemDefinition();
-
-        ItemPath passwordPath = new ItemPath(SchemaConstantsGenerated.C_CREDENTIALS,
-                CredentialsType.F_PASSWORD);
-        if (passwordPath.equivalent(container.getPath())
+        if (container != null && SchemaConstants.PATH_PASSWORD.equivalent(container.getPath())
                 && PasswordType.F_VALUE.equals(property.getElementName())) {
-            displayName = "prismPropertyPanel.name.credentials.password";
-        }
+			super.setDisplayName("prismPropertyPanel.name.credentials.password");
+		}
         
         values = createValues();
     }
 
-    public void revive(PrismContext prismContext) throws SchemaException {
-        if (property != null) {
-            property.revive(prismContext);
-        }
-        if (itemDefinition != null) {
-            itemDefinition.revive(prismContext);
-        }
-    }
-
-    @Override
-    public PrismPropertyDefinition getItemDefinition() {
-    	PrismPropertyDefinition propDef = null;
-    	if (container.getItemDefinition() != null){
-    		propDef = container.getItemDefinition().findPropertyDefinition(property.getDefinition().getName());
-    	}
-    	if (propDef == null) {
-    		propDef = property.getDefinition();
-    	}
-    	return propDef;
-    }
-    
-    public boolean isVisible() {
-        if (property.getDefinition().isOperational()) {
-            return false;
-        }
-
-        return container.isItemVisible(this);
-    }
-    
-    
-
-    public ContainerWrapper getContainer() {
-        return container;
-    }
-
-    @Override
-    public String getDisplayName() {
-        if (StringUtils.isNotEmpty(displayName)) {
-            return displayName;
-        }
-        return ContainerWrapper.getDisplayNameFromItem(property);
-    }
-
-    @Override
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
-    public ValueStatus getStatus() {
-        return status;
-    }
-
-    public List<ValueWrapper> getValues() {
-        return values;
-    }
-
-    @Override
-    public PrismProperty getItem() {
-        return property;
-    }
-
+	// TODO consider unifying with ReferenceWrapper.createValues  (difference is in oldValue in ValueWrapper constructor: null vs. prismValue)
     private List<ValueWrapper> createValues() {
-        List<ValueWrapper> values = new ArrayList<ValueWrapper>();
+        List<ValueWrapper> values = new ArrayList<>();
 
-        for (PrismPropertyValue prismValue : (List<PrismPropertyValue>) property.getValues()) {
+        for (PrismValue prismValue : item.getValues()) {
             values.add(new ValueWrapper(this, prismValue, ValueStatus.NOT_CHANGED));
         }
 
-        int minOccurs = property.getDefinition().getMinOccurs();
+        int minOccurs = getDefinition().getMinOccurs();
         while (values.size() < minOccurs) {
             values.add(createAddedValue());
         }
@@ -152,12 +70,9 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
         return values;
     }
 
-    public void addValue(){
-        getValues().add(createAddedValue());
-    }
-
+	@Override
     public ValueWrapper createAddedValue() {
-        PrismPropertyDefinition definition = property.getDefinition();
+        ItemDefinition definition = item.getDefinition();
 
         ValueWrapper wrapper;
         if (SchemaConstants.T_POLY_STRING_TYPE.equals(definition.getTypeName())) {
@@ -174,7 +89,13 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
     }
 
     private boolean isUser() {
+		if (getContainer() == null) {
+			return false;
+		}
         ObjectWrapper wrapper = getContainer().getObject();
+		if (wrapper == null) {
+			return false;
+		}
         PrismObject object = wrapper.getObject();
 
         return UserType.class.isAssignableFrom(object.getCompileTimeClass());
@@ -185,11 +106,11 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
             return false;
         }
 
-        if (!ActivationType.F_ADMINISTRATIVE_STATUS.equals(property.getElementName())) {
+        if (!ActivationType.F_ADMINISTRATIVE_STATUS.equals(item.getElementName())) {
             return false;
         }
 
-        if (ContainerStatus.MODIFYING.equals(container.getObject().getStatus())) {
+        if (container.getObject() == null || ContainerStatus.MODIFYING.equals(container.getObject().getStatus())) {
             //when modifying then we don't want to create "true" value for c:activation/c:enabled, only during add
             return false;
         }
@@ -197,45 +118,18 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
         return true;
     }
 
-    public boolean hasChanged() {
-        for (ValueWrapper value : getValues()) {
-            switch (value.getStatus()) {
-                case DELETED:
-                    return true;
-                case ADDED:
-                case NOT_CHANGED:
-                    if (value.hasValueChanged()) {
-                        return true;
-                    }
-            }
-        }
-
-        return false;
-    }
-
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
         builder.append("PropertyWrapper(");
         builder.append(getDisplayName());
-        builder.append(", ");
+        builder.append(" (");
         builder.append(status);
-        builder.append(",values=[");
-        for (ValueWrapper wrapper : getValues()) {
-            builder.append(wrapper.toString());
-            builder.append(",");
-        }
-        builder.append("])");
+        builder.append(") ");
+        builder.append(getValues() == null ? null :  getValues().size());
+		builder.append(" values)");
+        builder.append(")");
         return builder.toString();
-    }
-
-    @Override
-    public boolean isReadonly() {
-        return readonly;
-    }
-
-    public void setReadonly(boolean readonly) {
-        this.readonly = readonly;
     }
 
 	@Override
@@ -247,7 +141,8 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
 	public String debugDump(int indent) {
 		StringBuilder sb = new StringBuilder();
 		DebugUtil.indentDebugDump(sb, indent);
-		sb.append("PropertyWrapper(\n");
+		sb.append(getDebugName());
+		sb.append(": ").append(PrettyPrinter.prettyPrint(getName())).append("\n");
 		DebugUtil.debugDumpWithLabel(sb, "displayName", displayName, indent+1);
 		sb.append("\n");
 		DebugUtil.debugDumpWithLabel(sb, "status", status == null?null:status.toString(), indent+1);
@@ -256,13 +151,16 @@ public class PropertyWrapper implements ItemWrapper, Serializable, DebugDumpable
 		sb.append("\n");
 		DebugUtil.debugDumpWithLabel(sb, "itemDefinition", itemDefinition == null?null:itemDefinition.toString(), indent+1);
 		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "property", property == null?null:property.toString(), indent+1);
+		DebugUtil.debugDumpWithLabel(sb, "property", item == null?null:item.toString(), indent+1);
 		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "values", values, indent+1);
+		DebugUtil.debugDumpLabel(sb, "values", indent+1);
 		sb.append("\n");
-		DebugUtil.indentDebugDump(sb, indent);
-		sb.append(")");
+		DebugUtil.debugDump(sb, values, indent+2, false);
 		return sb.toString();
+	}
+
+	protected String getDebugName() {
+		return "PropertyWrapper";
 	}
 
 }

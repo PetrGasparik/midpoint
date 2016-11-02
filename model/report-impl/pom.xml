@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  ~ Copyright (c) 2010-2013 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 	<parent>
 		<artifactId>model</artifactId>
 		<groupId>com.evolveum.midpoint</groupId>
-		<version>3.3</version>
+		<version>3.5-SNAPSHOT</version>
 	</parent>
 	<organization>
 		<name>Evolveum</name>
@@ -51,35 +51,61 @@
         <dependency>
             <groupId>com.evolveum.midpoint.model</groupId>
             <artifactId>report-api</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.evolveum.midpoint.infra</groupId>
+            <artifactId>util</artifactId>
+            <version>3.5-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.infra</groupId>
             <artifactId>schema</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.infra</groupId>
             <artifactId>prism</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.evolveum.midpoint.repo</groupId>
+            <artifactId>audit-api</artifactId>
+            <version>3.5-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.evolveum.midpoint.repo</groupId>
+            <artifactId>task-api</artifactId>
+            <version>3.5-SNAPSHOT</version>
         </dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.model</groupId>
 			<artifactId>model-api</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.model</groupId>
 			<artifactId>model-common</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
-
-<dependency>
+		<dependency>
 			<groupId>com.evolveum.midpoint.model</groupId>
 			<artifactId>model-impl</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
-
+		
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-codec</groupId>
+			<artifactId>commons-codec</artifactId>
+		</dependency>
 
  		<!-- Jasper reports -->
 <!--         <dependency> -->
@@ -87,86 +113,110 @@
 <!--    			<artifactId>jasperreports</artifactId> -->
 <!--    			<version>4.7.0-e1</version> -->
 <!--  		</dependency> -->
-<dependency>
-	<groupId>net.sf.jasperreports</groupId>
-	<artifactId>jasperreports</artifactId>
-</dependency>
+		<dependency>
+			<groupId>net.sf.jasperreports</groupId>
+			<artifactId>jasperreports</artifactId>
+		</dependency>
 <!-- <dependency> -->
 <!-- 	<groupId>com.google.code.maven-play-plugin.org.apache.commons</groupId> -->
 <!-- 	<artifactId>commons-javaflow</artifactId> -->
 <!-- 	<version>1590792</version> -->
 <!-- </dependency> -->
 
-<dependency>
-	<groupId>commons-javaflow</groupId>
-	<artifactId>commons-javaflow</artifactId>
-	<version>20060411</version>
-</dependency>
+		<dependency>
+			<groupId>commons-javaflow</groupId>
+			<artifactId>commons-javaflow</artifactId>
+			<version>20060411</version>
+			<scope>runtime</scope>
+		</dependency>
+  		
   		<dependency>
-   			<groupId>org.hibernate</groupId>
-   			<artifactId>hibernate-core</artifactId>
-   			<scope>compile</scope>
+   			<groupId>org.apache.cxf</groupId>
+   			<artifactId>cxf-core</artifactId>
+  		</dependency>
+  		<dependency>
+   			<groupId>org.apache.cxf</groupId>
+   			<artifactId>cxf-rt-wsdl</artifactId>
+  		</dependency>
+  		
+  		<dependency>
+   			<groupId>org.springframework</groupId>
+   			<artifactId>spring-context</artifactId>
+  		</dependency>
+  		<dependency>
+   			<groupId>org.springframework</groupId>
+   			<artifactId>spring-beans</artifactId>
+  		</dependency>
+  		<dependency>
+   			<groupId>javax.annotation</groupId>
+   			<artifactId>javax.annotation-api</artifactId>
   		</dependency>
   		
         <!-- Test -->
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>repo-cache</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.model</groupId>
             <artifactId>model-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
 <!--             <scope>test</scope> -->
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.provisioning</groupId>
             <artifactId>provisioning-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
      	<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>task-quartz-impl</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.icf</groupId>
+			<artifactId>dummy-resource</artifactId>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>audit-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>security-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.model</groupId>
             <artifactId>model-test</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>repo-sql-impl</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>repo-test-util</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.infra</groupId>
 			<artifactId>test-util</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -177,7 +227,7 @@
 		<dependency>
 			<groupId>com.evolveum.midpoint.tools</groupId>
 			<artifactId>test-ng</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -193,7 +243,7 @@
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>system-init</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -218,99 +268,4 @@
             <scope>test</scope>
 		</dependency>
     </dependencies>
-	<profiles>
-		<profile>
-			<id>aspectj</id>
-			<activation>
-				<activeByDefault>true</activeByDefault>
-			</activation>
-			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.codehaus.mojo</groupId>
-						<artifactId>aspectj-maven-plugin</artifactId>
-                        <version>1.6</version>
-						<configuration>
-							<aspectLibraries>
-								<aspectLibrary>
-									<groupId>com.evolveum.midpoint.infra</groupId>
-									<artifactId>util</artifactId>
-								</aspectLibrary>
-							</aspectLibraries>
-						</configuration>
-					</plugin>
-				</plugins>
-			</build>
-		</profile>
-	</profiles>
-<!--     <build> -->
-<!--         <plugins> -->
-<!--             <plugin> -->
-<!--                 <groupId>org.apache.maven.plugins</groupId> -->
-<!--                 <artifactId>maven-jar-plugin</artifactId> -->
-<!--                 <executions> -->
-<!--                     <execution> -->
-<!--                         <goals> -->
-<!--                             <goal>test-jar</goal> -->
-<!--                         </goals> -->
-<!--                     </execution> -->
-<!--                 </executions> -->
-<!--             </plugin> -->
-         <!--    <plugin>
-                <groupId>org.apache.cxf</groupId>
-                <artifactId>cxf-codegen-plugin</artifactId>
-                <version>${cxf.version}</version>
-                <executions>
-                    <execution>
-                        <id>generate-sources</id>
-                        <phase>generate-sources</phase>
-                        <configuration>
-                            <sourceRoot>${project.build.directory}/generated/cxf</sourceRoot>
-                            <wsdlRoot>${project.directory}/src/main/resources/xml</wsdlRoot>
-                            <wsdlOptions>
-                                <wsdlOption>
-                                    <wsdl>src/main/resources/xml/ns/private/reportWrapper.wsdl</wsdl>
-                                    <wsdlLocation>classpath:xml/ns/private/reportWrapper.wsdl</wsdlLocation>
-                                    <catalog>${basedir}/src/main/resources/META-INF/jax-ws-catalog-compile-time.xml</catalog>
-                                    <extraargs>
-                                        <extraarg>-impl</extraarg>
-                                        <extraarg>-verbose</extraarg>
-                                        <extraarg>-validate</extraarg>
-                                        <extraarg>-xjc-Xts</extraarg>
-                                        <extraarg>-xjc-XhashCode</extraarg>
-                                        <extraarg>-xjc-Xequals</extraarg>
-                                        <extraarg>
-                                            -xjc-Xequals-equalsStrategyClass=com.evolveum.midpoint.util.xml.DomAwareEqualsStrategy
-                                        </extraarg>
-                                        <extraarg>-nexclude</extraarg>
-                                        <extraarg>http://prism.evolveum.com/xml/ns/public/types-3</extraarg>
-                                        <extraarg>-nexclude</extraarg>
-                                        <extraarg>http://prism.evolveum.com/xml/ns/public/annotation-3</extraarg>
-                                        <extraarg>-nexclude</extraarg>
-                                        <extraarg>http://prism.evolveum.com/xml/ns/public/query-3</extraarg>
-                                    </extraargs>
-                                </wsdlOption>
-                               
-                            </wsdlOptions>
-                        </configuration>
-                        <goals>
-                            <goal>wsdl2java</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.apache.cxf.xjcplugins</groupId>
-                        <artifactId>cxf-xjc-ts</artifactId>
-                        <version>${cxf-xjc.version}</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.jvnet.jaxb2_commons</groupId>
-                        <artifactId>jaxb2-basics</artifactId>
-                        <version>0.6.3</version>
-                    </dependency>
-                </dependencies>
-            </plugin>-->
-<!--         </plugins> -->
-<!--     </build> -->
 </project>

@@ -23,9 +23,10 @@ import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
 
 import com.evolveum.midpoint.web.page.error.PageError;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
+
 import org.apache.commons.lang.Validate;
 
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.query.ObjectPaging;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
@@ -34,7 +35,6 @@ import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.util.Selectable;
 import com.evolveum.midpoint.web.component.util.SelectableBean;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 
@@ -131,12 +131,12 @@ public class ObjectDataProvider<W extends Serializable, T extends ObjectType>
             }
         } catch (Exception ex) {
             result.recordFatalError("Couldn't list objects.", ex);
-            LoggingUtils.logException(LOGGER, "Couldn't list objects", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't list objects", ex);
         } finally {
             result.computeStatusIfUnknown();
         }
 
-        if (!WebMiscUtil.isSuccessOrHandledError(result)) {
+        if (!WebComponentUtil.isSuccessOrHandledError(result)) {
             handleNotSuccessOrHandledErrorInIterator(result);
         }
 
@@ -145,7 +145,7 @@ public class ObjectDataProvider<W extends Serializable, T extends ObjectType>
     }
 
     protected void handleNotSuccessOrHandledErrorInIterator(OperationResult result){
-        getPage().showResultInSession(result);
+        getPage().showResult(result);
         throw new RestartResponseException(PageError.class);
     }
 
@@ -167,13 +167,13 @@ public class ObjectDataProvider<W extends Serializable, T extends ObjectType>
             count = getModel().countObjects(type, getQuery(), options, task, result);
         } catch (Exception ex) {
             result.recordFatalError("Couldn't count objects.", ex);
-            LoggingUtils.logException(LOGGER, "Couldn't count objects", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't count objects", ex);
         } finally {
             result.computeStatusIfUnknown();
         }
 
-        if (!WebMiscUtil.isSuccessOrHandledError(result)) {
-            getPage().showResultInSession(result);
+        if (!WebComponentUtil.isSuccessOrHandledError(result)) {
+            getPage().showResult(result);
             throw new RestartResponseException(PageError.class);
         }
 

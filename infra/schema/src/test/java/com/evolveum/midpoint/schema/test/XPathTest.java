@@ -25,9 +25,9 @@ import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 import org.testng.AssertJUnit;
 
-import com.evolveum.midpoint.prism.parser.TrivialXPathParser;
-import com.evolveum.midpoint.prism.parser.XPathHolder;
-import com.evolveum.midpoint.prism.parser.XPathSegment;
+import com.evolveum.midpoint.prism.marshaller.TrivialXPathParser;
+import com.evolveum.midpoint.prism.marshaller.XPathHolder;
+import com.evolveum.midpoint.prism.marshaller.XPathSegment;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.MidPointPrismContextFactory;
@@ -389,6 +389,23 @@ public class XPathTest {
         ItemPath xpath2 = xPathHolder2.toItemPath();
         assertTrue("Paths are not equivalent", xpath1.equivalent(xpath2));
     }
+
+	@Test
+	public void parseSpecial() {
+		final String D = "declare namespace x='http://xyz.com/'; ";
+		AssertJUnit.assertEquals("..", TrivialXPathParser.parse("..").getPureXPathString());
+		AssertJUnit.assertEquals("..", TrivialXPathParser.parse(D+"..").getPureXPathString());
+		AssertJUnit.assertEquals("a/../b", TrivialXPathParser.parse("a/../b").getPureXPathString());
+		AssertJUnit.assertEquals("a/../b", TrivialXPathParser.parse(D+"a/../b").getPureXPathString());
+		AssertJUnit.assertEquals("@", TrivialXPathParser.parse("@").getPureXPathString());
+		AssertJUnit.assertEquals("@", TrivialXPathParser.parse(D+"@").getPureXPathString());
+		AssertJUnit.assertEquals("a/@/b", TrivialXPathParser.parse("a/@/b").getPureXPathString());
+		AssertJUnit.assertEquals("a/@/b", TrivialXPathParser.parse(D+"a/@/b").getPureXPathString());
+		AssertJUnit.assertEquals("#", TrivialXPathParser.parse("#").getPureXPathString());
+		AssertJUnit.assertEquals("#", TrivialXPathParser.parse(D+"#").getPureXPathString());
+		AssertJUnit.assertEquals("a/#/b", TrivialXPathParser.parse("a/#/b").getPureXPathString());
+		AssertJUnit.assertEquals("a/#/b", TrivialXPathParser.parse(D+"a/#/b").getPureXPathString());
+	}
 
     //not actual anymore..we have something like "wildcard" in xpath..there don't need to be prefix specified.we will try to match the local names
     @Test(enabled=false)

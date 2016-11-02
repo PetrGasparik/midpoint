@@ -24,6 +24,8 @@ public enum BreakMode {
 	NONE,
 	NETWORK,
 	IO,
+	SCHEMA,
+	CONFLICT, // results in AlreadyExists exceptions
 	GENERIC,
 	UNSUPPORTED,
 	RUNTIME;

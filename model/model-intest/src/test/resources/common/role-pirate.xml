@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright (c) 2010-2013 Evolveum
+  ~ Copyright (c) 2010-2015 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@
 						<script>
 							<language>http://midpoint.evolveum.com/xml/ns/public/expression/language#Groovy</language>
 							<code>
+								assert resource != null
 								locality?.getNorm() != "hidden"
 							</code>
 						</script>
@@ -110,7 +111,10 @@
 					</expression>
 					<condition>
 						<script>
-							<code>!magicSea?.isAllWhitespace()</code>
+							<code>
+								assert resource != null
+								!magicSea?.isAllWhitespace()
+							</code>
 						</script>
 					</condition>
 				</outbound>
@@ -122,4 +126,22 @@
     	<phase>execution</phase>
     </authorization>
     <requestable>true</requestable>
+    <adminGuiConfiguration>
+    	<additionalMenuLink>
+    		<targetUrl>http://piracy.com/plunder</targetUrl>
+    		<label>Plunder</label>
+    	</additionalMenuLink>
+    	<userDashboardLink>
+    		<targetUrl>http://example.com/swashbuckle</targetUrl>
+    		<label>Swashbuckle</label>
+    	</userDashboardLink>
+    	<objectForms>
+    		<objectForm>
+    			<type>UserType</type>
+    			<formSpecification>
+    				<panelClass>com.piracy.form.PirateUserPanel</panelClass>
+    			</formSpecification>
+    		</objectForm>
+    	</objectForms>
+    </adminGuiConfiguration>
 </role>

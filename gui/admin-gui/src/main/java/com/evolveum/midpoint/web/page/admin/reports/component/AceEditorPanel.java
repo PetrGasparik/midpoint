@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
  */
 package com.evolveum.midpoint.web.page.admin.reports.component;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.AceEditor;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+
 import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.model.IModel;
 
 /**
  * @author shood
  */
-public class AceEditorPanel extends SimplePanel<String> {
+public class AceEditorPanel extends BasePanel<String> {
 
     private static final String ID_TITLE = "title";
     private static final String ID_EDITOR = "editor";
@@ -34,25 +35,25 @@ public class AceEditorPanel extends SimplePanel<String> {
         super(id, data);
 
         this.title = title;
-        initPanelLayout(0);
+        initLayout(0);
     }
     
     public AceEditorPanel(String id, IModel<String> title, IModel<String> data, int minSize) {
         super(id, data);
 
         this.title = title;
-        initPanelLayout(minSize);
+        initLayout(minSize);
     }
 
 
-    private void initPanelLayout(int minSize) {
+    private void initLayout(int minSize) {
         Label title = new Label(ID_TITLE, this.title);
         add(title);
 
         AceEditor editor = new AceEditor(ID_EDITOR, getModel());
         editor.setReadonly(false);
         if (minSize > 0) {
-            editor.setMinSize(minSize);
+            editor.setMinHeight(minSize);
         }
         add(editor);
     }

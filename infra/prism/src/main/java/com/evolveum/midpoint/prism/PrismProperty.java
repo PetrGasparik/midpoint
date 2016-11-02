@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,19 @@ package com.evolveum.midpoint.prism;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
+import com.evolveum.midpoint.prism.xnode.ListXNode;
 import com.evolveum.midpoint.prism.xnode.PrimitiveXNode;
+import com.evolveum.midpoint.prism.xnode.RootXNode;
+import com.evolveum.midpoint.prism.xnode.XNode;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
+import org.apache.commons.lang.Validate;
+import org.jetbrains.annotations.NotNull;
 
 import javax.xml.namespace.QName;
 
@@ -93,30 +97,21 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     /**
      * Sets applicable property definition.
      *
+	 * TODO remove (method in Item is sufficient)
      * @param definition the definition to set
      */
     public void setDefinition(PrismPropertyDefinition<T> definition) {
+		checkMutability();
         this.definition = definition;
     }
 
-    /**
-     * Returns property values.
-     * <p/>
-     * The values are returned as set. The order of values is not significant.
-     *
-     * @return property values
-     */
-    public List<PrismPropertyValue<T>> getValues() {
-        return (List<PrismPropertyValue<T>>) super.getValues();
-    }
-    
     public PrismPropertyValue<T> getValue() {
     	if (!isSingleValue()) {
     		throw new IllegalStateException("Attempt to get single value from property " + getElementName()
                     + " with multiple values");
     	}
         List<PrismPropertyValue<T>> values = getValues();
-        if (values == null || values.isEmpty()) {
+        if (values.isEmpty()) {
         	return null;
         }
         return values.get(0);
@@ -129,6 +124,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
         return (List) getValues();
     }
 
+    @Override
     public Collection<T> getRealValues() {
 		Collection<T> realValues = new ArrayList<T>(getValues().size());
 		for (PrismPropertyValue<T> pValue: getValues()) {
@@ -140,6 +136,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     /**
      * Type override, also for compatibility.
      */
+    
 	public <X> Collection<X> getRealValues(Class<X> type) {
 		Collection<X> realValues = new ArrayList<X>(getValues().size());
 		for (PrismPropertyValue<T> pValue: getValues()) {
@@ -164,6 +161,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
         return values.iterator().next();
     }
 
+    @Override
     public T getRealValue() {
 		if (getValue() == null) {
             return null;
@@ -227,7 +225,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
      * Will remove all existing values.
      */
     public void setValue(PrismPropertyValue<T> value) {
-    	getValues().clear();
+		clear();
         addValue(value);
     }
 
@@ -241,13 +239,17 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     }
 
     public void addValues(Collection<PrismPropertyValue<T>> pValuesToAdd) {
+		if (pValuesToAdd == null) {
+			return;
+		}
     	for (PrismPropertyValue<T> pValue: pValuesToAdd) {
     		addValue(pValue);
     	}
     }
 
     public void addValue(PrismPropertyValue<T> pValueToAdd) {
-    	pValueToAdd.checkValue();
+		checkMutability();
+		pValueToAdd.checkValue();
     	Iterator<PrismPropertyValue<T>> iterator = getValues().iterator();
     	while (iterator.hasNext()) {
     		PrismPropertyValue<T> pValue = iterator.next();
@@ -267,7 +269,8 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     }
     
     public boolean deleteValues(Collection<PrismPropertyValue<T>> pValuesToDelete) {
-        boolean changed = false;
+		checkMutability();
+		boolean changed = false;
     	for (PrismPropertyValue<T> pValue: pValuesToDelete) {
             if (!changed) {
     		    changed = deleteValue(pValue);
@@ -279,7 +282,8 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     }
 
     public boolean deleteValue(PrismPropertyValue<T> pValueToDelete) {
-    	Iterator<PrismPropertyValue<T>> iterator = getValues().iterator();
+		checkMutability();
+		Iterator<PrismPropertyValue<T>> iterator = getValues().iterator();
     	boolean found = false;
     	while (iterator.hasNext()) {
     		PrismPropertyValue<T> pValue = iterator.next();
@@ -297,7 +301,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
     }
 
     public void replaceValues(Collection<PrismPropertyValue<T>> valuesToReplace) {
-    	getValues().clear();
+    	clear();
         addValues(valuesToReplace);
     }
 
@@ -379,24 +383,29 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
 	}
 
 	public PropertyDelta<T> diff(PrismProperty<T> other) {
-    	return diff(other, true, false);
+		return (PropertyDelta<T>) super.diff(other);
     }
     
     public PropertyDelta<T> diff(PrismProperty<T> other, boolean ignoreMetadata, boolean isLiteral) {
-    	List<? extends ItemDelta> deltas = new ArrayList<ItemDelta>();
-    	diffInternal(other, deltas, ignoreMetadata, isLiteral);
-    	if (deltas.isEmpty()) {
-    		return null;
-    	}
-    	if (deltas.size() > 1) {
-    		throw new IllegalStateException("Unexpected number of deltas from property diff: "+deltas);
-    	}
-    	return (PropertyDelta<T>)deltas.get(0);
+    	return (PropertyDelta<T>) super.diff(other, true, false);
     }
+    
+    public static <T> PropertyDelta<T> diff(PrismProperty<T> a, PrismProperty<T> b) {
+		if (a == null) {
+			if (b == null) {
+				return null;
+			}
+			PropertyDelta<T> delta = b.createDelta();
+			delta.addValuesToAdd(PrismValue.cloneCollection(b.getValues()));
+			return delta;
+		} else {
+			return a.diff(b);
+		}
+	}
 
 	@Override
 	protected void checkDefinition(PrismPropertyDefinition<T> def) {
-		if (!(def instanceof PrismPropertyDefinition)) {
+		if (def == null) {
 			throw new IllegalArgumentException("Definition "+def+" cannot be applied to property "+this);
 		}
 	}
@@ -563,7 +572,7 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
         
         if (def != null && DebugUtil.isDetailedDebugDump()) {
             sb.append(" def(");
-            def.debugDumpShortToString(sb);
+			((PrismPropertyDefinitionImpl) def).debugDumpShortToString(sb);
 //            if (def.isIndexed() != null) {
 //                sb.append(def.isIndexed() ? ",i+" : ",i-");
 //            }
@@ -611,4 +620,17 @@ public class PrismProperty<T> extends Item<PrismPropertyValue<T>,PrismPropertyDe
         return "PP";
     }
 
+	public static <T> PrismProperty<T> createRaw(@NotNull XNode node, @NotNull QName itemName, @NotNull PrismContext prismContext)
+			throws SchemaException {
+		Validate.isTrue(!(node instanceof RootXNode));
+		PrismProperty<T> property = new PrismProperty<>(itemName, prismContext);
+		if (node instanceof ListXNode) {
+			for (XNode subnode : (ListXNode) node) {
+				property.add(PrismPropertyValue.createRaw(subnode));
+			}
+		} else {
+			property.add(PrismPropertyValue.createRaw(node));
+		}
+		return property;
+	}
 }

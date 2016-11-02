@@ -16,26 +16,15 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import javax.xml.namespace.QName;
-
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 
 
 public class NotFilter extends UnaryLogicalFilter {
 
-//	private ObjectFilter filter;
-
 	public NotFilter() {
-
 	}
 
 	public NotFilter(ObjectFilter filter) {
@@ -46,6 +35,7 @@ public class NotFilter extends UnaryLogicalFilter {
 		return new NotFilter(filter);
 	}
 	
+	@SuppressWarnings("CloneDoesntCallSuperClone")
 	@Override
 	public NotFilter clone() {
 		return new NotFilter(getFilter().clone());
@@ -70,9 +60,7 @@ public class NotFilter extends UnaryLogicalFilter {
 			sb.append("\n");
 			sb.append(getFilter().debugDump(indent + 1));
 		}
-
 		return sb.toString();
-
 	}
 	
 	@Override
@@ -90,4 +78,10 @@ public class NotFilter extends UnaryLogicalFilter {
 	public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
 		return !getFilter().match(value, matchingRuleRegistry);
 	}
+
+	@Override
+	public boolean equals(Object obj, boolean exact) {
+		return super.equals(obj, exact) && obj instanceof NotFilter;
+	}
+
 }

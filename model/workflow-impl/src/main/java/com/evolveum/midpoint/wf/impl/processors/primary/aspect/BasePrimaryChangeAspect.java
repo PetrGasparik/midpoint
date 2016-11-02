@@ -16,32 +16,30 @@
 
 package com.evolveum.midpoint.wf.impl.processors.primary.aspect;
 
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.wf.impl.jobs.WfTaskUtil;
+import com.evolveum.midpoint.wf.impl.processors.BaseModelInvocationProcessingHelper;
+import com.evolveum.midpoint.wf.impl.tasks.WfTaskUtil;
 import com.evolveum.midpoint.wf.impl.messages.ProcessEvent;
 import com.evolveum.midpoint.wf.impl.processes.ProcessInterfaceFinder;
 import com.evolveum.midpoint.wf.impl.processes.itemApproval.ItemApprovalProcessInterface;
 import com.evolveum.midpoint.wf.impl.processors.BaseConfigurationHelper;
-import com.evolveum.midpoint.wf.impl.processors.primary.PcpJob;
+import com.evolveum.midpoint.schema.ObjectTreeDeltas;
+import com.evolveum.midpoint.wf.impl.processors.primary.PcpWfTask;
 import com.evolveum.midpoint.wf.impl.processors.primary.PrimaryChangeProcessor;
+import com.evolveum.midpoint.wf.impl.util.MiscDataUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PrimaryChangeProcessorConfigurationType;
-import com.evolveum.midpoint.xml.ns.model.workflow.process_instance_state_3.ProcessSpecificState;
-
 import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import javax.annotation.PostConstruct;
 import java.util.List;
-import java.util.Map;
 
 /**
  * @author mederly
@@ -77,7 +75,13 @@ public abstract class BasePrimaryChangeAspect implements PrimaryChangeAspect, Be
     @Autowired
     protected ItemApprovalProcessInterface itemApprovalProcessInterface;
 
-    @PostConstruct
+    @Autowired
+    protected MiscDataUtil miscDataUtil;
+
+	@Autowired
+	protected BaseModelInvocationProcessingHelper baseModelInvocationProcessingHelper;
+
+	@PostConstruct
     public void init() {
         changeProcessor.registerChangeAspect(this);
     }
@@ -92,18 +96,13 @@ public abstract class BasePrimaryChangeAspect implements PrimaryChangeAspect, Be
     }
 
     @Override
-    public List<ObjectDelta<Objectable>> prepareDeltaOut(ProcessEvent event, PcpJob pcpJob, OperationResult result) throws SchemaException {
+    public ObjectTreeDeltas prepareDeltaOut(ProcessEvent event, PcpWfTask pcpJob, OperationResult result) throws SchemaException {
         return primaryChangeAspectHelper.prepareDeltaOut(event, pcpJob, result);
     }
 
     @Override
-    public List<ObjectReferenceType> prepareApprovedBy(ProcessEvent event, PcpJob job, OperationResult result) {
+    public List<ObjectReferenceType> prepareApprovedBy(ProcessEvent event, PcpWfTask job, OperationResult result) {
         return processInterfaceFinder.getProcessInterface(event.getVariables()).prepareApprovedBy(event);
-    }
-
-    @Override
-    public ProcessSpecificState externalizeProcessInstanceState(Map<String, Object> variables) {
-        return processInterfaceFinder.getProcessInterface(variables).externalizeProcessInstanceState(variables);
     }
 
     public PrimaryChangeProcessor getChangeProcessor() {

@@ -16,9 +16,23 @@
 
 package com.evolveum.midpoint.web.page.admin.users.component;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import org.apache.wicket.Component;
+import org.apache.wicket.RestartResponseException;
+import org.apache.wicket.extensions.markup.html.repeater.util.SortableTreeProvider;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.Model;
+
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.model.api.ModelService;
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.ObjectPaging;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.OrderDirection;
@@ -30,29 +44,21 @@ import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.page.PageBase;
+import com.evolveum.midpoint.web.component.menu.cog.InlineMenuItem;
+import com.evolveum.midpoint.web.component.util.SelectableBean;
 import com.evolveum.midpoint.web.page.admin.users.PageOrgTree;
 import com.evolveum.midpoint.web.page.admin.users.PageUsers;
-import com.evolveum.midpoint.web.page.admin.users.dto.OrgTreeDto;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
-
-import org.apache.wicket.Component;
-import org.apache.wicket.RestartResponseException;
-import org.apache.wicket.extensions.markup.html.repeater.util.SortableTreeProvider;
-import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.Model;
-
-import java.util.*;
 
 /**
  * @author lazyman
  */
-public class OrgTreeProvider extends SortableTreeProvider<OrgTreeDto, String> {
+public class OrgTreeProvider extends SortableTreeProvider<SelectableBean<OrgType>, String> {
 
-    private static final Trace LOGGER = TraceManager.getTrace(OrgTreeProvider.class);
+	private static final long serialVersionUID = 1L;
+
+	private static final Trace LOGGER = TraceManager.getTrace(OrgTreeProvider.class);
 
     private static final String DOT_CLASS = OrgTreeProvider.class.getName() + ".";
     private static final String LOAD_ORG_UNIT = DOT_CLASS + "loadOrgUnit";
@@ -60,120 +66,162 @@ public class OrgTreeProvider extends SortableTreeProvider<OrgTreeDto, String> {
 
     private Component component;
     private IModel<String> rootOid;
-    private OrgTreeDto root;
+    private SelectableBean<OrgType> root;
+    
+    private List<SelectableBean<OrgType>> availableData;
 
     public OrgTreeProvider(Component component, IModel<String> rootOid) {
         this.component = component;
         this.rootOid = rootOid;
     }
 
+    public List<SelectableBean<OrgType>> getAvailableData() {
+		if (availableData == null){
+			availableData = new ArrayList<>();
+		}
+    	return availableData;
+	}
+    
     private PageBase getPageBase() {
-        return WebMiscUtil.getPageBase(component);
+        return WebComponentUtil.getPageBase(component);
     }
 
     private ModelService getModelService() {
         return getPageBase().getModelService();
     }
+    
+    
 
     @Override
-    public Iterator<? extends OrgTreeDto> getChildren(OrgTreeDto node) {
+    public Iterator<? extends SelectableBean<OrgType>> getChildren(SelectableBean<OrgType> node) {
+//    	getAvailableData().clear();
         LOGGER.debug("Loading children for {}", new Object[]{node});
-        Iterator<OrgTreeDto> iterator = null;
+        Iterator<SelectableBean<OrgType>> iterator = null;
 
-        OrgFilter orgFilter = OrgFilter.createOrg(node.getOid(), OrgFilter.Scope.ONE_LEVEL);
-        ObjectQuery query = ObjectQuery.createObjectQuery(orgFilter);
-        query.setPaging(ObjectPaging.createPaging(null, null, ObjectType.F_NAME, OrderDirection.ASCENDING));
-
+        ObjectQuery query = QueryBuilder.queryFor(ObjectType.class, getPageBase().getPrismContext())
+                .isDirectChildOf(node.getValue().getOid())
+                .asc(ObjectType.F_NAME)
+                .build();
         OperationResult result = new OperationResult(LOAD_ORG_UNITS);
         try {
-            Collection<SelectorOptions<GetOperationOptions>> options = WebModelUtils.createOptionsForParentOrgRefs();
+//            Collection<SelectorOptions<GetOperationOptions>> options = WebModelServiceUtils.createOptionsForParentOrgRefs();
+        	Collection<SelectorOptions<GetOperationOptions>> options = null;
             Task task = getPageBase().createSimpleTask(LOAD_ORG_UNITS);
 
             List<PrismObject<OrgType>> units = getModelService().searchObjects(OrgType.class, query, options,
                     task, result);
             LOGGER.debug("Found {} units.", units.size());
 
-            List<OrgTreeDto> list = new ArrayList<OrgTreeDto>();
+            List<SelectableBean<OrgType>> list = new ArrayList<SelectableBean<OrgType>>();
             for (PrismObject<OrgType> unit : units) {
-                list.add(createDto(node, unit));
+                SelectableBean<OrgType> selectable =createObjectWrapper(node, unit);
+            	list.add(selectable);
+//                if (getAvailableData().contains(selectable)){
+//                	getAvailableData().remove(selectable);
+//                } 
+//                getAvailableData().add(selectable);
             }
+            
+            getAvailableData().addAll(list);
 
-            Collections.sort(list);
+//            Collections.sort(list);
             iterator = list.iterator();
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't load children", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load children", ex);
             result.recordFatalError("Unable to load org unit", ex);
         } finally {
             result.computeStatus();
         }
 
-        if (WebMiscUtil.showResultInPage(result)) {
-            getPageBase().showResultInSession(result);
+        if (WebComponentUtil.showResultInPage(result)) {
+            getPageBase().showResult(result);
             throw new RestartResponseException(PageOrgTree.class);
         }
 
         if (iterator == null) {
-            iterator = new ArrayList<OrgTreeDto>().iterator();
+            iterator = new ArrayList<SelectableBean<OrgType>>().iterator();
         }
 
         LOGGER.debug("Finished loading children.");
         return iterator;
     }
 
-    private OrgTreeDto createDto(OrgTreeDto parent, PrismObject<OrgType> unit) {
+    private SelectableBean<OrgType> createObjectWrapper(SelectableBean<OrgType> parent, PrismObject<OrgType> unit) {
         if (unit == null) {
             return null;
         }
 
-        String name = WebMiscUtil.getName(unit);
-        String description = unit.getPropertyRealValue(OrgType.F_DESCRIPTION, String.class);
-        String displayName = WebMiscUtil.getOrigStringFromPoly(
-                unit.getPropertyRealValue(OrgType.F_DISPLAY_NAME, PolyString.class));
-        String identifier = unit.getPropertyRealValue(OrgType.F_IDENTIFIER, String.class);
-
         //todo relation [lazyman]
-        return new OrgTreeDto(parent, unit);
+//        OrgTreeDto orgDto = new OrgTreeDto(parent, unit);
+        OrgType org = unit.asObjectable();
+        if (parent != null){
+        	org.getParentOrg().clear();
+        org.getParentOrg().add(parent.getValue());
+        }
+        SelectableBean<OrgType> orgDto = new SelectableBean<OrgType>(org);
+        orgDto.getMenuItems().addAll(createInlineMenuItems());
+        return orgDto;
     }
 
+    protected List<InlineMenuItem> createInlineMenuItems(){
+    	return null;
+    }
+    
     @Override
-    public Iterator<? extends OrgTreeDto> getRoots() {
+    public Iterator<SelectableBean<OrgType>> getRoots() {
         OperationResult result = null;
         if (root == null) {
         	Task task = getPageBase().createSimpleTask(LOAD_ORG_UNIT);
             result = task.getResult();
             LOGGER.debug("Getting roots for: " + rootOid.getObject());
 
-            PrismObject<OrgType> object = WebModelUtils.loadObject(OrgType.class, rootOid.getObject(),
-                    WebModelUtils.createOptionsForParentOrgRefs(), getPageBase(), task, result);
+            PrismObject<OrgType> object = WebModelServiceUtils.loadObject(OrgType.class, rootOid.getObject(),
+                    WebModelServiceUtils.createOptionsForParentOrgRefs(), getPageBase(), task, result);
             result.computeStatus();
 
-            root = createDto(null, object);
+            root = createObjectWrapper(null, object);
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("\n{}", result.debugDump());
                 LOGGER.debug("Finished roots loading.");
             }
         }
 
-        if (WebMiscUtil.showResultInPage(result)) {
-            getPageBase().showResultInSession(result);
+        if (WebComponentUtil.showResultInPage(result)) {
+            getPageBase().showResult(result);
             throw new RestartResponseException(PageUsers.class);
         }
 
-        List<OrgTreeDto> list = new ArrayList<OrgTreeDto>();
+        List<SelectableBean<OrgType>> list = new ArrayList<SelectableBean<OrgType>>();
         if (root != null) {
             list.add(root);
+            if (!getAvailableData().contains(root)){
+            	getAvailableData().add(root);
+            } 
+            
         }
+//        getAvailableData().addAll(list);
 
         return list.iterator();
     }
 
     @Override
-    public boolean hasChildren(OrgTreeDto node) {
+    public boolean hasChildren(SelectableBean<OrgType> node) {
         return true;
     }
 
     @Override
-    public IModel<OrgTreeDto> model(OrgTreeDto object) {
+    public IModel<SelectableBean<OrgType>> model(SelectableBean<OrgType> object) {
         return new Model<>(object);
+    }
+    
+    public List<OrgType> getSelectedObjects(){
+    	List<OrgType> selectedOrgs = new ArrayList<>();
+    	for (SelectableBean<OrgType> selected : getAvailableData()){
+    		if (selected.isSelected()){
+    			selectedOrgs.add(selected.getValue());
+    		}
+    	}
+    	
+    	return selectedOrgs;
     }
 }

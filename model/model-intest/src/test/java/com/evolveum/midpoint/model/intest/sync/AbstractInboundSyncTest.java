@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import static org.testng.AssertJUnit.assertNotNull;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.util.Collections;
 import java.util.Date;
 
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -31,11 +32,11 @@ import org.springframework.test.context.ContextConfiguration;
 import org.testng.annotations.Test;
 
 import com.evolveum.icf.dummy.resource.DummyAccount;
-import com.evolveum.icf.dummy.resource.DummyResource;
 import com.evolveum.midpoint.model.intest.AbstractInitializedModelIntegrationTest;
 import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.util.PrismAsserts;
+import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
-import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.test.DummyResourceContoller;
@@ -56,29 +57,20 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 public abstract class AbstractInboundSyncTest extends AbstractInitializedModelIntegrationTest {
 	
 	public static final File TEST_DIR = new File("src/test/resources/sync");
-	
-	protected static final File RESOURCE_DUMMY_EMERALD_FILE = new File(TEST_DIR, "resource-dummy-emerald.xml");
-	protected static final File RESOURCE_DUMMY_EMERALD_DEPRECATED_FILE = new File(TEST_DIR, "resource-dummy-emerald-deprecated.xml");
-	protected static final String RESOURCE_DUMMY_EMERALD_OID = "10000000-0000-0000-0000-00000000e404";
-	protected static final String RESOURCE_DUMMY_EMERALD_NAME = "emerald";
-	protected static final String RESOURCE_DUMMY_EMERALD_NAMESPACE = MidPointConstants.NS_RI;
-	
+		
 	protected static final File TASK_LIVE_SYNC_DUMMY_EMERALD_FILE = new File(TEST_DIR, "task-dummy-emerald-livesync.xml");
 	protected static final String TASK_LIVE_SYNC_DUMMY_EMERALD_OID = "10000000-0000-0000-5555-55550000e404";
 		
 	protected static final File TASK_RECON_DUMMY_EMERALD_FILE = new File(TEST_DIR, "task-dummy-emerald-recon.xml");
 	protected static final String TASK_RECON_DUMMY_EMERALD_OID = "10000000-0000-0000-5656-56560000e404";
-	
-	protected static DummyResource dummyResourceEmerald;
-	protected static DummyResourceContoller dummyResourceCtlEmerald;
-	protected ResourceType resourceDummyEmeraldType;
-	protected PrismObject<ResourceType> resourceDummyEmerald;
 		
 	protected static final String ACCOUNT_WALLY_DUMMY_USERNAME = "wally";
 	protected static final String ACCOUNT_MANCOMB_DUMMY_USERNAME = "mancomb";
 	protected static final Date ACCOUNT_MANCOMB_VALID_FROM_DATE = MiscUtil.asDate(2011, 2, 3, 4, 5, 6);
 	protected static final Date ACCOUNT_MANCOMB_VALID_TO_DATE = MiscUtil.asDate(2066, 5, 4, 3, 2, 1);
-	
+
+	protected static final String ACCOUNT_POSIXUSER_DUMMY_USERNAME = "posixuser";
+
 	protected static String userWallyOid;
 	
 	protected boolean allwaysCheckTimestamp = false;
@@ -90,12 +82,6 @@ public abstract class AbstractInboundSyncTest extends AbstractInitializedModelIn
 		
 		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.NONE);
 		
-		dummyResourceCtlEmerald = DummyResourceContoller.create(RESOURCE_DUMMY_EMERALD_NAME, resourceDummyEmerald);
-		dummyResourceCtlEmerald.extendSchemaPirate();
-		dummyResourceEmerald = dummyResourceCtlEmerald.getDummyResource();
-		resourceDummyEmerald = importAndGetObjectFromFile(ResourceType.class, getResourceDummyEmeraldFile(), RESOURCE_DUMMY_EMERALD_OID, initTask, initResult); 
-		resourceDummyEmeraldType = resourceDummyEmerald.asObjectable();
-		dummyResourceCtlEmerald.setResource(resourceDummyEmerald);
 	}
 	
 	protected File getResourceDummyEmeraldFile() {
@@ -191,6 +177,339 @@ public abstract class AbstractInboundSyncTest extends AbstractInitializedModelIn
         // notifications
         notificationManager.setDisabled(true);
 	}
+	
+	@Test
+    public void test120ModifyDummyEmeraldAccountMancombSeepbad() throws Exception {
+		final String TEST_NAME = "test120ModifyDummyEmeraldAccountMancombSeepbad";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValue(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepbad");
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepbad");
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_FULL_NAME, PrismTestUtil.createPolyString("Mancomb Seepbad"));
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+	
+	@Test
+    public void test122ModifyDummyEmeraldAccountMancombSeepNULL() throws Exception {
+		final String TEST_NAME = "test122ModifyDummyEmeraldAccountMancombSeepNULL";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValue(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb SeepNULL");
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb SeepNULL");
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertNoItem(userAfter, UserType.F_FULL_NAME);
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+
+	@Test
+    public void test124ModifyDummyEmeraldAccountMancombSeepevil() throws Exception {
+		final String TEST_NAME = "test124ModifyDummyEmeraldAccountMancombSeepevil";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValue(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepevil");
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepevil");
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_FULL_NAME, PrismTestUtil.createPolyString("Mancomb Seepevil"));
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+	
+	@Test
+    public void test126ModifyDummyEmeraldAccountMancombTitlePirate() throws Exception {
+		final String TEST_NAME = "test126ModifyDummyEmeraldAccountMancombTitlePirate";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_TITLE_NAME, "Pirate");
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_TITLE_NAME, "Pirate");
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_FULL_NAME, PrismTestUtil.createPolyString("Mancomb Seepevil"));
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_TITLE, PrismTestUtil.createPolyString("Pirate"));
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+
+	@Test
+    public void test127ModifyDummyEmeraldAccountMancombTitlePirateNull() throws Exception {
+		final String TEST_NAME = "test127ModifyDummyEmeraldAccountMancombTitlePirateNull";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_TITLE_NAME);
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_TITLE_NAME);
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_FULL_NAME, PrismTestUtil.createPolyString("Mancomb Seepevil"));
+        PrismAsserts.assertNoItem(userAfter, UserType.F_TITLE);
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+
+	@Test
+    public void test129ModifyDummyEmeraldAccountMancombSeepgood() throws Exception {
+		final String TEST_NAME = "test129ModifyDummyEmeraldAccountMancombSeepgood";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        rememberTimeBeforeSync();
+        prepareNotifications();
+        
+        // Preconditions
+        assertUsers(6);
+
+        DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        
+		/// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        
+        account.replaceAttributeValue(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepgood");
+
+        display("Modified dummy account", account.debugDump());
+
+        waitForSyncTaskNextRun(resourceDummyEmerald);
+		
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        
+        PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME, resourceDummyEmerald);
+        display("Account mancomb", accountAfter);
+        assertNotNull("No mancomb account shadow", accountAfter);
+        assertEquals("Wrong resourceRef in mancomb account", RESOURCE_DUMMY_EMERALD_OID, 
+        		accountAfter.asObjectable().getResourceRef().getOid());
+        assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+        assertDummyAccountAttribute(RESOURCE_DUMMY_EMERALD_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME, 
+        		DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Mancomb Seepgood");
+        
+        PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_MANCOMB_DUMMY_USERNAME);
+        display("User mancomb", userAfter);
+        assertNotNull("User mancomb was not created", userAfter);
+        assertLinks(userAfter, 1);
+        assertAdministrativeStatusEnabled(userAfter);
+        assertValidFrom(userAfter, ACCOUNT_MANCOMB_VALID_FROM_DATE);
+        assertValidTo(userAfter, ACCOUNT_MANCOMB_VALID_TO_DATE);
+        
+        assertLinked(userAfter, accountAfter);
+        
+        PrismAsserts.assertPropertyValue(userAfter, UserType.F_FULL_NAME, PrismTestUtil.createPolyString("Mancomb Seepgood"));
+        
+        assertUsers(6);
+
+        // notifications
+        notificationManager.setDisabled(true);
+	}
+
 
 	@Test
 	public void test180NoChange() throws Exception {
@@ -200,6 +519,116 @@ public abstract class AbstractInboundSyncTest extends AbstractInitializedModelIn
 
 	@Test
     public abstract void test199DeleteDummyEmeraldAccountMancomb() throws Exception;
+
+	@Test
+	public void test300AddDummyEmeraldAccountPosixUser() throws Exception {
+		final String TEST_NAME = "test300AddDummyEmeraldAccountPosixUser";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		rememberTimeBeforeSync();
+		prepareNotifications();
+
+		// Preconditions
+		assertUsers(6);
+
+		DummyAccount account = new DummyAccount(ACCOUNT_POSIXUSER_DUMMY_USERNAME);
+		account.setEnabled(true);
+		account.addAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, "Posix User");
+		account.addAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_LOCATION_NAME, "Melee Island");
+		account.addAuxiliaryObjectClassName(DummyResourceContoller.DUMMY_POSIX_ACCOUNT_OBJECT_CLASS_NAME);
+		account.addAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_POSIX_UID_NUMBER, Collections.<Object>singleton(1001));
+		account.addAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_POSIX_GID_NUMBER, Collections.<Object>singleton(10001));
+
+		/// WHEN
+		TestUtil.displayWhen(TEST_NAME);
+
+		display("Adding dummy account", account.debugDump());
+
+		dummyResourceEmerald.addAccount(account);
+
+		waitForSyncTaskNextRun(resourceDummyEmerald);
+
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+
+		PrismObject<ShadowType> accountPosixUser = findAccountByUsername(ACCOUNT_POSIXUSER_DUMMY_USERNAME, resourceDummyEmerald);
+		display("Account posixuser", accountPosixUser);
+		assertNotNull("No posixuser account shadow", accountPosixUser);
+		assertEquals("Wrong resourceRef in posixuser account", RESOURCE_DUMMY_EMERALD_OID,
+				accountPosixUser.asObjectable().getResourceRef().getOid());
+		assertShadowOperationalData(accountPosixUser, SynchronizationSituationType.LINKED);
+
+		PrismObject<UserType> userPosixUser = findUserByUsername(ACCOUNT_POSIXUSER_DUMMY_USERNAME);
+		display("User posixuser", userPosixUser);
+		assertNotNull("User posixuser was not created", userPosixUser);
+		assertLinks(userPosixUser, 1);
+		assertAdministrativeStatusEnabled(userPosixUser);
+		assertLinked(userPosixUser, accountPosixUser);
+
+		assertUsers(7);
+
+		// notifications
+		notificationManager.setDisabled(true);
+		
+		// TODO create and test inbounds for uid and gid numbers; also other attributes
+		// (Actually I'm not sure it will work, as even now the auxiliary object class is
+		// removed right during the livesync. This has to be solved somehow...)
+	}
+
+	@Test
+	public void test310ModifyDummyEmeraldAccountPosixUserUidNumber() throws Exception {
+		final String TEST_NAME = "test310ModifyDummyEmeraldAccountPosixUserUidNumber";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = createTask(AbstractInboundSyncTest.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		rememberTimeBeforeSync();
+		prepareNotifications();
+
+		// Preconditions
+		assertUsers(7);
+
+		DummyAccount account = dummyResourceEmerald.getAccountByUsername(ACCOUNT_POSIXUSER_DUMMY_USERNAME);
+
+		/// WHEN
+		TestUtil.displayWhen(TEST_NAME);
+
+		account.replaceAttributeValue(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_POSIX_UID_NUMBER, 1002);
+
+		display("Modified dummy account", account.debugDump());
+
+		waitForSyncTaskNextRun(resourceDummyEmerald);
+
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+
+		PrismObject<ShadowType> accountAfter = findAccountByUsername(ACCOUNT_POSIXUSER_DUMMY_USERNAME, resourceDummyEmerald);
+		display("Account posixuser", accountAfter);
+		assertNotNull("No posixuser account shadow", accountAfter);
+		assertEquals("Wrong resourceRef in posixuser account", RESOURCE_DUMMY_EMERALD_OID,
+				accountAfter.asObjectable().getResourceRef().getOid());
+		assertShadowOperationalData(accountAfter, SynchronizationSituationType.LINKED);
+
+		PrismObject<UserType> userAfter = findUserByUsername(ACCOUNT_POSIXUSER_DUMMY_USERNAME);
+		display("User posixuser", userAfter);
+		assertNotNull("User posixuser was not created", userAfter);
+		assertLinks(userAfter, 1);
+		assertAdministrativeStatusEnabled(userAfter);
+
+		assertLinked(userAfter, accountAfter);
+
+		assertUsers(7);
+
+		// notifications
+		notificationManager.setDisabled(true);
+
+		// TODO create and test inbounds for uid and gid numbers; also other attributes
+	}
+
 
 	protected void waitForSyncTaskStart(PrismObject<ResourceType> resource) throws Exception {
 		waitForTaskStart(getSyncTaskOid(resource), false, getWaitTimeout());

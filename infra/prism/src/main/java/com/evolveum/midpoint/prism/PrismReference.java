@@ -16,6 +16,8 @@
 
 package com.evolveum.midpoint.prism;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import javax.xml.namespace.QName;
@@ -57,18 +59,6 @@ public class PrismReference extends Item<PrismReferenceValue,PrismReferenceDefin
 		return (PrismReferenceDefinition) super.getDefinition();
 	}
 		
-	/**
-     * Returns reference values.
-     * <p/>
-     * The values are returned as set. The order of values is not significant.
-     *
-     * @return property values
-     */
-	@Override
-    public List<PrismReferenceValue> getValues() {
-        return (List<PrismReferenceValue>) super.getValues();
-    }
-
     public PrismReferenceValue getValue() {
     	// We are not sure about multiplicity if there is no definition or the definition is dynamic
     	if (getDefinition() != null && !getDefinition().isDynamic()) {
@@ -99,6 +89,26 @@ public class PrismReference extends Item<PrismReferenceValue,PrismReferenceDefin
 			}
 		}
 		return null;
+	}
+	
+	@Override
+	public Referencable getRealValue() {
+		if (getValue() == null) {
+			return null;
+		}
+		return getValue().asReferencable();
+	}
+	
+	@Override
+	public Collection<Referencable> getRealValues() {
+		if (getValues() == null) {
+			return null;
+		}
+		List<Referencable> realValues = new ArrayList<>(getValues().size());
+		for (PrismReferenceValue refVal : getValues()) {
+			realValues.add(refVal.asReferencable());
+		}
+		return realValues;
 	}
 
     

@@ -16,14 +16,15 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
+import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import org.jetbrains.annotations.NotNull;
 
 import javax.xml.namespace.QName;
 
@@ -32,14 +33,17 @@ import javax.xml.namespace.QName;
  */
 public class TypeFilter extends ObjectFilter {
 
-    private QName type;
+    private static final Trace LOGGER = TraceManager.getTrace(TypeFilter.class);
+
+    @NotNull private final QName type;
     private ObjectFilter filter;
 
-    public TypeFilter(QName type, ObjectFilter filter) {
+    public TypeFilter(@NotNull QName type, ObjectFilter filter) {
         this.type = type;
         this.filter = filter;
     }
 
+    @NotNull
     public QName getType() {
         return type;
     }
@@ -56,25 +60,56 @@ public class TypeFilter extends ObjectFilter {
         return new TypeFilter(type, filter);
     }
 
+    @SuppressWarnings("CloneDoesntCallSuperClone")
     @Override
     public ObjectFilter clone() {
         ObjectFilter f = filter != null ? filter.clone() : null;
         return new TypeFilter(type, f);
     }
 
+	public TypeFilter cloneEmpty() {
+		return new TypeFilter(type, null);
+	}
+
+	// untested; TODO test this method
     @Override
     public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
-        return false;
+        if (value == null) {
+            return false;           // just for safety
+        }
+        ComplexTypeDefinition definition = value.getComplexTypeDefinition();
+        if (definition == null) {
+            if (!(value.getParent() instanceof PrismContainer)) {
+                LOGGER.trace("Parent of {} is not a PrismContainer, returning false; it is {}", value, value.getParent());
+                return false;
+            }
+            PrismContainer container = (PrismContainer) value.getParent();
+            PrismContainerDefinition pcd = container.getDefinition();
+            if (pcd == null) {
+                LOGGER.trace("Parent of {} has no definition, returning false", value);
+                return false;
+            }
+            definition = pcd.getComplexTypeDefinition();
+        }
+        // TODO TODO TODO subtypes!!!!!!!!
+        if (!QNameUtil.match(definition.getTypeName(), type)) {
+            return false;
+        }
+        if (filter == null) {
+            return true;
+        } else {
+            return filter.match(value, matchingRuleRegistry);
+        }
     }
     
     @Override
-	public void checkConsistence() {
+	public void checkConsistence(boolean requireDefinitions) {
 		if (type == null) {
 			throw new IllegalArgumentException("Null type in "+this);
 		}
 		// null subfilter is legal. It means "ALL".
 		if (filter != null) {
-			filter.checkConsistence();
+			filter.checkConsistence(requireDefinitions);
 		}
 	}
 
@@ -98,20 +133,21 @@ public class TypeFilter extends ObjectFilter {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(Object o, boolean exact) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
         TypeFilter that = (TypeFilter) o;
 
-        if (type != null ? !type.equals(that.type) : that.type != null) return false;
+        if (!type.equals(that.type)) return false;
+        if (filter != null ? !filter.equals(that.filter, exact) : that.filter != null) return false;
 
         return true;
     }
 
     @Override
     public int hashCode() {
-        return type != null ? type.hashCode() : 0;
+        return type.hashCode();
     }
 
     @Override
@@ -123,5 +159,13 @@ public class TypeFilter extends ObjectFilter {
 		sb.append(filter);
 		sb.append(")");
 		return sb.toString();
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        super.accept(visitor);
+        if (filter != null) {
+            visitor.visit(filter);
+        }
     }
 }

@@ -18,21 +18,28 @@ package com.evolveum.midpoint.repo.sql.data.common.embedded;
 
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.repo.sql.data.common.ObjectReference;
+import com.evolveum.midpoint.repo.sql.data.common.RObject;
 import com.evolveum.midpoint.repo.sql.data.common.other.RObjectType;
+import com.evolveum.midpoint.repo.sql.query2.definition.NotQueryable;
 import com.evolveum.midpoint.repo.sql.util.ClassMapper;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 import org.apache.commons.lang.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang.builder.ToStringStyle;
+import org.hibernate.annotations.ForeignKey;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 
 import javax.persistence.Column;
 import javax.persistence.Embeddable;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import javax.persistence.FetchType;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 
 /**
  * @author lazyman
@@ -53,7 +60,17 @@ public class REmbeddedReference implements ObjectReference {
         return relation;
     }
 
-    @Column(length = RUtil.COLUMN_LENGTH_OID, insertable = true, updatable = true, nullable = true)
+    //@MapsId("target")
+    @ForeignKey(name="none")
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(referencedColumnName = "oid", updatable = false, insertable = false, nullable = true)
+    @NotFound(action = NotFoundAction.IGNORE)
+    @NotQueryable
+    public RObject getTarget() {
+        return null;
+    }
+
+    @Column(length = RUtil.COLUMN_LENGTH_OID, insertable = true, updatable = true, nullable = true /*, insertable = false, updatable = false */)
     @Override
     public String getTargetOid() {
         return targetOid;
@@ -75,6 +92,9 @@ public class REmbeddedReference implements ObjectReference {
 
     public void setType(RObjectType type) {
         this.type = type;
+    }
+
+    public void setTarget(RObject target) {
     }
 
     @Override
@@ -118,8 +138,9 @@ public class REmbeddedReference implements ObjectReference {
     public static void copyFromJAXB(ObjectReferenceType jaxb, REmbeddedReference repo, PrismContext prismContext) {
         Validate.notNull(repo, "Repo object must not be null.");
         Validate.notNull(jaxb, "JAXB object must not be null.");
+        if (jaxb.getFilter() == null){
         Validate.notEmpty(jaxb.getOid(), "Target oid must not be null.");
-
+        }
         repo.setType(ClassMapper.getHQLTypeForQName(jaxb.getType()));
         repo.setRelation(RUtil.qnameToString(jaxb.getRelation()));
         repo.setTargetOid(jaxb.getOid());

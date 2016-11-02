@@ -1,24 +1,15 @@
 package com.evolveum.midpoint.wf.impl.processors;
 
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.wf.impl.WorkflowManagerImpl;
-import com.evolveum.midpoint.xml.ns.model.workflow.common_forms_3.WorkItemContents;
-
+import com.evolveum.midpoint.wf.impl.util.MiscDataUtil;
 import org.apache.commons.configuration.Configuration;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.BeanNameAware;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import javax.xml.bind.JAXBException;
-
-import java.util.Map;
 
 /**
  * Useful base class for creating change processors. Currently this class deals only with keeping the processor
@@ -36,9 +27,12 @@ public abstract class BaseChangeProcessor implements ChangeProcessor, BeanNameAw
     private BeanFactory beanFactory;
 
     @Autowired
-    private WorkflowManagerImpl workflowManager;
+    private MiscDataUtil miscDataUtil;
 
-    private boolean enabled = false;
+	@Autowired
+	private PrismContext prismContext;
+
+	private boolean enabled = false;
 
     public String getBeanName() {
         return beanName;
@@ -70,7 +64,12 @@ public abstract class BaseChangeProcessor implements ChangeProcessor, BeanNameAw
         processorConfiguration = c;
     }
 
-    public WorkflowManagerImpl getWorkflowManager() {
-        return workflowManager;
+	public MiscDataUtil getMiscDataUtil() {
+		return miscDataUtil;
+	}
+
+    @Override
+    public PrismContext getPrismContext() {
+        return prismContext;
     }
 }

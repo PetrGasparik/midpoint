@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ public class PrismConstants {
 
 	public static final String EXTENSION_LOCAL_NAME = "extension";
 	public static final String NAME_LOCAL_NAME = "name";
-	
+
 	public static final String ATTRIBUTE_ID_LOCAL_NAME = "id";
 	public static final String ATTRIBUTE_OID_LOCAL_NAME = "oid";
 	public static final String ATTRIBUTE_VERSION_LOCAL_NAME = "version";
@@ -54,7 +54,9 @@ public class PrismConstants {
 	public static final QName A_PROPERTY_CONTAINER = new QName(NS_ANNOTATION, "container");
 	public static final QName A_OBJECT = new QName(NS_ANNOTATION, "object");
 
-	
+	public static final QName A_DEFAULT_NAMESPACE = new QName(NS_ANNOTATION, "defaultNamespace");
+	public static final QName A_IGNORED_NAMESPACE = new QName(NS_ANNOTATION, "ignoredNamespace");
+
 	public static final QName A_TYPE = new QName(NS_ANNOTATION, "type");
 	public static final QName A_DISPLAY_NAME = new QName(NS_ANNOTATION, "displayName");
 	public static final QName A_DISPLAY_ORDER = new QName(NS_ANNOTATION, "displayOrder");
@@ -73,6 +75,9 @@ public class PrismConstants {
 	public static final QName A_COMPOSITE = new QName(NS_ANNOTATION, "composite");
 	public static final QName A_DEPRECATED = new QName(NS_ANNOTATION, "deprecated");
 	public static final QName A_LABEL = new QName(NS_ANNOTATION, "label");
+	public static final QName A_MATCHING_RULE = new QName(NS_ANNOTATION, "matchingRule");
+	public static final QName A_EMPHASIZED = new QName(NS_ANNOTATION, "emphasized");
+	public static final QName A_VALUE_ENUMERATION_REF = new QName(NS_ANNOTATION, "valueEnumerationRef");
 	
 	public static final QName SCHEMA_DOCUMENTATION = new QName(W3C_XML_SCHEMA_NS_URI, "documentation");
 	public static final QName SCHEMA_APP_INFO = new QName(W3C_XML_SCHEMA_NS_URI, "appinfo");
@@ -92,7 +97,13 @@ public class PrismConstants {
 	public static final QName Q_ORDER_BY = new QName(NS_QUERY, "orderBy");
 	public static final QName Q_ANY = new QName(NS_QUERY, "any");
 
-	
+	// Path constants
+	public static final String T_PARENT_LOCAL_PART = "parent";
+	public static final QName T_PARENT = new QName(NS_TYPES, T_PARENT_LOCAL_PART);
+	public static final QName T_OBJECT_REFERENCE = new QName(NS_TYPES, "objectReference");
+	public static final String T_ID_LOCAL_PART = "id";
+	public static final QName T_ID = new QName(NS_TYPES, T_ID_LOCAL_PART);
+
 	// Misc
 	
 	public static final Class DEFAULT_VALUE_CLASS = String.class;

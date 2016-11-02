@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Evolveum
+ * Copyright (c) 2015-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,11 @@ public interface PrismValueDeltaSetTripleProducer<V extends PrismValue, D extend
 
 	QName getMappingQName();
 
+	/**
+	 * Null output tripple means "the mapping is not applicable", e.g. due to the
+	 * condition being false.
+	 * Empty output triple means "the mapping is applicable but there are no values".
+	 */
 	PrismValueDeltaSetTriple<V> getOutputTriple();
 	
 	MappingStrengthType getStrength();
@@ -34,6 +39,13 @@ public interface PrismValueDeltaSetTripleProducer<V extends PrismValue, D extend
 
 	boolean isExclusive();
 
-	boolean isAuthoritative(); 
+	boolean isAuthoritative();
+
+	/**
+	 * Returns true if the mapping has no source. That means
+	 * it has to be evaluated for any delta. This really applies
+	 * only to normal-strength mappings.
+	 */
+	boolean isSourceless(); 
 
 }

@@ -33,6 +33,8 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 	private ObjectPaging paging;
 	private boolean allowPartialResults = false;
 
+	private boolean useNewQueryInterpreter = true;
+
 	public ObjectFilter getFilter() {
 		return filter;
 	}
@@ -55,6 +57,14 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 
 	public void setAllowPartialResults(boolean allowPartialResults) {
 		this.allowPartialResults = allowPartialResults;
+	}
+
+	public boolean isUseNewQueryInterpreter() {
+		return useNewQueryInterpreter;
+	}
+
+	public void setUseNewQueryInterpreter(boolean useNewQueryInterpreter) {
+		this.useNewQueryInterpreter = useNewQueryInterpreter;
 	}
 
 	public static ObjectQuery createObjectQuery(ObjectFilter filter) {
@@ -106,6 +116,7 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 		if (this.allowPartialResults) {
 			clone.allowPartialResults = true;
 		}
+		clone.useNewQueryInterpreter = this.useNewQueryInterpreter;
 		return clone;
 	}	
 
@@ -120,9 +131,9 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 		
 		DebugUtil.indentDebugDump(sb, indent);
 		if (filter == null) {
-			sb.append("filter: null");
+			sb.append("Filter: null");
 		} else {
-			sb.append("filter:");
+			sb.append("Filter:");
 			sb.append("\n");
 			sb.append(filter.debugDump(indent + 1));
 		}
@@ -130,9 +141,9 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 		sb.append("\n");
 		DebugUtil.indentDebugDump(sb, indent);
 		if (paging == null) {
-			sb.append("paging: null");
+			sb.append("Paging: null");
 		} else {
-			sb.append("paging: ").append(paging.debugDump(0));
+			sb.append(paging.debugDump(0));
 		}
 		
 		if (allowPartialResults) {
@@ -166,4 +177,71 @@ public class ObjectQuery implements DebugDumpable, Serializable {
 		return sb.toString();
 	}
 
+	public void addFilter(ObjectFilter objectFilter) {
+		if (objectFilter == null || objectFilter instanceof AllFilter) {
+			// nothing to do
+		} else if (filter == null || filter instanceof AllFilter) {
+			setFilter(objectFilter);
+		} else {
+			setFilter(AndFilter.createAnd(objectFilter, filter));
+		}
+	}
+
+	// use when offset/maxSize is expected
+	public Integer getOffset() {
+		if (paging == null) {
+			return null;
+		}
+		if (paging.getCookie() != null) {
+			throw new UnsupportedOperationException("Paging cookie is not supported here.");
+		}
+		return paging.getOffset();
+	}
+
+	// use when offset/maxSize is expected
+	public Integer getMaxSize() {
+		if (paging == null) {
+			return null;
+		}
+		if (paging.getCookie() != null) {
+			throw new UnsupportedOperationException("Paging cookie is not supported here.");
+		}
+		return paging.getMaxSize();
+	}
+
+	@SuppressWarnings("EqualsWhichDoesntCheckParameterClass")
+	public boolean equals(Object o) {
+		return equals(o, true);
+	}
+
+	public boolean equivalent(Object o) {
+		return equals(o, false);
+	}
+
+	public boolean equals(Object o, boolean exact) {
+		if (this == o)
+			return true;
+		if (o == null || getClass() != o.getClass())
+			return false;
+
+		ObjectQuery that = (ObjectQuery) o;
+
+		if (allowPartialResults != that.allowPartialResults)
+			return false;
+		if (useNewQueryInterpreter != that.useNewQueryInterpreter)
+			return false;
+		if (filter != null ? !filter.equals(that.filter, exact) : that.filter != null)
+			return false;
+		return paging != null ? paging.equals(that.paging, exact) : that.paging == null;
+
+	}
+
+	@Override
+	public int hashCode() {
+		int result = filter != null ? filter.hashCode() : 0;
+		result = 31 * result + (paging != null ? paging.hashCode() : 0);
+		result = 31 * result + (allowPartialResults ? 1 : 0);
+		result = 31 * result + (useNewQueryInterpreter ? 1 : 0);
+		return result;
+	}
 }

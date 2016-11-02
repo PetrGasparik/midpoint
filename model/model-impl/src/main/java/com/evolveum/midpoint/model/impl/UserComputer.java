@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ public class UserComputer {
 		UserType userType = user.asObjectable();
 		ActivationType activationType = userType.getActivation();
 		if (activationType != null) {
-			activationComputer.computeEffective(activationType);
+			activationComputer.computeEffective(userType.getLifecycleState(), activationType);
 		}
 	}
 	

@@ -20,12 +20,10 @@ import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertNull;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
 
 import org.testng.AssertJUnit;
@@ -253,7 +251,7 @@ public class PasswordPolicyValidatorTest {
 	}
 
 	private void assertPassword(String passwd, ValuePolicyType pp) {
-		OperationResult validationResult = PasswordPolicyUtils.validatePassword(passwd, pp);
+		OperationResult validationResult = PasswordPolicyUtils.validatePassword(passwd, null, pp);
 		if (!validationResult.isSuccess()) {
 			AssertJUnit.fail(validationResult.debugDump());
 		}
@@ -296,7 +294,7 @@ public class PasswordPolicyValidatorTest {
 
 	private boolean pwdValidHelper(String password, ValuePolicyType pp) {
 		OperationResult op = new OperationResult("Password Validator test with password:" + password);
-		PasswordPolicyUtils.validatePassword(password, pp, op);
+		PasswordPolicyUtils.validatePassword(password, null, pp, op);
 		op.computeStatus();
 		String msg = "-> Policy "+pp.getName()+", password '"+password+"': "+op.getStatus();
 		System.out.println(msg);
@@ -324,7 +322,7 @@ public class PasswordPolicyValidatorTest {
 		pps.add(pp);
 		pps.add(pp);
 		
-		PasswordPolicyUtils.validatePassword(password, pps, op);
+		PasswordPolicyUtils.validatePassword(password, null, pps, op);
 		op.computeStatus();
 		LOGGER.error(op.debugDump());
 		AssertJUnit.assertTrue(op.isSuccess());

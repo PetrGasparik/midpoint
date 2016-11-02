@@ -17,6 +17,7 @@
 package com.evolveum.midpoint.init;
 
 import com.evolveum.midpoint.common.configuration.api.MidpointConfiguration;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
 import com.evolveum.midpoint.model.api.ModelService;
 import com.evolveum.midpoint.prism.PrismContext;
@@ -39,7 +40,6 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
@@ -139,7 +139,7 @@ public class InitialDataImport {
                     errors++;
                 }
             } catch (Exception ex) {
-                LoggingUtils.logException(LOGGER, "Couldn't import file {}", ex, file.getName());
+                LoggingUtils.logUnexpectedException(LOGGER, "Couldn't import file {}", ex, file.getName());
                 mainResult.recordFatalError("Couldn't import file '" + file.getName() + "'", ex);
             }
         }
@@ -172,7 +172,7 @@ public class InitialDataImport {
             importObject = true;
         } catch (Exception ex) {
         	if (!importObject){
-	            LoggingUtils.logException(LOGGER, "Couldn't get object with oid {} from model", ex,
+	            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get object with oid {} from model", ex,
 	                    object.getOid());
 	            result.recordWarning("Couldn't get object with oid '" + object.getOid() + "' from model",
 	                    ex);
@@ -186,12 +186,12 @@ public class InitialDataImport {
         ObjectDelta delta = ObjectDelta.createAddDelta(object);
         try {
             LOGGER.info("Starting initial import of file {}.", file.getName());
-            model.executeChanges(WebMiscUtil.createDeltaCollection(delta), ModelExecuteOptions.createIsImport(), task, result);
+            model.executeChanges(WebComponentUtil.createDeltaCollection(delta), ModelExecuteOptions.createIsImport(), task, result);
             result.recordSuccess();
             LOGGER.info("Created {} as part of initial import", object);
             return true;
         } catch (Exception e) {
-            LoggingUtils.logException(LOGGER, "Couldn't import {} from file {}: ", e, object,
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't import {} from file {}: ", e, object,
                     file.getName(), e.getMessage());
             result.recordFatalError(e);
 
@@ -226,12 +226,12 @@ public class InitialDataImport {
         	try {
         		File tmpDir = new File(configuration.getMidpointHome()+"/tmp");
         		if (!tmpDir.mkdir()) {
-        			LOGGER.warn("Failed to create temporary directory for inital objects {}. Maybe it already exists", configuration.getMidpointHome()+"/tmp");
+        			LOGGER.warn("Failed to create temporary directory for initial objects {}. Maybe it already exists", configuration.getMidpointHome()+"/tmp");
         		}
 
         		tmpDir = new File(configuration.getMidpointHome()+"/tmp/initial-objects");
         		if (!tmpDir.mkdir()) {
-        			LOGGER.warn("Failed to create temporary directory for inital objects {}. Maybe it already exists", configuration.getMidpointHome()+"/tmp/initial-objects");
+        			LOGGER.warn("Failed to create temporary directory for initial objects {}. Maybe it already exists", configuration.getMidpointHome()+"/tmp/initial-objects");
         		}
         		
         		//prerequisite: we are expecting that the files are store in the same archive as the source code that is loading it

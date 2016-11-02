@@ -26,8 +26,11 @@ import com.evolveum.midpoint.prism.delta.ReferenceDelta;
 import com.evolveum.midpoint.prism.query.AndFilter;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
@@ -136,12 +139,10 @@ public class DiscoverConnectorsExecutor extends BaseActionExecutor {
             LOGGER.trace("Finding obsolete versions for connector: {}", connectorType.asPrismObject().debugDump());
         }
 
-        AndFilter filter = AndFilter.createAnd(
-                EqualFilter.createEqual(SchemaConstants.C_CONNECTOR_FRAMEWORK, ConnectorType.class, prismContext, null, connectorType.getFramework()),
-                EqualFilter.createEqual(SchemaConstants.C_CONNECTOR_CONNECTOR_TYPE, ConnectorType.class, prismContext, null, connectorType.getConnectorType()));
-
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-
+        ObjectQuery query = QueryBuilder.queryFor(ConnectorType.class, prismContext)
+                .item(SchemaConstants.C_CONNECTOR_FRAMEWORK).eq(connectorType.getFramework())
+                .and().item(SchemaConstants.C_CONNECTOR_CONNECTOR_TYPE).eq(connectorType.getConnectorType())
+                .build();
         List<PrismObject<ConnectorType>> foundConnectors;
         try {
             foundConnectors = modelService.searchObjects(ConnectorType.class, query, null, null, result);
@@ -151,6 +152,14 @@ public class DiscoverConnectorsExecutor extends BaseActionExecutor {
 
         for (PrismObject<ConnectorType> foundConnector : foundConnectors) {
             ConnectorType foundConnectorType = foundConnector.asObjectable();
+            // TODO temporary hack. fix it after MID-3355 is implemented.
+            if (connectorType.getConnectorHost() != null) {
+            	if (foundConnectorType.getConnectorHost() == null) {
+            		connectorType.setConnectorHostRef(ObjectTypeUtil.createObjectRef(connectorType.getConnectorHost().getOid(), ObjectTypes.CONNECTOR_HOST));
+                	connectorType.setConnectorHost(null);
+            	}
+            	
+            }
             if (connectorType.getConnectorHostRef().equals(foundConnectorType.getConnectorHostRef()) &&
                     foundConnectorType.getConnectorVersion() != null &&
                     !foundConnectorType.getConnectorVersion().equals(connectorType.getConnectorVersion())) {

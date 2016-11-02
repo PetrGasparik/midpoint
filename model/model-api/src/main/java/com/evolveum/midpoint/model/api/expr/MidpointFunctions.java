@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.api.context.ModelContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
+import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
@@ -28,7 +29,6 @@ import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
@@ -37,17 +37,10 @@ import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.exception.SystemException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensContextType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
+import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 
 import java.util.Collection;
 import java.util.List;
@@ -71,8 +64,10 @@ public interface MidpointFunctions {
 	 * </p>
 	 * @param type Class of the object to create
 	 * @return empty object in memory
+	 * @throws SchemaException schema error instantiating the object (e.g. attempt to
+	 *                         instantiate abstract type).
 	 */
-	<T extends ObjectType> T createEmptyObject(Class<T> type);
+	<T extends ObjectType> T createEmptyObject(Class<T> type) throws SchemaException;
 
 	/**
 	 * <p>
@@ -88,8 +83,10 @@ public interface MidpointFunctions {
 	 * @param type Class of the object to create
 	 * @param name Name of the object
 	 * @return empty object in memory
+	 * @throws SchemaException schema error instantiating the object (e.g. attempt to
+	 *                         instantiate abstract type).
 	 */
-	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, String name);
+	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, String name) throws SchemaException;
 
 	/**
 	 * <p>
@@ -105,8 +102,10 @@ public interface MidpointFunctions {
 	 * @param type Class of the object to create
 	 * @param name Name of the object
 	 * @return empty object in memory
+	 * @throws SchemaException schema error instantiating the object (e.g. attempt to
+	 *                         instantiate abstract type).
 	 */
-	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyString name);
+	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyString name) throws SchemaException;
 	
 	/**
 	 * <p>
@@ -122,8 +121,10 @@ public interface MidpointFunctions {
 	 * @param type Class of the object to create
 	 * @param name Name of the object
 	 * @return empty object in memory
+	 * @throws SchemaException schema error instantiating the object (e.g. attempt to
+	 *                         instantiate abstract type).
 	 */
-	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyStringType name);
+	<T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyStringType name) throws SchemaException;
 
 	<T extends ObjectType> T resolveReference(ObjectReferenceType reference)
             throws ObjectNotFoundException, SchemaException,
@@ -870,15 +871,15 @@ public interface MidpointFunctions {
 
     List<String> toList(String... s);
 
-    Collection<String> getManagersOids(UserType user) throws SchemaException, ObjectNotFoundException;
+    Collection<String> getManagersOids(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException;
 
-    Collection<String> getManagersOidsExceptUser(UserType user) throws SchemaException, ObjectNotFoundException;
+    Collection<String> getManagersOidsExceptUser(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException;
 
-    Collection<UserType> getManagers(UserType user) throws SchemaException, ObjectNotFoundException;
+    Collection<UserType> getManagers(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException;
     
-    Collection<UserType> getManagersByOrgType(UserType user, String orgType) throws SchemaException, ObjectNotFoundException;
+    Collection<UserType> getManagersByOrgType(UserType user, String orgType) throws SchemaException, ObjectNotFoundException, SecurityViolationException;
     
-    Collection<UserType> getManagers(UserType user, String orgType, boolean allowSelf) throws SchemaException, ObjectNotFoundException;
+    Collection<UserType> getManagers(UserType user, String orgType, boolean allowSelf) throws SchemaException, ObjectNotFoundException, SecurityViolationException;
 
     UserType getUserByOid(String oid) throws ObjectNotFoundException, SchemaException;
 
@@ -890,7 +891,7 @@ public interface MidpointFunctions {
 
 	OrgType getOrgByOid(String oid) throws SchemaException;
 
-    OrgType getOrgByName(String name) throws SchemaException;
+    OrgType getOrgByName(String name) throws SchemaException, SecurityViolationException;
 
     /**
      * Returns parent orgs of the specified object that have a specific relation and orgType.
@@ -970,6 +971,8 @@ public interface MidpointFunctions {
     boolean isMemberOf(UserType user, String orgOid);
 
     String getPlaintextUserPassword(UserType user) throws EncryptionException;
+    
+    String getPlaintext(ProtectedStringType user) throws EncryptionException;
 
     String getPlaintextAccountPassword(ShadowType account) throws EncryptionException;
 
@@ -989,9 +992,15 @@ public interface MidpointFunctions {
 
     ShadowType getLinkedShadow(FocusType focus, String resourceOid)  throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
     
+    ShadowType getLinkedShadow(FocusType focus, String resourceOid, boolean repositoryObjectOnly)  throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
+    
     ShadowType getLinkedShadow(FocusType focus, ResourceType resource)  throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
+    
+    ShadowType getLinkedShadow(FocusType focus, ResourceType resource, boolean repositoryObjectOnly)  throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
 
     ShadowType getLinkedShadow(FocusType focus, String resourceOid, ShadowKindType kind, String intent) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
+    
+    ShadowType getLinkedShadow(FocusType focus, String resourceOid, ShadowKindType kind, String intent, boolean repositoryObjectOnly) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException;
     
     /**
      * Returns aggregated delta that is to be executed on a given resource.
@@ -1000,4 +1009,6 @@ public interface MidpointFunctions {
      * @return
      */
     ObjectDeltaType getResourceDelta(ModelContext context, String resourceOid) throws SchemaException;
+
+	Protector getProtector();
 }

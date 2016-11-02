@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 package com.evolveum.midpoint.model.common.expression.script;
 
 import com.evolveum.midpoint.model.common.expression.functions.BasicExpressionFunctions;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.crypto.AESProtector;
@@ -26,7 +25,6 @@ import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.schema.MidPointPrismContextFactory;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
-import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.util.SchemaTestConstants;
 import com.evolveum.midpoint.test.util.TestUtil;
 import com.evolveum.midpoint.util.MiscUtil;
@@ -44,6 +42,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 
+import javax.naming.ldap.LdapName;
+import javax.naming.ldap.Rdn;
 import javax.xml.datatype.DatatypeConstants;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
@@ -434,6 +434,86 @@ public class TestExpressionFunctions {
 		assertEquals("Vedeckotechnicka revoluce neni zadna idyla!", basic.toAscii(PrismTestUtil.createPolyStringType("Vědeckotechnická revoluce není žádná idyla!")));
 		assertEquals(null, basic.toAscii(null));
 		assertEquals("", basic.toAscii(""));
+	}
+	
+	@Test
+	public void testComposeDn() throws Exception {
+		final String TEST_NAME = "testComposeDn";
+		TestUtil.displayTestTile(TEST_NAME);
+		BasicExpressionFunctions basic = createBasicFunctions();
+		
+		assertEquals("cn=foo,o=bar", basic.composeDn("cn","foo","o","bar"));
+		assertEquals("cn=foo,o=bar", basic.composeDn("cn",PrismTestUtil.createPolyString("foo"),"o","bar"));
+		assertEquals("cn=foo,o=bar", basic.composeDn("cn",PrismTestUtil.createPolyStringType("foo"),"o","bar"));
+		assertEquals("cn=foo,o=bar", basic.composeDn("cn","foo",new Rdn("o","bar")));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDn(new Rdn("cn","foo"),"ou","baz",new Rdn("o","bar")));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDn(new Rdn("cn","foo"),"ou","baz","o","bar"));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDn(new Rdn("cn","foo"),new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDn("cn","foo",new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo\\,foo,ou=baz,o=bar", basic.composeDn("cn","foo,foo",new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo\\=foo,ou=baz,o=bar", basic.composeDn("cn","foo=foo",new LdapName("ou=baz,o=bar")));
+		assertEquals(null, basic.composeDn(null));
+		assertEquals(null, basic.composeDn());
+		assertEquals(null, basic.composeDn(""));
+		assertEquals(null, basic.composeDn("   "));
+	}
+	
+	@Test
+	public void testComposeDnWithSuffix() throws Exception {
+		final String TEST_NAME = "testComposeDnWithSuffix";
+		TestUtil.displayTestTile(TEST_NAME);
+		BasicExpressionFunctions basic = createBasicFunctions();
+		
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix(new Rdn("cn","foo"),"ou=baz,o=bar"));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix(new Rdn("cn","foo"),new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo","ou=baz,o=bar"));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn",PrismTestUtil.createPolyString("foo"),"ou=baz,o=bar"));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn",PrismTestUtil.createPolyStringType("foo"),"ou=baz,o=bar"));
+		assertEquals("cn=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo",new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo,ou=baz\\,baz,o=bar", basic.composeDnWithSuffix("cn","foo","ou=baz\\,baz,o=bar"));
+		assertEquals("cn=foo,ou=baz\\,baz,o=bar", basic.composeDnWithSuffix("cn","foo",new LdapName("ou=baz\\,baz,o=bar")));
+		assertEquals("cn=foo\\,foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo,foo","ou=baz,o=bar"));
+		assertEquals("cn=foo\\,foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo,foo",new LdapName("ou=baz,o=bar")));
+		assertEquals("cn=foo\\=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo=foo","ou=baz,o=bar"));
+		assertEquals("cn=foo\\=foo,ou=baz,o=bar", basic.composeDnWithSuffix("cn","foo=foo",new LdapName("ou=baz,o=bar")));
+		assertEquals("ou=baz,o=bar", basic.composeDnWithSuffix("ou=baz,o=bar"));
+		assertEquals("ou=baz, o=bar", basic.composeDnWithSuffix("ou=baz, o=bar"));
+		assertEquals("OU=baz, o=bar", basic.composeDnWithSuffix("OU=baz, o=bar"));
+		assertEquals("ou=baz,o=bar", basic.composeDnWithSuffix(new LdapName("ou=baz,o=bar")));
+		assertEquals(null, basic.composeDnWithSuffix(null));
+		assertEquals(null, basic.composeDnWithSuffix());
+		assertEquals(null, basic.composeDnWithSuffix(""));
+		assertEquals(null, basic.composeDnWithSuffix("   "));
+	}
+	
+	@Test
+	public void testParseFullName() throws Exception {
+		final String TEST_NAME = "testParseFullName";
+		TestUtil.displayTestTile(TEST_NAME);
+		BasicExpressionFunctions basic = createBasicFunctions();
+		
+		assertEquals(null, basic.parseGivenName(null));
+		assertEquals(null, basic.parseGivenName("   "));
+		
+		assertEquals("Jack", basic.parseGivenName("Jack Sparrow"));
+		assertEquals("Jack", basic.parseGivenName(" Jack     Sparrow  "));
+		assertEquals("Jack", basic.parseGivenName(new PolyString("Jack Sparrow")));
+		assertEquals("Sparrow", basic.parseFamilyName("Jack Sparrow"));
+		assertEquals("Sparrow", basic.parseFamilyName("   Jack    Sparrow   "));
+		
+		assertEquals("Tim", basic.parseGivenName("Tim Berners-Lee"));
+		assertEquals("Berners-Lee", basic.parseFamilyName("Tim Berners-Lee"));
+		
+		assertEquals("Cassius", basic.parseGivenName("Cassius Marcellus \"Muhammad Ali\" Clay, Jr."));
+		assertEquals("Marcellus", basic.parseAdditionalName("Cassius Marcellus \"Muhammad Ali\" Clay, Jr."));
+		assertEquals("Clay", basic.parseFamilyName("Cassius Marcellus \"Muhammad Ali\" Clay, Jr."));
+		assertEquals("Muhammad Ali", basic.parseNickName("Cassius Marcellus \"Muhammad Ali\" Clay, Jr."));
+		assertEquals("Jr.", basic.parseHonorificSuffix("Cassius Marcellus \"Muhammad Ali\" Clay, Jr."));
+		
+		assertEquals("Radovan", basic.parseGivenName("Ing. Radovan Semančík, PhD."));
+		assertEquals("Semančík", basic.parseFamilyName("Ing. Radovan Semančík, PhD."));
+		assertEquals("Ing.", basic.parseHonorificPrefix("Ing. Radovan Semančík, PhD."));
+		assertEquals("PhD.", basic.parseHonorificSuffix("Ing. Radovan Semančík, PhD."));
 	}
 	
 }

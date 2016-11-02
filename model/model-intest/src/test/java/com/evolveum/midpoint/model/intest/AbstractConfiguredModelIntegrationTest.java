@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.evolveum.midpoint.model.intest;
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
 import static org.testng.AssertJUnit.assertNotNull;
 
-import com.evolveum.midpoint.model.impl.ModelWebService;
 import com.evolveum.midpoint.model.test.AbstractModelIntegrationTest;
 import com.evolveum.midpoint.prism.PrismContainer;
 import com.evolveum.midpoint.prism.PrismObject;
@@ -29,6 +28,7 @@ import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.test.DummyResourceContoller;
 import com.evolveum.midpoint.test.util.TestUtil;
 import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.QNameUtil;
@@ -46,7 +46,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemObjectsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.testng.IHookCallBack;
 import org.testng.ITestResult;
 import org.testng.annotations.AfterClass;
@@ -79,8 +78,11 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final String USER_TEMPLATE_FILENAME = COMMON_DIR + "/user-template.xml";
 	protected static final String USER_TEMPLATE_OID = "10000000-0000-0000-0000-000000000002";
 	
-	protected static final String USER_TEMPLATE_COMPLEX_FILENAME = COMMON_DIR + "/user-template-complex.xml";
+	protected static final File USER_TEMPLATE_COMPLEX_FILE = new File(COMMON_DIR, "user-template-complex.xml");
 	protected static final String USER_TEMPLATE_COMPLEX_OID = "10000000-0000-0000-0000-000000000222";
+	
+	protected static final String USER_TEMPLATE_INBOUNDS_FILENAME = COMMON_DIR + "/user-template-inbounds.xml";
+	protected static final String USER_TEMPLATE_INBOUNDS_OID = "10000000-0000-0000-0000-000000000555";
 	
 	protected static final String USER_TEMPLATE_COMPLEX_INCLUDE_FILENAME = COMMON_DIR + "/user-template-complex-include.xml";
 	protected static final String USER_TEMPLATE_COMPLEX_INCLUDE_OID = "10000000-0000-0000-0000-000000000223";
@@ -99,6 +101,7 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	
 	protected static final File RESOURCE_DUMMY_FILE = new File(COMMON_DIR, "resource-dummy.xml");
 	protected static final File RESOURCE_DUMMY_DEPRECATED_FILE = new File(COMMON_DIR, "resource-dummy-deprecated.xml");
+	protected static final File RESOURCE_DUMMY_CACHING_FILE = new File(COMMON_DIR, "resource-dummy-caching.xml");
 	protected static final String RESOURCE_DUMMY_OID = "10000000-0000-0000-0000-000000000004";
 	protected static final String RESOURCE_DUMMY_NAMESPACE = "http://midpoint.evolveum.com/xml/ns/public/resource/instance/10000000-0000-0000-0000-000000000004";
 	protected static final String RESOURCE_DUMMY_DRINK = "rum";
@@ -109,12 +112,19 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final String RESOURCE_DUMMY_RED_NAME = "red";
 	protected static final String RESOURCE_DUMMY_RED_NAMESPACE = MidPointConstants.NS_RI;
 	
-	// BLUE resource has WEAK mappings
+	// BLUE resource has WEAK mappings, outbound/inbound
 	protected static final File RESOURCE_DUMMY_BLUE_FILE = new File(COMMON_DIR, "resource-dummy-blue.xml");
 	protected static final File RESOURCE_DUMMY_BLUE_DEPRECATED_FILE = new File(COMMON_DIR, "resource-dummy-blue-deprecated.xml");
+	protected static final File RESOURCE_DUMMY_BLUE_CACHING_FILE = new File(COMMON_DIR, "resource-dummy-blue-caching.xml");
 	protected static final String RESOURCE_DUMMY_BLUE_OID = "10000000-0000-0000-0000-000000000204";
 	protected static final String RESOURCE_DUMMY_BLUE_NAME = "blue";
 	protected static final String RESOURCE_DUMMY_BLUE_NAMESPACE = MidPointConstants.NS_RI;
+	
+	// CYAN has WEAK mappings, outbound only
+	protected static final File RESOURCE_DUMMY_CYAN_FILE = new File(COMMON_DIR, "resource-dummy-cyan.xml");
+	protected static final String RESOURCE_DUMMY_CYAN_OID = "10000000-0000-0000-0000-00000000c204";
+	protected static final String RESOURCE_DUMMY_CYAN_NAME = "cyan";
+	protected static final String RESOURCE_DUMMY_CYAN_NAMESPACE = MidPointConstants.NS_RI;
 	
 	// WHITE dummy resource has almost no configuration: no schema, no schemahandling, no synchronization, ...
 	protected static final String RESOURCE_DUMMY_WHITE_FILENAME = COMMON_DIR + "/resource-dummy-white.xml";
@@ -131,10 +141,18 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
     // Green dummy resource is authoritative
 	protected static final File RESOURCE_DUMMY_GREEN_FILE = new File(COMMON_DIR, "resource-dummy-green.xml");
 	protected static final File RESOURCE_DUMMY_GREEN_DEPRECATED_FILE = new File(COMMON_DIR, "resource-dummy-green-deprecated.xml");
+	protected static final File RESOURCE_DUMMY_GREEN_CACHING_FILE = new File(COMMON_DIR, "resource-dummy-green-caching.xml");
 	protected static final String RESOURCE_DUMMY_GREEN_OID = "10000000-0000-0000-0000-000000000404";
 	protected static final String RESOURCE_DUMMY_GREEN_NAME = "green";
 	protected static final String RESOURCE_DUMMY_GREEN_NAMESPACE = MidPointConstants.NS_RI;
 	
+	// This is authoritative resource similar to green resource but it has a bit wilder inbound mappings.
+	protected static final File RESOURCE_DUMMY_EMERALD_FILE = new File(COMMON_DIR, "resource-dummy-emerald.xml");
+	protected static final File RESOURCE_DUMMY_EMERALD_DEPRECATED_FILE = new File(COMMON_DIR, "resource-dummy-emerald-deprecated.xml");
+	protected static final String RESOURCE_DUMMY_EMERALD_OID = "10000000-0000-0000-0000-00000000e404";
+	protected static final String RESOURCE_DUMMY_EMERALD_NAME = "emerald";
+	protected static final String RESOURCE_DUMMY_EMERALD_NAMESPACE = MidPointConstants.NS_RI;
+
 	// Black dummy resource for testing tolerant attributes
 	protected static final String RESOURCE_DUMMY_BLACK_FILENAME = COMMON_DIR + "/resource-dummy-black.xml";
 	protected static final String RESOURCE_DUMMY_BLACK_OID = "10000000-0000-0000-0000-000000000305";
@@ -142,6 +160,7 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final String RESOURCE_DUMMY_BLACK_NAMESPACE = MidPointConstants.NS_RI;
 
 	// Orange dummy resource for testing associations with resource-provided referential integrity
+	// It also have very little outbound expressions and it has some strange inbound expressions.
 	protected static final String RESOURCE_DUMMY_ORANGE_FILENAME = COMMON_DIR + "/resource-dummy-orange.xml";
 	protected static final String RESOURCE_DUMMY_ORANGE_OID = "10000000-0000-0000-0000-000000001104";
 	protected static final String RESOURCE_DUMMY_ORANGE_NAME = "orange";
@@ -169,6 +188,16 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final String ROLE_PIRATE_OID = "12345678-d34d-b33f-f00d-555555556666";
     protected static final String ROLE_PIRATE_NAME = "Pirate";
     protected static final String ROLE_PIRATE_DESCRIPTION = "Scurvy Pirates";
+    
+    protected static final File ROLE_PIRATE_GREEN_FILE = new File(COMMON_DIR, "role-pirate-green.xml");
+	protected static final String ROLE_PIRATE_GREEN_OID = "12345678-d34d-b33f-f00d-555555557777";
+    protected static final String ROLE_PIRATE_GREEN_NAME = "Pirate Green";
+    protected static final String ROLE_PIRATE_GREEN_DESCRIPTION = "Scurvy Pirates";
+    
+    protected static final File ROLE_BUCCANEER_GREEN_FILE = new File(COMMON_DIR, "role-buccaneer-green.xml");
+	protected static final String ROLE_BUCCANEER_GREEN_OID = "12345678-d34d-b33f-f00d-555555558888";
+    protected static final String ROLE_BUCCANEER_GREEN_NAME = "Bucaneers Green";
+    protected static final String ROLE_BUCCANEER_GREEN_DESCRIPTION = "Scurvy Bucaneers";
 	
 	protected static final String ROLE_NICE_PIRATE_FILENAME = COMMON_DIR + "/role-nice-pirate.xml";
 	protected static final String ROLE_NICE_PIRATE_OID = "12345678-d34d-b33f-f00d-555555556677";
@@ -194,12 +223,23 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final File ROLE_SAILOR_FILE = new File(COMMON_DIR, "role-sailor.xml");
 	protected static final String ROLE_SAILOR_OID = "12345111-1111-2222-1111-121212111113";
 	protected static final String ROLE_SAILOR_DRINK = "grog";
+	
+	protected static final File ROLE_RED_SAILOR_FILE = new File(COMMON_DIR, "role-red-sailor.xml");
+	protected static final String ROLE_RED_SAILOR_OID = "12345111-1111-2222-1111-121212111223";
+
+	protected static final File ROLE_CYAN_SAILOR_FILE = new File(COMMON_DIR, "role-cyan-sailor.xml");
+	protected static final String ROLE_CYAN_SAILOR_OID = "d3abd794-9c30-11e6-bb5a-af14bf2cc29b";
 
 	protected static final File USER_JACK_FILE = new File(COMMON_DIR, "user-jack.xml");
 	protected static final String USER_JACK_OID = "c0c010c0-d34d-b33f-f00d-111111111111";
 	protected static final String USER_JACK_USERNAME = "jack";
 	protected static final String USER_JACK_FULL_NAME = "Jack Sparrow";
+	protected static final String USER_JACK_GIVEN_NAME = "Jack";
 	protected static final String USER_JACK_FAMILY_NAME = "Sparrow";
+	protected static final String USER_JACK_ADDITIONAL_NAME = "Jackie";
+	protected static final String USER_JACK_EMPLOYEE_TYPE = "CAPTAIN";
+	protected static final String USER_JACK_LOCALITY = "Caribbean";
+	protected static final String USER_JACK_PASSWORD = "deadmentellnotales";
 
 	protected static final File USER_BARBOSSA_FILE = new File(COMMON_DIR, "user-barbossa.xml");
 	protected static final String USER_BARBOSSA_OID = "c0c010c0-d34d-b33f-f00d-111111111112";
@@ -210,7 +250,9 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final String USER_GUYBRUSH_OID = "c0c010c0-d34d-b33f-f00d-111111111116";
 	protected static final String USER_GUYBRUSH_USERNAME = "guybrush";
 	protected static final String USER_GUYBRUSH_FULL_NAME = "Guybrush Threepwood";
+	protected static final String USER_GUYBRUSH_GIVEN_NAME = "Guybrush";
 	protected static final String USER_GUYBRUSH_FAMILY_NAME = "Threepwood";
+	protected static final String USER_GUYBRUSH_LOCALITY = "Melee Island";
 	
 	// Largo does not have a full name set, employeeType=PIRATE
 	protected static final File USER_LARGO_FILE = new File(COMMON_DIR, "user-largo.xml");
@@ -221,6 +263,7 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	protected static final File USER_RAPP_FILE = new File(COMMON_DIR, "user-rapp.xml");
 	protected static final String USER_RAPP_OID = "c0c010c0-d34d-b33f-f00d-11111111c008";
 	protected static final String USER_RAPP_USERNAME = "rapp";
+	protected static final String USER_RAPP_FULLNAME = "Rapp Scallion";
 
 	// Herman has a validity dates set in the activation part
 	protected static final File USER_HERMAN_FILE = new File(COMMON_DIR, "user-herman.xml");
@@ -302,21 +345,29 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
 	public static final String GROUP_SHADOW_JOKER_DUMMY_UPCASE_NAME = "joker";
 	public static final String GROUP_JOKER_DUMMY_UPCASE_NAME = "JOKER";
 	
-	protected static final String PASSWORD_POLICY_GLOBAL_FILENAME = COMMON_DIR + "/password-policy-global.xml";
+	public static final String DUMMY_ORG_TOP_NAME = DummyResourceContoller.ORG_TOP_NAME;
+	
+	protected static final File PASSWORD_POLICY_GLOBAL_FILE = new File(COMMON_DIR,  "password-policy-global.xml");
 	protected static final String PASSWORD_POLICY_GLOBAL_OID = "12344321-0000-0000-0000-000000000003";
 	
 	protected static final File ORG_MONKEY_ISLAND_FILE = new File(COMMON_DIR, "org-monkey-island.xml");
 	protected static final String ORG_GOVERNOR_OFFICE_OID = "00000000-8888-6666-0000-100000000001";
 	protected static final String ORG_SCUMM_BAR_OID = "00000000-8888-6666-0000-100000000006";
+	protected static final String ORG_SCUMM_BAR_NAME = "F0006";
+	protected static final String ORG_SCUMM_BAR_DISPLAY_NAME = "Scumm Bar";
 	protected static final String ORG_MINISTRY_OF_OFFENSE_OID = "00000000-8888-6666-0000-100000000003";
     protected static final String ORG_MINISTRY_OF_DEFENSE_OID = "00000000-8888-6666-0000-100000000002";
 	protected static final String ORG_MINISTRY_OF_RUM_OID = "00000000-8888-6666-0000-100000000004";
 	protected static final String ORG_SWASHBUCKLER_SECTION_OID = "00000000-8888-6666-0000-100000000005";
 	protected static final String ORG_PROJECT_ROOT_OID = "00000000-8888-6666-0000-200000000000";
 	protected static final String ORG_SAVE_ELAINE_OID = "00000000-8888-6666-0000-200000000001";
+	protected static final String ORG_KIDNAP_AND_MARRY_ELAINE_OID = "00000000-8888-6666-0000-200000000002";
 	
 	protected static final String ORG_TYPE_FUNCTIONAL = "functional"; 
 	protected static final String ORG_TYPE_PROJECT = "project";
+	
+	protected static final File SERVICE_SHIP_SEA_MONKEY_FILE = new File(COMMON_DIR, "service-ship-sea-monkey.xml");
+	protected static final String SERVICE_SHIP_SEA_MONKEY_OID = "914b94be-1901-11e6-9269-972ee32cd8db";
 	
 	protected static final String TASK_RECONCILE_DUMMY_FILENAME = COMMON_DIR + "/task-reconcile-dummy.xml";
 	protected static final String TASK_RECONCILE_DUMMY_OID = "10000000-0000-0000-5656-565600000004";
@@ -368,6 +419,8 @@ public class AbstractConfiguredModelIntegrationTest extends AbstractModelIntegra
     protected static final String DUMMY_ACCOUNT_ATTRIBUTE_SEA_NAME = "sea";
     
     protected static final String INTENT_TEST = "test";
+    protected static final String INTENT_DUMMY_GROUP = "group";
+    protected static final String INTENT_DUMMY_PRIVILEGE = "privilege";
 	
 	// Authorizations
 	

@@ -16,14 +16,16 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource.component.schemahandling;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.NonEmptyPropertyModel;
 import com.evolveum.midpoint.web.component.input.SearchFilterPanel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.page.admin.configuration.component.EmptyOnBlurAjaxFormUpdatingBehaviour;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectPatternType;
 import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
@@ -40,9 +42,9 @@ import java.util.List;
 /**
  *  @author shood
  * */
-public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatternType>>{
+public class ResourceProtectedEditor extends BasePanel<List<ResourceObjectPatternType>> {
 
-    private static enum ChangeState{
+    private enum ChangeState {
         SKIP, FIRST, LAST
     }
 
@@ -62,23 +64,21 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
 
     private ChangeState changeState = ChangeState.FIRST;
 
-    public ResourceProtectedEditor(String id, IModel<List<ResourceObjectPatternType>> model){
+    public ResourceProtectedEditor(String id, IModel<List<ResourceObjectPatternType>> model, PageResourceWizard parentPage) {
         super(id, model);
+		initLayout(parentPage);
+		if (model.getObject() == null) {		// shouldn't occur, actually
+			model.setObject(new ArrayList<ResourceObjectPatternType>());
+		} else {
+			for (ResourceObjectPatternType pattern : model.getObject()) {
+				if (pattern.getFilter() == null) {
+					pattern.setFilter(new SearchFilterType());			// in order for SearchFilterPanel work correctly; is normalized before saving resource
+				}
+			}
+		}
     }
 
-    @Override
-    public IModel<List<ResourceObjectPatternType>> getModel(){
-        IModel<List<ResourceObjectPatternType>> model = super.getModel();
-
-        if(model.getObject() == null){
-            model.setObject(new ArrayList<ResourceObjectPatternType>());
-        }
-
-        return model;
-    }
-
-    @Override
-    protected void initLayout(){
+    protected void initLayout(final PageResourceWizard parentPage) {
         WebMarkupContainer container = new WebMarkupContainer(ID_CONTAINER);
         container.setOutputMarkupId(true);
         add(container);
@@ -100,13 +100,13 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
                         ResourceObjectPatternType account = item.getModelObject();
                         sb.append("#").append(item.getIndex()+1).append(" - ");
 
-                        if(account.getUid() != null){
-                            sb.append(account.getUid()).append(":");
-                        }
+						if (account.getUid() != null) {
+							sb.append(account.getUid()).append(":");
+						}
 
-                        if(account.getName() != null){
-                            sb.append(account.getName());
-                        }
+						if (account.getName() != null) {
+							sb.append(account.getName());
+						}
 
                         return sb.toString();
                     }
@@ -117,9 +117,10 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
 
                     @Override
                     public void onClick(AjaxRequestTarget target) {
-                        deleteDependencyPerformed(target, item);
+                        deleteProtectedAccountPerformed(target, item);
                     }
                 };
+				parentPage.addEditingVisibleBehavior(delete);
                 linkCont.add(delete);
 
                 WebMarkupContainer accountBody = new WebMarkupContainer(ID_ACCOUNT_BODY);
@@ -145,17 +146,19 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
                 item.add(accountBody);
 
                 //TODO - maybe add some validator and auto-complete functionality?
-                TextField name = new TextField<>(ID_NAME, new PropertyModel<String>(item.getModelObject(), "name"));
-                name.add(prepareAjaxOnComponentTagUpdateBehavior());
-                accountBody.add(name);
+                TextField name = new TextField<>(ID_NAME, new PropertyModel<String>(item.getModel(), "name"));
+                name.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+				parentPage.addEditingEnabledBehavior(name);
+				accountBody.add(name);
 
                 //TODO - maybe add some validator and auto-complete functionality?
-                TextField uid = new TextField<>(ID_UID, new PropertyModel<String>(item.getModelObject(), "uid"));
-                uid.add(prepareAjaxOnComponentTagUpdateBehavior());
+                TextField uid = new TextField<>(ID_UID, new PropertyModel<String>(item.getModel(), "uid"));
+                uid.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+				parentPage.addEditingEnabledBehavior(uid);
                 accountBody.add(uid);
 
                 SearchFilterPanel searchFilterPanel = new SearchFilterPanel<>(ID_FILTER_EDITOR,
-                        new PropertyModel<SearchFilterType>(item.getModelObject(), "filter"));
+						new NonEmptyPropertyModel<SearchFilterType>(item.getModel(), "filter"), parentPage.getReadOnlyModel());
                 accountBody.add(searchFilterPanel);
 
                 Label nameTooltip = new Label(ID_T_NAME);
@@ -181,15 +184,8 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
                 addProtectedAccountPerformed(target);
             }
         };
-        add(add);
-    }
-
-    private AjaxFormComponentUpdatingBehavior prepareAjaxOnComponentTagUpdateBehavior(){
-        return new AjaxFormComponentUpdatingBehavior("onBlur") {
-
-            @Override
-            protected void onUpdate(AjaxRequestTarget target) {}
-        };
+		parentPage.addEditingVisibleBehavior(add);
+		add(add);
     }
 
     private WebMarkupContainer getMainContainer(){
@@ -216,12 +212,13 @@ public class ResourceProtectedEditor extends SimplePanel<List<ResourceObjectPatt
 
     private void addProtectedAccountPerformed(AjaxRequestTarget target){
         ResourceObjectPatternType account = new ResourceObjectPatternType();
+		account.setFilter(new SearchFilterType());
         changeState = ChangeState.LAST;
         getModel().getObject().add(account);
         target.add(getMainContainer());
     }
 
-    private void deleteDependencyPerformed(AjaxRequestTarget target, ListItem<ResourceObjectPatternType> item){
+    private void deleteProtectedAccountPerformed(AjaxRequestTarget target, ListItem<ResourceObjectPatternType> item){
         changeState = ChangeState.SKIP;
         getModel().getObject().remove(item.getModelObject());
         target.add(getMainContainer());

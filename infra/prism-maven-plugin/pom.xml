@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  ~ Copyright (c) 2013 Evolveum
+  ~ Copyright (c) 2013-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,13 +20,13 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.evolveum.midpoint.infra</groupId>
     <artifactId>prism-maven-plugin</artifactId>
-    <version>3.3</version>
+    <version>3.5-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
     <name>midPoint Infrastructure - prism maven plugin</name>
     <parent>
         <artifactId>infra</artifactId>
         <groupId>com.evolveum.midpoint</groupId>
-        <version>3.3</version>
+        <version>3.5-SNAPSHOT</version>
     </parent>
     <scm>
         <connection>https://github.com/Evolveum/midpoint.git</connection>
@@ -34,6 +34,16 @@
         <url>https://fisheye.evolveum.com/browse/midPoint</url>
     </scm>
     <dependencies>
+    	<dependency>
+            <groupId>com.evolveum.midpoint.infra</groupId>
+            <artifactId>util</artifactId>
+            <version>3.5-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.evolveum.midpoint.infra</groupId>
+            <artifactId>prism</artifactId>
+            <version>3.5-SNAPSHOT</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
@@ -47,9 +57,8 @@
             <artifactId>maven-archiver</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.evolveum.midpoint.infra</groupId>
-            <artifactId>prism</artifactId>
-            <version>3.3</version>
+            <groupId>org.codehaus.plexus</groupId>
+            <artifactId>plexus-archiver</artifactId>
         </dependency>
         <dependency>
             <groupId>commons-lang</groupId>
@@ -58,6 +67,10 @@
         <dependency>
             <groupId>org.apache.velocity</groupId>
             <artifactId>velocity</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations-java5</artifactId>
         </dependency>
 
     </dependencies>

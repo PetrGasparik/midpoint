@@ -16,35 +16,181 @@
 
 package com.evolveum.midpoint.web.component.wizard;
 
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.web.component.AjaxSubmitButton;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
+import org.apache.wicket.Session;
+import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.wizard.*;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.markup.html.form.IFormSubmittingComponent;
 import org.apache.wicket.markup.html.panel.Panel;
+import org.apache.wicket.model.AbstractReadOnlyModel;
 
 /**
  * @author lazyman
  */
 public class WizardButtonBar extends Panel implements IDefaultButtonProvider {
 
-    public WizardButtonBar(String id, IWizard wizard) {
-        super(id);
-        add(new PreviousButton("previous", wizard));
-        add(new NextButton("next", wizard));
-        add(new LastButton("last", wizard));
-        add(new CancelButton("cancel", wizard));
-        add(new FinishButton("finish", wizard){
+	private static final String ID_PREVIOUS = "previous";
+	private static final String ID_NEXT = "next";
+	private static final String ID_LAST = "last";
+	private static final String ID_FINISH = "finish";
+	private static final String ID_CANCEL = "cancel";
+	private static final String ID_VALIDATE = "validate";
+	private static final String ID_SAVE = "save";
+	private static final String ID_VISUALIZE = "visualize";
+	private static final String ID_VISUALIZE_LABEL = "visualizeLabel";
 
-            /*
-            *   Finish button is always enabled, so user don't have to
-            *   click through every step of wizard every time it is used
-            * */
+    public WizardButtonBar(String id, final Wizard wizard) {
+        super(id);
+
+		VisibleEnableBehaviour showInFullWizardMode = new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				PageResourceWizard wizardPage = (PageResourceWizard) getPage();
+				return !wizardPage.isConfigurationOnly() && !wizardPage.isReadOnly();
+			}
+		};
+		boolean moreSteps = wizard.hasMoreThanOneStep();
+
+		PreviousButton previous = new PreviousButton(ID_PREVIOUS, wizard) {
+			@Override
+			public void onClick() {
+				IWizardModel wizardModel = getWizardModel();
+				IWizardStep step = wizardModel.getActiveStep();
+				step.applyState();
+				if (step.isComplete()) {
+					wizardModel.previous();
+				} else {
+					couldntSave();
+				}
+			}
+		};
+		previous.setVisible(moreSteps);
+		add(previous);
+
+		final NextButton next = new NextButton(ID_NEXT, wizard) {
+			@Override
+			public void onClick() {
+				IWizardModel wizardModel = getWizardModel();
+				IWizardStep step = wizardModel.getActiveStep();
+				step.applyState();
+				if (step.isComplete()) {
+					wizardModel.next();
+				} else {
+					couldntSave();
+				}
+			}
+		};
+		next.setVisible(moreSteps);
+		add(next);
+
+		final LastButton lastButton = new LastButton(ID_LAST, wizard);
+		lastButton.setVisible(false);		// not used at all
+		add(lastButton);
+
+        add(new CancelButton(ID_CANCEL, wizard));
+        add(new FinishButton(ID_FINISH, wizard){
+
+			@Override
+			public void onClick()
+			{
+				IWizardModel wizardModel = getWizardModel();
+				IWizardStep step = wizardModel.getActiveStep();
+				step.applyState();
+				if (step.isComplete()) {
+					getWizardModel().finish();
+				} else {
+					couldntSave();
+				}
+			}
+			/*
+             *   Finish button is always enabled, so user don't have to
+             *   click through every step of wizard every time it is used
+             */
             @Override
             public boolean isEnabled() {
-                return true;
+				final IWizardStep activeStep = wizard.getModelObject().getActiveStep();
+				return activeStep == null || activeStep.isComplete();
             }
         });
-    }
 
-    @Override
+		AjaxSubmitButton validate = new AjaxSubmitButton(ID_VALIDATE) {
+			@Override
+			protected void onSubmit(AjaxRequestTarget target, Form<?> form) {
+				Session.get().getFeedbackMessages().clear();			// TODO - ok?
+				((PageResourceWizard) getPage()).refreshIssues(target);
+			}
+			@Override
+			protected void onError(AjaxRequestTarget target, Form<?> form) {
+				target.add(((PageBase) getPage()).getFeedbackPanel());
+			}
+		};
+		validate.add(showInFullWizardMode);
+		add(validate);
+
+		final AjaxSubmitButton save = new AjaxSubmitButton(ID_SAVE) {
+			@Override
+			protected void onSubmit(AjaxRequestTarget target, Form<?> form) {
+				IWizardStep activeStep = wizard.getModelObject().getActiveStep();
+				if (activeStep != null) {
+					activeStep.applyState();
+					target.add(getPage());
+				}
+			}
+
+			@Override
+			protected void onError(AjaxRequestTarget target, Form<?> form) {
+				target.add(((PageBase) getPage()).getFeedbackPanel());
+			}
+		};
+		save.add(showInFullWizardMode);
+		add(save);
+
+		final AjaxSubmitButton visualize = new AjaxSubmitButton(ID_VISUALIZE) {
+			@Override
+			protected void onSubmit(AjaxRequestTarget target, Form<?> form) {
+				IWizardStep activeStep = wizard.getModelObject().getActiveStep();
+				PageResourceWizard wizardPage = (PageResourceWizard) getPage();
+				if (!wizardPage.isReadOnly()) {
+					if (activeStep != null) {
+						activeStep.applyState();
+						if (!activeStep.isComplete()) {
+							return;
+						}
+					}
+				}
+				((PageResourceWizard) getPage()).visualize(target);
+			}
+
+			@Override
+			protected void onError(AjaxRequestTarget target, Form<?> form) {
+				target.add(((PageBase) getPage()).getFeedbackPanel());
+			}
+		};
+		visualize.setVisible(moreSteps);
+		add(visualize);
+
+		Label visualizeLabel = new Label(ID_VISUALIZE_LABEL, new AbstractReadOnlyModel<String>() {
+			@Override
+			public String getObject() {
+				PageResourceWizard wizardPage = (PageResourceWizard) getPage();
+				return wizardPage.isReadOnly() ? getString("ResourceWizard.visualize") : getString("ResourceWizard.saveAndVisualize");
+			}
+		});
+		visualize.add(visualizeLabel);
+	}
+
+	private void couldntSave() {
+		// we should't come here but ... might happen if 'issues' window is not up-to-date
+		error(getString("Wizard.correctErrorsFirst"));
+		getPage().setResponsePage(getPage());
+	}
+
+	@Override
     public IFormSubmittingComponent getDefaultButton(IWizardModel model) {
 
         if (model.isNextAvailable()){

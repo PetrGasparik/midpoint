@@ -80,23 +80,25 @@ public enum ObjectTypes {
     LOOKUP_TABLE(LookupTableType.COMPLEX_TYPE, SchemaConstantsGenerated.C_LOOKUP_TABLE, LookupTableType.class,
             ObjectManager.MODEL, "lookupTables"),
 
-    ACCESS_CERTIFICATION_DEFINITION(AccessCertificationDefinitionType.COMPLEX_TYPE, SchemaConstantsGenerated.C_ACCESS_CERTIFICATION_DEFINITION, AccessCertificationDefinitionType.class,
+    ACCESS_CERTIFICATION_DEFINITION(AccessCertificationDefinitionType.COMPLEX_TYPE,
+            SchemaConstantsGenerated.C_ACCESS_CERTIFICATION_DEFINITION, AccessCertificationDefinitionType.class,
             ObjectManager.MODEL, "accessCertificationDefinitions"),
 
-    ACCESS_CERTIFICATION_CAMPAIGN(AccessCertificationCampaignType.COMPLEX_TYPE, SchemaConstantsGenerated.C_ACCESS_CERTIFICATION_CAMPAIGN, AccessCertificationCampaignType.class,
+    ACCESS_CERTIFICATION_CAMPAIGN(AccessCertificationCampaignType.COMPLEX_TYPE,
+            SchemaConstantsGenerated.C_ACCESS_CERTIFICATION_CAMPAIGN, AccessCertificationCampaignType.class,
             ObjectManager.MODEL, "accessCertificationCampaigns"),
 
-    SEQUENCE(SequenceType.COMPLEX_TYPE, SchemaConstantsGenerated.C_SEQUENCE, SequenceType.class, ObjectManager.MODEL, "sequences"),
+    SEQUENCE(SequenceType.COMPLEX_TYPE, SchemaConstantsGenerated.C_SEQUENCE, SequenceType.class, ObjectManager.MODEL,
+            "sequences"),
 
-    // as for now, this has to remain disabled (they could be used e.g. in audit logs, when the repo will support them)
-    //WORK_ITEM(WorkItemType.COMPLEX_TYPE, SchemaConstants.C_WORK_ITEM, WorkItemType.class, ObjectManager.WORKFLOW, "workItems"),
-    //WF_PROCESS_INSTANCE(WfProcessInstanceType.COMPLEX_TYPE, SchemaConstants.C_WF_PROCESS_INSTANCE, WfProcessInstanceType.class, ObjectManager.WORKFLOW, "wfProcessInstances"),
+    SERVICE(ServiceType.COMPLEX_TYPE, SchemaConstantsGenerated.C_SERVICE, ServiceType.class, ObjectManager.MODEL,
+            "services"),
 
     // this should be at end, because otherwise it presents itself as entry for all subtypes of ObjectType
     OBJECT(SchemaConstants.C_OBJECT_TYPE, SchemaConstants.C_OBJECT, ObjectType.class, ObjectManager.MODEL, "objects");
     
     public static enum ObjectManager {
-        PROVISIONING, TASK_MANAGER, WORKFLOW, MODEL, REPOSITORY;
+        PROVISIONING, TASK_MANAGER, MODEL, WORKFLOW, REPOSITORY;
     }
 
     private QName type;
@@ -105,8 +107,8 @@ public enum ObjectTypes {
     private ObjectManager objectManager;
     private String restType;
 
-    private ObjectTypes(QName type, QName name, Class<? extends ObjectType> classDefinition,
-                        ObjectManager objectManager, String restType) {
+    ObjectTypes(QName type, QName name, Class<? extends ObjectType> classDefinition,
+			ObjectManager objectManager, String restType) {
         this.type = type;
         this.name = name;
         this.classDefinition = classDefinition;
@@ -120,10 +122,6 @@ public enum ObjectTypes {
 
     public boolean isManagedByTaskManager() {
         return objectManager == ObjectManager.TASK_MANAGER;
-    }
-
-    public boolean isManagedByWorkflow() {
-        return objectManager == ObjectManager.WORKFLOW;
     }
 
     public String getValue() {

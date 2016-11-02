@@ -1,6 +1,5 @@
 package com.evolveum.midpoint.provisioning.ucf.impl;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -134,11 +133,11 @@ public class IcfNameMapper {
 		return convertAttributeNameToIcf(attrDef);
 	}
 
-	public String convertAttributeNameToIcf(QName attributeName, ObjectClassComplexTypeDefinition ocDef)
+	public <T> String convertAttributeNameToIcf(QName attributeName, ObjectClassComplexTypeDefinition ocDef, String desc)
 			throws SchemaException {
-		ResourceAttributeDefinition attrDef = ocDef.findAttributeDefinition(attributeName);
+		ResourceAttributeDefinition<T> attrDef = ocDef.findAttributeDefinition(attributeName);
 		if (attrDef == null) {
-			throw new SchemaException("No attribute "+attributeName+" in object class "+ocDef.getTypeName());
+			throw new SchemaException("No attribute "+attributeName+" in object class "+ocDef.getTypeName() + " " + desc);
 		}
 		return convertAttributeNameToIcf(attrDef);
 	}

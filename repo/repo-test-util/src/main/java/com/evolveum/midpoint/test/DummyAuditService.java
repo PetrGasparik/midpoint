@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,16 +23,14 @@ import java.util.*;
 import com.evolveum.midpoint.audit.api.AuditEventType;
 import com.evolveum.midpoint.schema.result.OperationResult;
 
-import net.sf.saxon.tree.wrapper.SiblingCountingNode;
-
 import org.apache.commons.lang.StringUtils;
 
 import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditEventStage;
 import com.evolveum.midpoint.audit.api.AuditService;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
+import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
@@ -45,7 +43,6 @@ import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CleanupPolicyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 import org.apache.commons.lang.Validate;
 
@@ -315,18 +312,25 @@ public class DummyAuditService implements AuditService, DebugDumpable {
 		assertEquals("Wrong number of execution deltas in audit trail (index "+index+")", expectedNumber, getExecutionDeltas(index).size());
 	}
 
-	public void assertTarget(String expectedOid) {
-		Collection<PrismObject<? extends ObjectType>> targets = new ArrayList<PrismObject<? extends ObjectType>>();
+	public void assertTarget(String expectedOid, AuditEventStage stage) {
+		Collection<PrismReferenceValue> targets = new ArrayList<>();
 		for(AuditEventRecord record: records) {
-			PrismObject<? extends ObjectType> target = record.getTarget();
-			if (target != null && expectedOid.equals(target.getOid())) {
-				return;
-			}
-			if (target != null) {
-				targets.add(target);
+			PrismReferenceValue target = record.getTarget();
+			if (stage == null || stage == record.getEventStage()) {
+				if (target != null && expectedOid.equals(target.getOid())) {
+					return;
+				}
+				if (target != null) {
+					targets.add(target);
+				}				
 			}
 		}
-		assert false : "Target "+expectedOid+" not found in audit records; found "+targets;
+		assert false : "Target "+expectedOid+" not found in audit records (stage="+stage+"); found "+targets;
+	}
+	
+	public void assertTarget(String expectedOid) {
+		assertTarget(expectedOid, AuditEventStage.REQUEST);
+		assertTarget(expectedOid, AuditEventStage.EXECUTION);
 	}
 	
 	public <O extends ObjectType,T> void assertOldValue(ChangeType expectedChangeType, Class<O> expectedClass, QName attrName, T expectedValue) {
@@ -407,8 +411,16 @@ public class DummyAuditService implements AuditService, DebugDumpable {
 
 	@Override
 	public List<AuditEventRecord> listRecords(String query, Map<String, Object> params) {
-		// TODO Auto-generated method stub
-		return null;
+		throw new UnsupportedOperationException("Object retrieval not supported");
 	}
 
+    @Override
+    public long countObjects(String query, Map<String, Object> params){
+    	throw new UnsupportedOperationException("Object retrieval not supported");
+    }
+
+	@Override
+	public boolean supportsRetrieval() {
+		return false;
+	}
 }

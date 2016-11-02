@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2015 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,16 @@
 
 package com.evolveum.midpoint.web.security;
 
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.security.api.AuthorizationConstants;
 import com.evolveum.midpoint.security.api.MidPointPrincipal;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-
 import com.evolveum.midpoint.web.application.AuthorizationAction;
 import com.evolveum.midpoint.web.application.PageDescriptor;
 import com.evolveum.midpoint.web.component.menu.MainMenuItem;
 import com.evolveum.midpoint.web.component.menu.MenuItem;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -46,31 +47,34 @@ public class SecurityUtils {
 
     public static MidPointPrincipal getPrincipalUser(Authentication authentication) {
         if (authentication == null) {
-            LOGGER.debug("Authentication not available in security current context holder.");
+            LOGGER.trace("Authentication not available in security context.");
             return null;
         }
 
         Object principal = authentication.getPrincipal();
-        if (!(principal instanceof MidPointPrincipal)) {
-            LOGGER.debug("Principal user in security context holder is {} but not type of {}",
-                    new Object[]{principal, MidPointPrincipal.class.getName()});
-            return null;
+        if (principal instanceof MidPointPrincipal) {
+        	return (MidPointPrincipal) principal;
         }
-
-        return (MidPointPrincipal) principal;
+        if (AuthorizationConstants.ANONYMOUS_USER_PRINCIPAL.equals(principal)) {
+        	// silently ignore to avoid filling the logs
+        	return null;
+        }
+        LOGGER.debug("Principal user in security context holder is {} ({}) but not type of {}",
+                    new Object[]{principal, principal.getClass(), MidPointPrincipal.class.getName()});
+        return null;
     }
 
     public static boolean isMenuAuthorized(MainMenuItem item) {
-        Class clazz = item.getPage();
-        return clazz == null || isMenuAuthorizedByPage(clazz);
+        Class clazz = item.getPageClass();
+        return clazz == null || isPageAuthorized(clazz);
     }
 
     public static boolean isMenuAuthorized(MenuItem item) {
-        Class clazz = item.getPage();
-        return isMenuAuthorizedByPage(clazz);
+        Class clazz = item.getPageClass();
+        return isPageAuthorized(clazz);
     }
 
-    private static boolean isMenuAuthorizedByPage(Class page) {
+    public static boolean isPageAuthorized(Class page) {
         if (page == null) {
             return false;
         }
@@ -89,6 +93,6 @@ public class SecurityUtils {
             }
         }
 
-        return WebMiscUtil.isAuthorized(list.toArray(new String[list.size()]));
+        return WebComponentUtil.isAuthorized(list.toArray(new String[list.size()]));
     }
 }

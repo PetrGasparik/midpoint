@@ -26,6 +26,11 @@
     <includeRef oid="10000000-0000-0000-0000-000000000223"/>
     
     <item>
+    	<ref>givenName</ref>
+    	<emphasized>false</emphasized>
+    </item>
+    
+    <item>
     	<ref>additionalName</ref>
     	<displayName>Middle Name</displayName>
     </item>
@@ -38,7 +43,9 @@
     <item>
     	<ref>costCenter</ref>
     	<displayOrder>123</displayOrder>
+    	<emphasized>true</emphasized>
     	<mapping>
+    		<name>usertemplate-costcenter-g001-weak-afterAssignemnts</name>
 	    	<strength>weak</strength>
 	    	<expression>
 	            <value>G001</value>    	
@@ -46,6 +53,7 @@
 	    	<evaluationPhase>afterAssignments</evaluationPhase>
 	    </mapping>
 	    <mapping>
+	    	<name>usertemplate-costcenter-b666-strong-conditional</name>
 	    	<authoritative>true</authoritative>
 	    	<strength>strong</strength>
 	    	<source>
@@ -67,6 +75,47 @@
     	<ref>preferredLanguage</ref>
     	<displayName>Language</displayName>
     	<valueEnumerationRef oid="70000000-0000-0000-1111-000000000001"/>
+    </item>
+
+	<!-- Normal-strength mapping with property source and target -->
+	<item>
+    	<ref>timezone</ref>
+    	<mapping>
+    		<name>usertemplate-timezone</name>
+	    	<authoritative>true</authoritative>
+	    	<source>
+	    		<path>locality</path>
+	    	</source>
+	    	<expression>
+	            <script>
+	            	<code>'High Seas/' + locality</code>
+	            </script>
+	    	</expression>
+	    </mapping>
+    </item>
+    
+    <!-- Weak mapping with property source and target -->
+	<item>
+    	<ref>locale</ref>
+    	<mapping>
+    		<name>usertemplate-locale</name>
+    		<strength>weak</strength>
+	    	<authoritative>true</authoritative>
+	    	<source>
+	    		<path>locality</path>
+	    	</source>
+	    	<expression>
+	            <script>
+	            	<code>
+	            		if (locality == null) {
+	            			return null
+	            		} else {
+	            			locality.substring(0,2).toUpperCase()
+	            		}
+	            	</code>
+	            </script>
+	    	</expression>
+	    </mapping>
     </item>
 
 	<item>
@@ -139,6 +188,39 @@
 		</condition>
     </mapping>
     
+    <!-- similar mapping with assignmentTargetSearch and more sources -->
+    <mapping>
+    	<trace>false</trace>
+    	<authoritative>true</authoritative>
+    	<source>
+    		<path>employeeType</path>
+    	</source>
+    	<source>
+    		<path>honorificPrefix</path>
+    	</source>
+    	<expression>
+            <assignmentTargetSearch>
+                <targetType>RoleType</targetType>
+                <filter>
+                    <q:equal>
+                        <q:path>name</q:path>
+                        <q:value>Thief</q:value>
+                    </q:equal>
+                </filter>
+            </assignmentTargetSearch>
+    	</expression>
+    	<target>
+    		<path>assignment</path>
+    	</target>
+    	<condition>
+    		<trace>false</trace>
+    		<script>
+    			<trace>false</trace>
+            	<code>employeeType == 'THIEF' &amp;&amp; basic.stringify(honorificPrefix) == 'Thf.'</code>
+            </script>
+		</condition>
+    </mapping>
+    
     <!-- This is quite a stupid way how to add the same role for many values of user property.
          A single mapping with a condition that has an '||' operator internally will be more efficient.
          But this is using this way to check for situation in which the same value is added and removed at the same time. -->
@@ -171,6 +253,7 @@
     		demand. We want to populate new Org object with a name and description derived from
     		the user.
     	</description>
+    	<strength>strong</strength>
     	<authoritative>true</authoritative>
     	<source>
     		<path>organizationalUnit</path>

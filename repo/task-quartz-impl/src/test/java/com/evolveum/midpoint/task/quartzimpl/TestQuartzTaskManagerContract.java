@@ -15,10 +15,7 @@
  */
 package com.evolveum.midpoint.task.quartzimpl;
 
-import static com.evolveum.midpoint.test.IntegrationTestTools.display;
-
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,7 +34,9 @@ import com.evolveum.midpoint.prism.query.AndFilter;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.schema.DeltaConvertor;
+import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.task.quartzimpl.execution.JobExecutor;
 import com.evolveum.midpoint.task.quartzimpl.handlers.NoOpTaskHandler;
@@ -46,7 +45,6 @@ import com.evolveum.midpoint.test.IntegrationTestTools;
 import com.evolveum.midpoint.test.util.TestUtil;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.prism.xml.ns._public.types_3.ItemDeltaType;
 
 import org.opends.server.types.Attribute;
 import org.opends.server.types.SearchResultEntry;
@@ -96,7 +94,7 @@ import static org.testng.AssertJUnit.*;
 @ContextConfiguration(locations = {"classpath:ctx-task.xml",
         "classpath:ctx-task-test.xml",
         "classpath:ctx-repo-cache.xml",
-        "classpath*:ctx-repository.xml",
+        "classpath*:ctx-repository-test.xml",
         "classpath:ctx-audit.xml",
         "classpath:ctx-security.xml",
         "classpath:ctx-common.xml",
@@ -261,7 +259,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
 
         // property definition
         QName bigStringQName = new QName("http://midpoint.evolveum.com/repo/test", "bigString");
-        PrismPropertyDefinition bigStringDefinition = new PrismPropertyDefinition(bigStringQName, DOMUtil.XSD_STRING, taskManager.getPrismContext());
+        PrismPropertyDefinitionImpl bigStringDefinition = new PrismPropertyDefinitionImpl(bigStringQName, DOMUtil.XSD_STRING, taskManager.getPrismContext());
         bigStringDefinition.setIndexed(false);
         bigStringDefinition.setMinOccurs(0);
         bigStringDefinition.setMaxOccurs(1);
@@ -289,7 +287,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         task001.setExtensionProperty(bigStringProperty);
 
         // brutal hack, because task extension property has no "indexed" flag when retrieved from repo
-        task001.getExtensionProperty(bigStringQName).getDefinition().setIndexed(false);
+        ((PrismPropertyDefinitionImpl) task001.getExtensionProperty(bigStringQName).getDefinition()).setIndexed(false);
 
         System.out.println("2nd round: Task before save = " + task001.debugDump());
         task001.savePendingModifications(result);   // however, this does not work, because 'modifyObject' in repo first reads object, overwriting any existing definitions ...
@@ -394,7 +392,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
 
         System.out.println("Task extension = " + task.getExtension());
 
-        PrismPropertyDefinition delayDefinition = new PrismPropertyDefinition(NoOpTaskHandler.DELAY_QNAME, DOMUtil.XSD_INT, taskManager.getPrismContext());
+        PrismPropertyDefinition delayDefinition = new PrismPropertyDefinitionImpl(SchemaConstants.NOOP_DELAY_QNAME, DOMUtil.XSD_INT, taskManager.getPrismContext());
         System.out.println("property definition = " + delayDefinition);
 
         PrismProperty<Integer> property = (PrismProperty<Integer>) delayDefinition.instantiate();
@@ -499,7 +497,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         AssertJUnit.assertNotNull(r001);
         //AssertJUnit.assertEquals("Owner OID is not correct", TASK_OWNER2_OID, task001.getOwner().getOid());
 
-        PrismProperty<?> d = task001.getExtensionProperty(NoOpTaskHandler.DELAY_QNAME);
+        PrismProperty<?> d = task001.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME);
         AssertJUnit.assertNotNull("delay extension property was not found", d);
         AssertJUnit.assertEquals("delay extension property has wrong value", (Integer) 100, d.getRealValue(Integer.class));
 
@@ -523,7 +521,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         AssertJUnit.assertEquals("Schedule after first POP is not correct", st1, task001.getSchedule());
         AssertJUnit.assertEquals("Binding after first POP is not correct", TaskBinding.TIGHT, task001.getBinding());
         AssertJUnit.assertNotSame("Task state after first POP should not be CLOSED", TaskExecutionStatus.CLOSED, task001.getExecutionStatus());
-        AssertJUnit.assertEquals("Extension element value is not correct after first POP", (Integer) 2, task001.getExtensionProperty(NoOpTaskHandler.DELAY_QNAME).getRealValue(Integer.class));
+        AssertJUnit.assertEquals("Extension element value is not correct after first POP", (Integer) 2, task001.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME).getRealValue(Integer.class));
 
         ((TaskQuartzImpl) task001).finishHandler(result);
         task001.refresh(result);
@@ -531,7 +529,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         AssertJUnit.assertEquals("Schedule after second POP is not correct", st0, task001.getSchedule());
         AssertJUnit.assertEquals("Binding after second POP is not correct", TaskBinding.LOOSE, task001.getBinding());
         AssertJUnit.assertNotSame("Task state after second POP should not be CLOSED", TaskExecutionStatus.CLOSED, task001.getExecutionStatus());
-        AssertJUnit.assertEquals("Extension element value is not correct after second POP", (Integer) 1, task001.getExtensionProperty(NoOpTaskHandler.DELAY_QNAME).getRealValue(Integer.class));
+        AssertJUnit.assertEquals("Extension element value is not correct after second POP", (Integer) 1, task001.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME).getRealValue(Integer.class));
 
         ((TaskQuartzImpl) task001).finishHandler(result);
         task001.refresh(result);
@@ -978,7 +976,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         // check if we can read the extension (xsi:type issue)
 
         Task taskTemp = taskManager.getTask(taskOid(test), result);
-        PrismProperty delay = taskTemp.getExtensionProperty(NoOpTaskHandler.DELAY_QNAME);
+        PrismProperty delay = taskTemp.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME);
         AssertJUnit.assertEquals("Delay was not read correctly", 2000, delay.getRealValue());
 
         waitFor("Waiting for task manager to execute the task", new Checker() {
@@ -1037,7 +1035,7 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
 
         // check if we can read the extension (xsi:type issue)
 
-        PrismProperty delay = task.getExtensionProperty(NoOpTaskHandler.DELAY_QNAME);
+        PrismProperty delay = task.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME);
         AssertJUnit.assertEquals("Delay was not read correctly", 1000, delay.getRealValue());
 
         // let us resume (i.e. start the task)
@@ -1231,8 +1229,8 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
             secondPrerequisiteTask.setOwner(rootTask.getOwner());
             secondPrerequisiteTask.addDependent(rootTask.getTaskIdentifier());
             secondPrerequisiteTask.pushHandlerUri(NoOpTaskHandler.HANDLER_URI, new ScheduleType(), null);
-            secondPrerequisiteTask.setExtensionPropertyValue(NoOpTaskHandler.DELAY_QNAME, 1500);
-            secondPrerequisiteTask.setExtensionPropertyValue(NoOpTaskHandler.STEPS_QNAME, 1);
+            secondPrerequisiteTask.setExtensionPropertyValue(SchemaConstants.NOOP_DELAY_QNAME, 1500);
+            secondPrerequisiteTask.setExtensionPropertyValue(SchemaConstants.NOOP_STEPS_QNAME, 1);
             secondPrerequisiteTask.setInitialExecutionStatus(TaskExecutionStatus.SUSPENDED);           // will resume it after root starts waiting for tasks
             secondPrerequisiteTask.addDependent(rootTask.getTaskIdentifier());
             taskManager.switchToBackground(secondPrerequisiteTask, result);
@@ -1419,8 +1417,8 @@ public class TestQuartzTaskManagerContract extends AbstractTestNGSpringContextTe
         Task rootTask = taskManager.createTaskInstance((PrismObject<TaskType>) (PrismObject) addObjectFromFile(taskFilename(test)), result);
         String oid = rootTask.getOid();
 
-        ObjectFilter filter1 = EqualFilter.createEqual(TaskType.F_EXECUTION_STATUS, TaskType.class, prismContext, null, TaskExecutionStatusType.WAITING);
-        ObjectFilter filter2 = EqualFilter.createEqual(TaskType.F_WAITING_REASON, TaskType.class, prismContext, null, TaskWaitingReasonType.WORKFLOW);
+        ObjectFilter filter1 = QueryBuilder.queryFor(TaskType.class, prismContext).item(TaskType.F_EXECUTION_STATUS).eq(TaskExecutionStatusType.WAITING).buildFilter();
+        ObjectFilter filter2 = QueryBuilder.queryFor(TaskType.class, prismContext).item(TaskType.F_WAITING_REASON).eq(TaskWaitingReasonType.WORKFLOW).buildFilter();
         ObjectFilter filter3 = AndFilter.createAnd(filter1, filter2);
 
         List<PrismObject<TaskType>> prisms1 = repositoryService.searchObjects(TaskType.class, ObjectQuery.createObjectQuery(filter1), null, result);

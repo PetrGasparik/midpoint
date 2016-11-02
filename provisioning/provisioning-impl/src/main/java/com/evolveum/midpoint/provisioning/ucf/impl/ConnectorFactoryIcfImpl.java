@@ -39,7 +39,9 @@ import javax.annotation.PostConstruct;
 import javax.net.ssl.TrustManager;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.prism.schema.PrismSchemaImpl;
 import org.apache.commons.configuration.Configuration;
+import org.apache.commons.lang.StringUtils;
 import org.identityconnectors.common.Version;
 import org.identityconnectors.common.security.Encryptor;
 import org.identityconnectors.common.security.EncryptorFactory;
@@ -186,13 +188,13 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 	private Set<ConnectorType> localConnectorTypes = null;
 	
 	@Autowired(required = true)
-	MidpointConfiguration midpointConfiguration;
+	private MidpointConfiguration midpointConfiguration;
 
 	@Autowired(required = true)
-	Protector protector;
+	private Protector protector;
 	
 	@Autowired(required = true)
-	PrismContext prismContext;
+	private PrismContext prismContext;
 
 	public ConnectorFactoryIcfImpl() {
 	}
@@ -278,7 +280,7 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 		if (xsdElement == null) {
 			return null;
 		}
-		PrismSchema connectorSchema = PrismSchema.parse(xsdElement, true, connectorType.toString(), prismContext);
+		PrismSchema connectorSchema = PrismSchemaImpl.parse(xsdElement, true, connectorType.toString(), prismContext);
 		return connectorSchema;
 	}
 
@@ -366,6 +368,7 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 		ConnectorType connectorType = new ConnectorType();
 		ConnectorKey key = cinfo.getConnectorKey();
 		String stringID = keyToNamespaceSuffix(key);
+		StringBuilder displayName = new StringBuilder(StringUtils.substringAfterLast(key.getConnectorName(), "."));
 		StringBuilder connectorName = new StringBuilder("ICF ");
 		connectorName.append(key.getConnectorName());
 		connectorName.append(" v");
@@ -373,6 +376,9 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 		if (hostType != null) {
 			connectorName.append(" @");
 			connectorName.append(hostType.getName());
+			displayName.append(" @");
+			displayName.append(hostType.getName());
+			
 		}
 		connectorType.setName(new PolyStringType(connectorName.toString()));
 		connectorType.setFramework(ICF_FRAMEWORK_URI);
@@ -496,7 +502,8 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 
 				// hack to split MANIFEST from name
 				try {
-					URL tmp = new URL(toUrl(u.getPath().split("!")[0]));
+                                        String upath = u.getPath();
+					URL tmp = new URL(toUrl(upath.substring(0, upath.lastIndexOf("!"))));
 					if (isThisBundleCompatible(tmp)) {
 						bundle.add(tmp);
 					} else {
@@ -807,6 +814,7 @@ public class ConnectorFactoryIcfImpl implements ConnectorFactory {
 
 	@Override
 	public void shutdown() {
+		LOGGER.info("Shutting down ConnId framework");
 		ConnectorFacadeFactory.getInstance().dispose();
 	}
 

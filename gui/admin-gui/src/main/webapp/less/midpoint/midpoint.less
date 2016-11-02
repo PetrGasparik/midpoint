@@ -1,8 +1,6 @@
-@import "../bootstrap/variables.less";
-@import "../custom/variables.less";
-@import "../bootstrap/mixins.less";
+@import "../admin-lte/bootstrap-less/variables.less";
+@import "../admin-lte/bootstrap-less/mixins.less";
 @import "midpoint-variables.less";
-@import "../custom/midpoint-variables.less";
 
 @import "prism-container.less";
 @import "wizard.less";
@@ -45,24 +43,28 @@
 /**
  *  Auto-complete drop-down choice styles
  */
-div.wicket-aa {
-  background-color: @body-bg;
-  border: 1px solid @input-border;
-  padding: 2px;
-  margin: 1px;
-  text-align: left;
+div.wicket-aa-container {
+  z-index: 20003 !important;  // used because if autocomplete used on popup
 
-  ul {
-    list-style: none;
+  div.wicket-aa {
+    background-color: @body-bg;
+    border: 1px solid @input-border;
     padding: 2px;
-    margin: 0;
+    margin: 1px;
+    text-align: left;
 
-    li {
+    ul {
+      list-style: none;
       padding: 2px;
       margin: 0;
 
-      &.selected {
-        background-color: lighten(@input-border-focus, 10%);
+      li {
+        padding: 2px;
+        margin: 0;
+
+        &.selected {
+          background-color: lighten(@input-border-focus, 10%);
+        }
       }
     }
   }
@@ -112,10 +114,11 @@ th.sortable {
     line-height: 1;
     -webkit-font-smoothing: antialiased;
 
-    float: right;
+    float: left;
     padding-top: 3px;
     color: @text-color;
     font-size: 0.7em;
+    margin-right: 5px;
   }
 
   &.asc span.sortableArrowIcon:before {
@@ -142,15 +145,6 @@ div.aceEditor {
 
 th h3 {
   margin-bottom: 0px;
-}
-
-div.mainContainer {
-  margin: 0 20px;
-}
-
-div.main-button-bar {
-  padding-top: 10px;
-  padding-bottom: 20px;
 }
 
 /*
@@ -202,16 +196,6 @@ span.yui-skin-sam {
   width: auto;
 }
 
-//div.org-tree-header {
-//  padding: 8px @padding-small-vertical @padding-small-vertical;
-//  font-weight: bold;
-//  border-bottom: 1px solid @table-border-color;
-//}
-
-div.org-tree-container {
-  overflow-y: auto;
-  margin-bottom: 20px;
-}
 
 /*
  * fix for wicket dialog
@@ -219,7 +203,20 @@ div.org-tree-container {
 h3.w_captionText {
    font-size: 18px;
 }
-
+//
+button.vertical-button-group{
+  margin: auto;
+  width: 60px;
+  padding: 10px;
+}
+div.centre
+{
+  width: 60px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 20px;
+}
 /*
  * Org. unit editor, orgType (MultiValueTextFormGroup)
  * todo this must be unified with user details for example (prism form) [lazyman]
@@ -247,6 +244,24 @@ div.tree-table-header {
     font-weight: bold;
 }
 
+div.search-popover {
 
+  & > div.more-input,
+  & > div.buttons {
+    margin: 6px;
+  }
 
+  & > div.properties {
+    padding: 0 5px;
+    border-top: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+    height: 150px;
+    max-height: 150px;
+    overflow: auto;
+    vertical-align: top;
 
+    & label {
+      font-weight: normal;
+    }
+  }
+}

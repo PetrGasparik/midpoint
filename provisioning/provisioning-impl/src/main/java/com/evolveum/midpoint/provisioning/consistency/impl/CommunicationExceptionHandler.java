@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,9 @@ package com.evolveum.midpoint.provisioning.consistency.impl;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 import com.evolveum.midpoint.provisioning.impl.ConstraintsChecker;
+import com.evolveum.midpoint.provisioning.impl.ResourceManager;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import org.apache.commons.lang.Validate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +30,6 @@ import org.springframework.stereotype.Component;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.provisioning.api.ResourceOperationDescription;
 import com.evolveum.midpoint.provisioning.consistency.api.ErrorHandler;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
@@ -48,7 +47,6 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AvailabilityStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FailedOperationTypeType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationalStateType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
@@ -59,6 +57,9 @@ public class CommunicationExceptionHandler extends ErrorHandler {
 	@Autowired
 	@Qualifier("cacheRepositoryService")
 	private RepositoryService cacheRepositoryService;
+	
+	@Autowired
+	private ResourceManager resourceManager;
 
 	public CommunicationExceptionHandler() {
 		cacheRepositoryService = null;
@@ -87,20 +88,31 @@ public class CommunicationExceptionHandler extends ErrorHandler {
 	}
 
 	@Override
-	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, boolean compensate, 
+	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, 
+			boolean doDiscovery, boolean compensate, 
 			Task task, OperationResult parentResult) throws SchemaException, GenericFrameworkException, CommunicationException,
 			ObjectNotFoundException, ObjectAlreadyExistsException, ConfigurationException {
 
+		if (!doDiscovery) {
+			parentResult.recordFatalError(ex);
+			if (ex instanceof CommunicationException) {
+				throw (CommunicationException)ex;
+			} else {
+				throw new CommunicationException(ex.getMessage(), ex);
+			}
+		}
+		
 		Validate.notNull(shadow, "Shadow must not be null.");
 		
-		OperationResult operationResult = parentResult.createSubresult("Compensation for communication problem. Operation: " + op.name());
+		OperationResult operationResult = parentResult.createSubresult("com.evolveum.midpoint.provisioning.consistency.impl.CommunicationExceptionHandler.handleError." + op.name());
 		operationResult.addParam("shadow", shadow);
 		operationResult.addParam("currentOperation", op);
 		operationResult.addParam("exception", ex.getMessage());
 
 		// first modify last availability status in the resource, so by others
 		// operations, we can know that it is down
-		modifyResourceAvailabilityStatus(shadow.getResource(), AvailabilityStatusType.DOWN, operationResult);
+		resourceManager.modifyResourceAvailabilityStatus(shadow.getResource().asPrismObject(), 
+				AvailabilityStatusType.DOWN, operationResult);
 		
 		if ((!isPostpone(shadow.getResource()) || !compensate) && !FailedOperation.GET.equals(op)){
 			LOGGER.trace("Postponing operation turned off.");
@@ -113,7 +125,7 @@ public class CommunicationExceptionHandler extends ErrorHandler {
 		ResourceOperationDescription operationDescription = null;
 		switch (op) {
 		case ADD:
-			// if it is firt time, just store the whole account to the repo
+			// if it is first time, just store the whole account to the repo
 			LOGGER.trace("Postponing ADD operation for {}", ObjectTypeUtil.toShortString(shadow));
 			ResourceType resource = shadow.getResource();
 			if (shadow.getFailedOperationType() == null) {
@@ -137,6 +149,9 @@ public class CommunicationExceptionHandler extends ErrorHandler {
 				// It is needed for shadow creation during error recovery.
 				String oid = cacheRepositoryService.addObject(shadow.asPrismObject(), null, operationResult);
 				shadow.setOid(oid);
+				if (LOGGER.isTraceEnabled()) {
+					LOGGER.trace("Stored new shadow for unfinished operation:\n{}", shadow.asPrismObject().debugDump(1));
+				}
 			
 				// if it is seccond time ,just increade the attempt number
 			} else {
@@ -245,24 +260,6 @@ public class CommunicationExceptionHandler extends ErrorHandler {
 			throw new CommunicationException(ex);
 		}
 
-	}
-
-	private void modifyResourceAvailabilityStatus(ResourceType resource, AvailabilityStatusType status, OperationResult result) throws ObjectNotFoundException, SchemaException, ObjectAlreadyExistsException {
-				
-		if (resource.getOperationalState() == null || resource.getOperationalState().getLastAvailabilityStatus() == null || resource.getOperationalState().getLastAvailabilityStatus() != status) {
-			List<PropertyDelta> modifications = new ArrayList<PropertyDelta>();
-			PropertyDelta statusDelta = PropertyDelta.createModificationReplaceProperty(OperationalStateType.F_LAST_AVAILABILITY_STATUS, resource.asPrismObject().getDefinition(), status);
-			modifications.add(statusDelta);
-			statusDelta.setParentPath(new ItemPath(ResourceType.F_OPERATIONAL_STATE));
-			cacheRepositoryService.modifyObject(ResourceType.class, resource.getOid(), modifications, result);
-		}
-		if (resource.getOperationalState() == null){
-			OperationalStateType operationalState = new OperationalStateType();
-			operationalState.setLastAvailabilityStatus(status);
-			resource.setOperationalState(operationalState);
-		} else{
-			resource.getOperationalState().setLastAvailabilityStatus(status);
-		}
 	}
 	
 	private <T extends ShadowType> Collection<ItemDelta> createShadowModification(T shadow) throws ObjectNotFoundException, SchemaException {

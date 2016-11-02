@@ -33,14 +33,16 @@
             classpath:ctx-audit.xml,
             classpath:ctx-security.xml,
             classpath:ctx-model.xml,
+            classpath:ctx-model-common.xml,
             classpath:ctx-report.xml,
             classpath*:ctx-workflow.xml,
             classpath*:ctx-notifications.xml,
             classpath:ctx-certification.xml,
-<!--             classpath:ctx-camel-imports.xml, -->
-            /WEB-INF/ctx-webapp.xml,
-            /WEB-INF/ctx-web-security.xml,
-            /WEB-INF/ctx-init.xml
+            classpath:ctx-interceptor.xml,
+            classpath*:ctx-overlay.xml,
+            /WEB-INF/ctx-init.xml,
+            /WEB-INF/ctx-webapp.xml  
+            /WEB-INF/ctx-web-security.xml
         </param-value>
     </context-param>
 
@@ -134,6 +136,10 @@
         <servlet-class>
             org.apache.cxf.transport.servlet.CXFServlet
         </servlet-class>
+        <init-param>
+			<param-name>service-list-path</param-name>
+			<param-value>midpointservices</param-value>
+		</init-param>
         <load-on-startup>1</load-on-startup>
     </servlet>
     <servlet-mapping>
@@ -163,6 +169,10 @@
     <error-page>
         <error-code>404</error-code>
         <location>/error/404</location>
+    </error-page>
+    <error-page>
+        <error-code>410</error-code>
+        <location>/error/410</location>
     </error-page>
     <error-page>
         <error-code>500</error-code>

@@ -15,22 +15,20 @@
  */
 package com.evolveum.midpoint.model.api;
 
+import java.io.IOException;
 import java.util.Collection;
 
-import com.evolveum.midpoint.model.api.context.ModelContext;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.schema.ProvisioningDiag;
 import com.evolveum.midpoint.schema.RepositoryDiag;
+import com.evolveum.midpoint.schema.RepositoryQueryDiagRequest;
+import com.evolveum.midpoint.schema.RepositoryQueryDiagResponse;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
-import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.util.exception.*;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.LogFileContentType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingEvaluationRequestType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingEvaluationResponseType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 
 /**
  * A service provided by the IDM Model focused on system diagnostic. It allows to retrieve diagnostic data
@@ -48,19 +46,23 @@ public interface ModelDiagnosticService {
 	String CLASS_NAME_WITH_DOT = ModelDiagnosticService.class.getName() + ".";
 	String REPOSITORY_SELF_TEST = CLASS_NAME_WITH_DOT + "repositorySelfTest";
     String REPOSITORY_TEST_ORG_CLOSURE_CONSISTENCY = CLASS_NAME_WITH_DOT + "repositoryTestOrgClosureConsistency";
+	String EXECUTE_REPOSITORY_QUERY = CLASS_NAME_WITH_DOT + "executeRepositoryQuery";
+	String EVALUATE_MAPPING = CLASS_NAME_WITH_DOT + "evaluateMapping";
 	String PROVISIONING_SELF_TEST = CLASS_NAME_WITH_DOT + "provisioningSelfTest";
+	String GET_LOG_FILE_CONTENT = CLASS_NAME_WITH_DOT + "getLogFileContent";
+	String GET_LOG_FILE_SIZE = CLASS_NAME_WITH_DOT + "getLogFileSize";
 	
 	/**
 	 * Provide repository run-time configuration and diagnostic information.
 	 */
-	public RepositoryDiag getRepositoryDiag(Task task, OperationResult parentResult);
+	RepositoryDiag getRepositoryDiag(Task task, OperationResult parentResult);
 	
 	/**
 	 * Runs a short, non-destructive repository self test.
 	 * This methods should never throw a (checked) exception. All the results
 	 * should be in the returned result structure (including fatal errors).
 	 */
-	public OperationResult repositorySelfTest(Task task);
+	OperationResult repositorySelfTest(Task task);
 
     /**
      * Checks a org closure table for consistency, repairing any problems found.
@@ -76,17 +78,58 @@ public interface ModelDiagnosticService {
      *
      * TODO this method is SQL service specific; it should be generalized/fixed somehow.
      */
-    public OperationResult repositoryTestOrgClosureConsistency(Task task, boolean repairIfNecessary);
+	void repositoryTestOrgClosureConsistency(Task task, boolean repairIfNecessary, OperationResult result) throws SchemaException, SecurityViolationException;
 
     /**
 	 * Runs a short, non-destructive internal provisioning test. It tests provisioning framework and
 	 * general setup. Use ModelService.testResource for testing individual resource configurations.
 	 */
-	public OperationResult provisioningSelfTest(Task task);
+	OperationResult provisioningSelfTest(Task task);
 
     /**
      * Provide provisioning run-time configuration and diagnostic information.
      */
-    public ProvisioningDiag getProvisioningDiag(Task task, OperationResult parentResult);
+	ProvisioningDiag getProvisioningDiag(Task task, OperationResult parentResult);
 
+	/**
+	 * Execute arbitrary implementation-specific query. In current implementation this means hibernate query.
+	 *
+	 * EXPERIMENTAL.
+	 */
+	RepositoryQueryDiagResponse executeRepositoryQuery(RepositoryQueryDiagRequest request, Task task, OperationResult parentResult)
+			throws SchemaException, SecurityViolationException;
+
+	/**
+	 * Execute arbitrary mapping.
+	 *
+	 * EXPERIMENTAL
+	 */
+	MappingEvaluationResponseType evaluateMapping(MappingEvaluationRequestType request, Task task, OperationResult parentResult)
+			throws SchemaException, SecurityViolationException, ExpressionEvaluationException,
+			ObjectNotFoundException;
+	/**
+	 * Exports data model
+	 *
+	 * EXPERIMENTAL. (TODO find a better place)
+	 */
+	String exportDataModel(Collection<String> resourceOids, Task task, OperationResult parentResult)
+			throws SchemaException, ConfigurationException, ObjectNotFoundException, CommunicationException, SecurityViolationException;
+
+	String exportDataModel(ResourceType resource, Task task, OperationResult parentResult)
+			throws SchemaException, ConfigurationException, ObjectNotFoundException, CommunicationException, SecurityViolationException;
+
+	// EXPERIMENTAL
+
+	/**
+	 * Returns the contents of the log file.
+	 *
+	 * @param fromPosition From absolute log file position (if non-negative); or counted from the end (if negative).
+	 * @param maxSize Max number of bytes to return.
+	 * @param task
+	 * @param parentResult
+	 */
+	LogFileContentType getLogFileContent(Long fromPosition, Long maxSize, Task task, OperationResult parentResult)
+			throws SecurityViolationException, IOException, SchemaException;
+
+	long getLogFileSize(Task task, OperationResult parentResult) throws SchemaException, SecurityViolationException;
 }

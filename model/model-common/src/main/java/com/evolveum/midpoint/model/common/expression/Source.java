@@ -19,13 +19,12 @@ import javax.xml.namespace.QName;
 
 import com.evolveum.midpoint.prism.Item;
 import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
+import com.evolveum.midpoint.util.exception.SchemaException;
 
 /**
  * @author semancik
@@ -53,7 +52,7 @@ public class Source<V extends PrismValue,D extends ItemDefinition> extends ItemD
 		this.name = name;
 	}
 	
-	public Item<V,D> getEmptyItem() {
+	public Item<V,D> getEmptyItem() throws SchemaException {
 		ItemDefinition definition = getDefinition();
 		if (definition == null) {
 			throw new IllegalStateException("No definition in source "+this);

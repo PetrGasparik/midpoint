@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,11 @@
  */
 package com.evolveum.midpoint.web.component.form.multivalue;
 
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.NonEmptyModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
@@ -37,7 +40,7 @@ import java.util.List;
 /**
  *  @author shood
  * */
-public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<List<T>> {
+public class MultiValueTextPanel<T extends Serializable> extends BasePanel<List<T>> {
 
     private static final String ID_PLACEHOLDER_CONTAINER = "placeholderContainer";
     private static final String ID_PLACEHOLDER_ADD = "placeholderAdd";
@@ -49,11 +52,11 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
 
     private static final String CSS_DISABLED = " disabled";
 
-    public MultiValueTextPanel(String id, IModel<List<T>> value){
+    public MultiValueTextPanel(String id, IModel<List<T>> value, NonEmptyModel<Boolean> readOnlyModel, boolean emptyStringToNull) {
         super(id, value);
         setOutputMarkupId(true);
 
-        initPanelLayout();
+        initLayout(readOnlyModel, emptyStringToNull);
     }
 
     @Override
@@ -65,7 +68,7 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
         return super.getModel();
     }
 
-    protected void initPanelLayout(){
+    private void initLayout(final NonEmptyModel<Boolean> readOnlyModel, final boolean emptyStringToNull) {
         WebMarkupContainer placeholderContainer = new WebMarkupContainer(ID_PLACEHOLDER_CONTAINER);
         placeholderContainer.setOutputMarkupPlaceholderTag(true);
         placeholderContainer.setOutputMarkupPlaceholderTag(true);
@@ -85,6 +88,7 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
                 addValuePerformed(target);
             }
         };
+		placeholderAdd.add(WebComponentUtil.visibleIfFalse(readOnlyModel));
         placeholderAdd.add(new AttributeAppender("class", new AbstractReadOnlyModel<String>() {
 
             @Override
@@ -105,16 +109,18 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
             @Override
             protected void populateItem(final ListItem<T> item) {
                 TextField text = new TextField<>(ID_TEXT, createTextModel(item.getModel()));
-                text.add(new AjaxFormComponentUpdatingBehavior("onblur") {
+                text.add(new AjaxFormComponentUpdatingBehavior("blur") {
                     @Override
                     protected void onUpdate(AjaxRequestTarget target) {}
                 });
                 text.add(AttributeAppender.replace("placeholder", createEmptyItemPlaceholder()));
+				text.add(WebComponentUtil.enabledIfFalse(readOnlyModel));
+				text.setConvertEmptyInputStringToNull(emptyStringToNull);
                 item.add(text);
 
                 WebMarkupContainer buttonGroup = new WebMarkupContainer(ID_BUTTON_GROUP);
                 item.add(buttonGroup);
-                initButtons(buttonGroup, item);
+                initButtons(buttonGroup, item, readOnlyModel);
             }
         };
         repeater.setOutputMarkupId(true);
@@ -129,7 +135,7 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
         add(repeater);
     }
 
-    private void initButtons(WebMarkupContainer buttonGroup, final ListItem<T> item) {
+    private void initButtons(WebMarkupContainer buttonGroup, final ListItem<T> item, NonEmptyModel<Boolean> readOnlyModel) {
         AjaxLink plus = new AjaxLink(ID_PLUS) {
 
             @Override
@@ -138,6 +144,7 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
             }
         };
         plus.add(new AttributeAppender("class", getPlusClassModifier(item)));
+		plus.add(WebComponentUtil.visibleIfFalse(readOnlyModel));
         buttonGroup.add(plus);
 
         AjaxLink minus = new AjaxLink(ID_MINUS) {
@@ -148,6 +155,7 @@ public class MultiValueTextPanel<T extends Serializable> extends SimplePanel<Lis
             }
         };
         minus.add(new AttributeAppender("class", getMinusClassModifier()));
+		minus.add(WebComponentUtil.visibleIfFalse(readOnlyModel));
         buttonGroup.add(minus);
     }
 

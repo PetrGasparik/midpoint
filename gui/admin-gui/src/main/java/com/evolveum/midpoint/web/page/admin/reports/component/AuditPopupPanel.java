@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,12 @@
 package com.evolveum.midpoint.web.page.admin.reports.component;
 
 import com.evolveum.midpoint.audit.api.AuditEventType;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.web.component.form.DateFormGroup;
 import com.evolveum.midpoint.web.component.form.DropDownFormGroup;
 import com.evolveum.midpoint.web.component.form.TextFormGroup;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
 import com.evolveum.midpoint.web.page.admin.reports.dto.AuditReportDto;
-import com.evolveum.midpoint.web.util.DateValidator;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ExportType;
 
 import org.apache.wicket.Component;
@@ -39,7 +38,7 @@ import javax.xml.datatype.XMLGregorianCalendar;
  *
  * @author lazyman
  */
-public class AuditPopupPanel extends SimplePanel<AuditReportDto> {
+public class AuditPopupPanel extends BasePanel<AuditReportDto> {
 
     private static final String ID_NAME = "name";
     private static final String ID_DATE_FROM = "dateFrom";
@@ -58,7 +57,7 @@ public class AuditPopupPanel extends SimplePanel<AuditReportDto> {
     }
 
     @SuppressWarnings("serial")
-    protected void initLayout(final Component component) {
+    private void initLayout(final Component component) {
 
         TextFormGroup name = new TextFormGroup(ID_NAME, new PropertyModel<String>(getModel(), AuditReportDto.F_NAME),
                 createStringResource("ObjectType.name"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);
@@ -68,13 +67,13 @@ public class AuditPopupPanel extends SimplePanel<AuditReportDto> {
                 createStringResource("ObjectType.description"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);
         add(description);
 
-        IModel choices = WebMiscUtil.createReadonlyModelFromEnum(ExportType.class);
+        IModel choices = WebComponentUtil.createReadonlyModelFromEnum(ExportType.class);
         IChoiceRenderer renderer = new EnumChoiceRenderer();
         DropDownFormGroup exportType = new DropDownFormGroup(ID_EXPORT_TYPE, new PropertyModel<ExportType>(getModel(), AuditReportDto.F_EXPORT_TYPE),
                 choices, renderer, createStringResource("AuditPopulPanel.exportType.label"), ID_LABEL_SIZE, ID_INPUT_SIZE, false);
         add(exportType);
 
-        choices = WebMiscUtil.createReadonlyModelFromEnum(AuditEventType.class);
+        choices = WebComponentUtil.createReadonlyModelFromEnum(AuditEventType.class);
         DropDownFormGroup auditEventType = new DropDownFormGroup(ID_AUDITEVENTTYPE, new PropertyModel<AuditEventType>(getModel(), AuditReportDto.F_AUDITEVENTTYPE),
                 choices, renderer, createStringResource("AuditPopupPanel.auditEventType"), ID_LABEL_SIZE, ID_INPUT_SIZE, false);
         add(auditEventType);

@@ -1,15 +1,20 @@
 package com.evolveum.midpoint.web.component.wizard;
 
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.model.NonEmptyModel;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.component.wizard.resource.*;
-import com.evolveum.midpoint.web.page.admin.resources.PageResources;
+import com.evolveum.midpoint.web.component.wizard.resource.dto.WizardIssuesDto;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
+import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.markup.html.AjaxFallbackLink;
 import org.apache.wicket.extensions.wizard.*;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.model.IModel;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -18,19 +23,26 @@ import java.util.List;
 /**
  * @author lazyman
  */
-public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelListener, IWizard {
+public class Wizard extends BasePanel<IWizardModel> implements IWizardModelListener, IWizard {
 
     private static final String ID_FORM = "form";
     private static final String ID_HEADER = "header";
     private static final String ID_STEPS = "steps";
     private static final String ID_VIEW = "view";
+    private static final String ID_ISSUES = "issues";
     private static final String ID_BUTTONS = "buttons";
+    private static final String ID_AUTO_SAVE_NOTE = "autoSaveNote";
+    private static final String ID_READ_ONLY_NOTE = "readOnlyNote";
+    private static final String ID_READ_ONLY_SWITCH = "readOnlySwitch";
 
-    public Wizard(String id, IModel<IWizardModel> model) {
+	@NotNull private final NonEmptyModel<WizardIssuesDto> issuesModel;
+
+    public Wizard(String id, IModel<IWizardModel> model, @NotNull NonEmptyModel<WizardIssuesDto> issuesModel) {
         super(id, model);
+		this.issuesModel = issuesModel;
+		initLayout();
     }
 
-    @Override
     protected void initLayout() {
         Form form = new Form(ID_FORM);
         add(form);
@@ -58,6 +70,8 @@ public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelLis
                 changeStep(target, dto);
             }
         };
+		steps.setOutputMarkupId(true);
+		steps.setVisible(hasMoreThanOneStep());
         form.add(steps);
 
         WebMarkupContainer header = new WebMarkupContainer(ID_HEADER);
@@ -66,15 +80,71 @@ public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelLis
         WebMarkupContainer view = new WebMarkupContainer(ID_VIEW);
         form.add(view);
 
+		WizardIssuesPanel issuesPanel = new WizardIssuesPanel(ID_ISSUES, issuesModel);
+		issuesPanel.setOutputMarkupId(true);
+		form.add(issuesPanel);
+
         WizardButtonBar buttons = new WizardButtonBar(ID_BUTTONS, this);
+		buttons.setOutputMarkupId(true);
         form.add(buttons);
+
+		WebMarkupContainer autoSaveNote = new WebMarkupContainer(ID_AUTO_SAVE_NOTE);
+		autoSaveNote.add(new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				PageResourceWizard wizardPage = (PageResourceWizard) getPageBase();
+				return !wizardPage.isConfigurationOnly() && !wizardPage.isReadOnly();
+			}
+		});
+		form.add(autoSaveNote);
+
+		WebMarkupContainer readOnlyNote = new WebMarkupContainer(ID_READ_ONLY_NOTE);
+		readOnlyNote.add(new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				PageResourceWizard wizardPage = (PageResourceWizard) getPageBase();
+				return wizardPage.isReadOnly();
+			}
+		});
+		form.add(readOnlyNote);
+
+		readOnlyNote.add(new AjaxFallbackLink<String>(ID_READ_ONLY_SWITCH) {
+			@Override
+			public void onClick(AjaxRequestTarget ajaxRequestTarget) {
+				PageResourceWizard wizardPage = (PageResourceWizard) getPageBase();
+				wizardPage.resetModels();			// e.g. to switch configuration models to read-write
+				wizardPage.setReadOnly(false);
+				ajaxRequestTarget.add(wizardPage);
+			}
+		});
 
         IWizardModel wizard = getWizardModel();
         wizard.addListener(this);
         wizard.reset();
     }
 
-    private List<WizardStepDto> loadSteps() {
+	public boolean hasMoreThanOneStep() {
+		Iterator<IWizardStep> iter = getWizardModel().stepIterator();
+		if (!iter.hasNext()) {
+			return false;
+		}
+		iter.next();
+		return iter.hasNext();
+	}
+
+	public WizardIssuesPanel getIssuesPanel() {
+		return (WizardIssuesPanel) get(createComponentPath(ID_FORM, ID_ISSUES));
+	}
+
+	public Component getSteps() {
+		return get(createComponentPath(ID_FORM, ID_STEPS));
+	}
+
+	public Component getButtons() {
+		return get(createComponentPath(ID_FORM, ID_BUTTONS));
+	}
+
+	private List<WizardStepDto> loadSteps() {
         List<WizardStepDto> steps = new ArrayList<>();
 
         IWizardModel model = getWizardModel();
@@ -83,9 +153,9 @@ public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelLis
             IWizardStep step = iterator.next();
             if (step instanceof WizardStep) {
                 WizardStep wizStep = (WizardStep) step;
-                steps.add(new WizardStepDto(wizStep.getTitle(), false, true));
+                steps.add(new WizardStepDto(wizStep.getTitle(), wizStep, false, true));
             } else {
-                steps.add(new WizardStepDto("Wizard.unknownStep", false, true));
+                steps.add(new WizardStepDto("Wizard.unknownStep", null, false, true));
             }
         }
 
@@ -134,23 +204,26 @@ public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelLis
 
     @Override
     public void onCancel() {
-        setResponsePage(new PageResources(false));
-        warn(getString("Wizard.message.cancel"));
+		getPageBase().redirectBack();
+        //setResponsePage(new PageResources(false));
+        //warn(getString("Wizard.message.cancel"));
     }
 
     @Override
     public void onFinish() {
-        if(getModel() != null && getModel().getObject() != null){
-            IWizardStep activeStep = getModel().getObject().getActiveStep();
+		// 'show result' is already done
+//        if(getModel() != null && getModel().getObject() != null){
+//            IWizardStep activeStep = getModel().getObject().getActiveStep();
+//
+//            if(activeStep != null){
+//                OperationResult result = ((WizardStep)activeStep).getResult();
+//				if (result != null) {
+//					getPageBase().showResult(result);
+//				}
+//            }
+//        }
 
-            if(activeStep != null){
-                OperationResult result = ((WizardStep)activeStep).getResult();
-
-                getPageBase().showResultInSession(result);
-            }
-        }
-
-        setResponsePage(new PageResources(false));
+		getPageBase().redirectBack();
     }
 
     private void changeStep(AjaxRequestTarget target, WizardStepDto dto){
@@ -214,4 +287,8 @@ public class Wizard extends SimplePanel<IWizardModel> implements IWizardModelLis
 
         target.add(this, getPageBase().getFeedbackPanel());
     }
+//
+//	public boolean noErrors() {
+//		return !issuesModel.getObject().hasErrors();
+//	}
 }

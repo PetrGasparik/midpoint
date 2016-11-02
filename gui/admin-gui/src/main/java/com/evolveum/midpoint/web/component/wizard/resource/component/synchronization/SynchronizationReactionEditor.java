@@ -16,28 +16,35 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource.component.synchronization;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.CommonException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.form.multivalue.MultiValueDropDownPanel;
 import com.evolveum.midpoint.web.component.form.multivalue.MultiValueTextEditPanel;
-import com.evolveum.midpoint.web.component.input.ThreeStateBooleanPanel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.input.ObjectReferenceChoiceRenderer;
+import com.evolveum.midpoint.web.component.input.StringChoiceRenderer;
+import com.evolveum.midpoint.web.component.input.TriStateComboPanel;
+import com.evolveum.midpoint.web.component.wizard.resource.SynchronizationStep;
+import com.evolveum.midpoint.web.page.admin.configuration.component.EmptyOnChangeAjaxFormUpdatingBehavior;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
 import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.form.*;
-import org.apache.wicket.model.AbstractReadOnlyModel;
-import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.Model;
-import org.apache.wicket.model.PropertyModel;
+import org.apache.wicket.markup.html.list.ListItem;
+import org.apache.wicket.model.*;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,7 +54,7 @@ import java.util.Map;
 /**
  *  @author shood
  * */
-public class SynchronizationReactionEditor extends SimplePanel<SynchronizationReactionType>{
+public class SynchronizationReactionEditor extends BasePanel<SynchronizationReactionType> {
 
     private static final Trace LOGGER = TraceManager.getTrace(SynchronizationReactionEditor.class);
 
@@ -73,43 +80,45 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
 
     private Map<String, String> objectTemplateMap = new HashMap<>();
 
-    public SynchronizationReactionEditor(String id, IModel<SynchronizationReactionType> model){
+	@NotNull private final SynchronizationStep parentStep;
+
+    public SynchronizationReactionEditor(String id, IModel<SynchronizationReactionType> model, SynchronizationStep parentStep,
+			PageResourceWizard parentPage) {
         super(id, model);
+		this.parentStep = parentStep;
+		initLayout(parentPage);
     }
 
-    @Override
-    protected void initLayout(){
-        Label label = new Label(ID_LABEL, new AbstractReadOnlyModel<String>() {
-
-            @Override
-            public String getObject() {
-                SynchronizationReactionType reaction = getModelObject();
-
-                if(reaction.getName() == null && reaction.getSituation() == null){
-                    return getString("SynchronizationReactionEditor.label.new");
-                } else {
-                    return getString("SynchronizationReactionEditor.label.edit",
-                            reaction.getName() != null ? reaction.getName() : getString("MultiValueField.nameNotSpecified"));
-                }
-            }
-        });
+	protected void initLayout(PageResourceWizard parentPage) {
+		Label label = new Label(ID_LABEL, new ResourceModel("SynchronizationReactionEditor.label.edit"));
         add(label);
 
         TextField name = new TextField<>(ID_NAME, new PropertyModel<String>(getModel(), "name"));
+		name.add(new ReactionListUpdateBehavior());
+		parentPage.addEditingEnabledBehavior(name);
         add(name);
 
         TextArea description = new TextArea<>(ID_DESCRIPTION, new PropertyModel<String>(getModel(), "description"));
+		parentPage.addEditingEnabledBehavior(description);
         add(description);
 
         DropDownChoice situation = new DropDownChoice<>(ID_SITUATION,
                 new PropertyModel<SynchronizationSituationType>(getModel(), "situation"),
-                WebMiscUtil.createReadonlyModelFromEnum(SynchronizationSituationType.class),
+                WebComponentUtil.createReadonlyModelFromEnum(SynchronizationSituationType.class),
                 new EnumChoiceRenderer<SynchronizationSituationType>(this));
         situation.setNullValid(true);
+		situation.add(new ReactionListUpdateBehavior());
+		parentPage.addEditingEnabledBehavior(situation);
+		situation.add(new EmptyOnChangeAjaxFormUpdatingBehavior() {
+			@Override
+			protected void onUpdate(AjaxRequestTarget target) {
+				((PageResourceWizard) getPageBase()).refreshIssues(target);
+			}
+		});
         add(situation);
 
         MultiValueDropDownPanel channel = new MultiValueDropDownPanel<String>(ID_CHANNEL,
-                new PropertyModel<List<String>>(getModel(), "channel"), true){
+                new PropertyModel<List<String>>(getModel(), "channel"), true, parentPage.getReadOnlyModel()) {
 
             @Override
             protected String createNewEmptyItem() {
@@ -122,36 +131,25 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
 
                     @Override
                     public List<String> getObject() {
-                        return WebMiscUtil.getChannelList();
+                        return WebComponentUtil.getChannelList();
                     }
                 };
             }
 
             @Override
             protected IChoiceRenderer<String> createRenderer() {
-                return new IChoiceRenderer<String>() {
-
-                    @Override
-                    public Object getDisplayValue(String object) {
-                        String[] fields = object.split("#");
-                        String label = fields[1];
-
-                        return getString("Channel." + label);
-                    }
-
-                    @Override
-                    public String getIdValue(String object, int index) {
-                        return Integer.toString(index);
-                    }
-                };
+            	return new StringChoiceRenderer("Channel.", "#");
+            	
             }
         };
         add(channel);
-
-        ThreeStateBooleanPanel synchronize = new ThreeStateBooleanPanel(ID_SYNCHRONIZE, new PropertyModel<Boolean>(getModel(), "synchronize"));
+        TriStateComboPanel synchronize = new TriStateComboPanel(ID_SYNCHRONIZE, new PropertyModel<Boolean>(getModel(), "synchronize"));
+		synchronize.getBaseFormComponent().add(new ReactionListUpdateBehavior());
+		parentPage.addEditingEnabledBehavior(synchronize);
         add(synchronize);
 
         CheckBox reconcile = new CheckBox(ID_RECONCILE, new PropertyModel<Boolean>(getModel(), "reconcile"));
+		parentPage.addEditingEnabledBehavior(reconcile);
         add(reconcile);
 
         DropDownChoice objectTemplateRef = new DropDownChoice<>(ID_OBJECT_TEMPLATE_REF,
@@ -160,25 +158,15 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
 
                     @Override
                     public List<ObjectReferenceType> getObject() {
-                        return createObjectTemplateList();
+                        return WebModelServiceUtils.createObjectReferenceList(ObjectTemplateType.class, getPageBase(), objectTemplateMap);
                     }
-                }, new IChoiceRenderer<ObjectReferenceType>() {
-
-            @Override
-            public Object getDisplayValue(ObjectReferenceType object) {
-                return objectTemplateMap.get(object.getOid());
-            }
-
-            @Override
-            public String getIdValue(ObjectReferenceType object, int index) {
-                return Integer.toString(index);
-            }
-        });
+                }, new ObjectReferenceChoiceRenderer(objectTemplateMap));
         objectTemplateRef.setNullValid(true);
+		parentPage.addEditingEnabledBehavior(objectTemplateRef);
         add(objectTemplateRef);
 
         MultiValueTextEditPanel action = new MultiValueTextEditPanel<SynchronizationActionType>(ID_ACTION,
-                new PropertyModel<List<SynchronizationActionType>>(getModel(), "action"), false){
+                new PropertyModel<List<SynchronizationActionType>>(getModel(), "action"), null, false, true, parentPage.getReadOnlyModel()) {
 
             @Override
             protected IModel<String> createTextModel(final IModel<SynchronizationActionType> model) {
@@ -187,27 +175,32 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
                     @Override
                     public String getObject() {
                         SynchronizationActionType action = model.getObject();
-
-                        if(action == null){
+                        if (action == null) {
                             return null;
                         }
-
                         StringBuilder sb = new StringBuilder();
-                        sb.append(action.getName() != null ? action.getName() : " - ");
-
-                        if(action.getHandlerUri() != null){
-                            String[] handlerUriSplit = action.getHandlerUri().split("#");
-                            sb.append("(");
-                            sb.append(handlerUriSplit[handlerUriSplit.length - 1]);
-                            sb.append(")");
+                        sb.append(action.getName() != null ? action.getName() : "-");
+                        if (action.getHandlerUri() != null) {
+                            sb.append(" (").append(StringUtils.substringAfter(action.getHandlerUri(), "#")).append(")");
                         }
-
                         return sb.toString();
                     }
                 };
             }
 
-            @Override
+			@Override
+			protected void performAddValueHook(AjaxRequestTarget target, SynchronizationActionType added) {
+				target.add(parentStep.getReactionList());
+				((PageResourceWizard) getPageBase()).refreshIssues(target);
+			}
+
+			@Override
+			protected void performRemoveValueHook(AjaxRequestTarget target, ListItem<SynchronizationActionType> item) {
+				target.add(parentStep.getReactionList());
+				((PageResourceWizard) getPageBase()).refreshIssues(target);
+			}
+
+			@Override
             protected SynchronizationActionType createNewEmptyItem(){
                 return new SynchronizationActionType();
             }
@@ -247,12 +240,12 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
         initModals();
     }
 
-    private void initModals(){
+    private void initModals() {
         ModalWindow actionEditor = new SynchronizationActionEditorDialog(ID_ACTION_MODAL, null){
 
             @Override
             public void updateComponents(AjaxRequestTarget target){
-                target.add(SynchronizationReactionEditor.this.get(ID_ACTION));
+                target.add(SynchronizationReactionEditor.this.get(ID_ACTION), parentStep.getReactionList());
             }
         };
         add(actionEditor);
@@ -268,9 +261,9 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
         try{
             templates = getPageBase().getModelService().searchObjects(ObjectTemplateType.class, new ObjectQuery(), null, task, result);
             result.recomputeStatus();
-        } catch (Exception e){
+        } catch (CommonException|RuntimeException e){
             result.recordFatalError("Couldn't load object templates from repository. ", e);
-            LoggingUtils.logException(LOGGER, "Couldn't load object templates from repository", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load object templates from repository", e);
         }
 
         // TODO - show error somehow
@@ -282,7 +275,7 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
             ObjectReferenceType ref;
 
             for(PrismObject<ObjectTemplateType> template: templates){
-                objectTemplateMap.put(template.getOid(), WebMiscUtil.getName(template));
+                objectTemplateMap.put(template.getOid(), WebComponentUtil.getName(template));
                 ref = new ObjectReferenceType();
                 ref.setType(ObjectTemplateType.COMPLEX_TYPE);
                 ref.setOid(template.getOid());
@@ -298,4 +291,11 @@ public class SynchronizationReactionEditor extends SimplePanel<SynchronizationRe
         window.updateModel(target, action);
         window.show(target);
     }
+
+	private class ReactionListUpdateBehavior extends EmptyOnChangeAjaxFormUpdatingBehavior {
+		@Override
+		protected void onUpdate(AjaxRequestTarget target) {
+			target.add(parentStep.getReactionList());
+		}
+	}
 }

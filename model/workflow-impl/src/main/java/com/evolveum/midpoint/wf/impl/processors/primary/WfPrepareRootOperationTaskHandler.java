@@ -16,10 +16,12 @@
 
 package com.evolveum.midpoint.wf.impl.processors.primary;
 
+import com.evolveum.midpoint.model.api.context.ModelProjectionContext;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
 import com.evolveum.midpoint.model.impl.lens.LensFocusContext;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.schema.ObjectTreeDeltas;
+import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.*;
 import com.evolveum.midpoint.task.api.TaskRunResult.TaskRunResultStatus;
@@ -27,17 +29,18 @@ import com.evolveum.midpoint.util.exception.*;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.wf.impl.WfConfiguration;
-import com.evolveum.midpoint.wf.impl.jobs.Job;
-import com.evolveum.midpoint.wf.impl.jobs.JobController;
-import com.evolveum.midpoint.wf.impl.jobs.WfTaskUtil;
+import com.evolveum.midpoint.wf.impl.tasks.WfTask;
+import com.evolveum.midpoint.wf.impl.tasks.WfTaskController;
 
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * This handler takes all changes from child tasks and puts them into model context of this task.
@@ -47,8 +50,7 @@ import java.util.List;
 @Component
 public class WfPrepareRootOperationTaskHandler implements TaskHandler {
 
-    // should be available only within the context of primary change processor
-	static final String HANDLER_URI = "http://midpoint.evolveum.com/xml/ns/public/workflow/prepare-root-operation/handler-3";
+	public static final String HANDLER_URI = "http://midpoint.evolveum.com/xml/ns/public/workflow/prepare-root-operation/handler-3";
 
     private static final Trace LOGGER = TraceManager.getTrace(WfPrepareRootOperationTaskHandler.class);
 
@@ -57,7 +59,7 @@ public class WfPrepareRootOperationTaskHandler implements TaskHandler {
     private TaskManager taskManager;
 
     @Autowired
-    private JobController jobController;
+    private WfTaskController wfTaskController;
 
     @PostConstruct
     public void init() {
@@ -76,13 +78,13 @@ public class WfPrepareRootOperationTaskHandler implements TaskHandler {
 
             OperationResult result = task.getResult();
 
-            Job rootJob = jobController.recreateRootJob(task);
-            List<Job> children = rootJob.listChildren(result);
+            WfTask rootWfTask = wfTaskController.recreateRootWfTask(task);
+            List<WfTask> children = rootWfTask.listChildren(result);
 
-            LensContext rootContext = (LensContext) rootJob.retrieveModelContext(result);
+            LensContext rootContext = (LensContext) rootWfTask.retrieveModelContext(result);
 
             boolean changed = false;
-            for (Job child : children) {
+            for (WfTask child : children) {
 
                 if (child.getTaskExecutionStatus() != TaskExecutionStatus.CLOSED) {
                     throw new IllegalStateException("Child task " + child + " is not in CLOSED state; its state is " + child.getTaskExecutionStatus());
@@ -93,33 +95,55 @@ public class WfPrepareRootOperationTaskHandler implements TaskHandler {
                         LOGGER.trace("Child job {} has model context present - skipping fetching deltas from it.", child);
                     }
                 } else {
-                    List<ObjectDelta<Objectable>> deltas = child.retrieveResultingDeltas();
+                    ObjectTreeDeltas deltas = child.retrieveResultingDeltas();
                     if (LOGGER.isTraceEnabled()) {
-                        LOGGER.trace("Child job {} returned {} deltas", child, deltas.size());
+                        LOGGER.trace("Child job {} returned {} deltas", child, deltas != null ? deltas.getDeltaList().size() : 0);
                     }
-                    LensFocusContext focusContext = rootContext.getFocusContext();
-                    for (ObjectDelta delta : deltas) {
-                        if (LOGGER.isTraceEnabled()) {
-                            LOGGER.trace("Adding delta from job {} to root model context; delta = {}", child, delta.debugDump(0));
+                    if (deltas != null) {
+                        LensFocusContext focusContext = rootContext.getFocusContext();
+                        ObjectDelta focusDelta = deltas.getFocusChange();
+                        if (focusDelta != null) {
+                            if (LOGGER.isTraceEnabled()) {
+                                LOGGER.trace("Adding delta from job {} to root model context; delta = {}", child, focusDelta.debugDump(0));
+                            }
+                            if (focusContext.getPrimaryDelta() != null && !focusContext.getPrimaryDelta().isEmpty()) {
+                                focusContext.addPrimaryDelta(focusDelta);
+                            } else {
+                                focusContext.setPrimaryDelta(focusDelta);
+                            }
+                            changed = true;
                         }
-                        if (focusContext.getPrimaryDelta() != null && !focusContext.getPrimaryDelta().isEmpty()) {
-                            focusContext.addPrimaryDelta(delta);
-                        } else {
-                            focusContext.setPrimaryDelta(delta);
+                        Set<Map.Entry<ResourceShadowDiscriminator, ObjectDelta<ShadowType>>> entries = deltas.getProjectionChangeMapEntries();
+                        for (Map.Entry<ResourceShadowDiscriminator, ObjectDelta<ShadowType>> entry : entries) {
+                            if (LOGGER.isTraceEnabled()) {
+                                LOGGER.trace("Adding projection delta from job {} to root model context; rsd = {}, delta = {}", child, entry.getKey(),
+                                        entry.getValue().debugDump());
+                            }
+                            ModelProjectionContext projectionContext = rootContext.findProjectionContext(entry.getKey());
+                            if (projectionContext == null) {
+                                // TODO more liberal treatment?
+                                throw new IllegalStateException("No projection context for " + entry.getKey());
+                            }
+                            if (projectionContext.getPrimaryDelta() != null && !projectionContext.getPrimaryDelta().isEmpty()) {
+                                projectionContext.addPrimaryDelta(entry.getValue());
+                            } else {
+                                projectionContext.setPrimaryDelta(entry.getValue());
+                            }
+                            changed = true;
                         }
-                        changed = true;
                     }
                 }
             }
 
-            if (rootContext.getFocusContext().getPrimaryDelta() == null || rootContext.getFocusContext().getPrimaryDelta().isEmpty()) {
-                rootJob.setSkipModelContextProcessingProperty(true, result);
+
+            if (!rootContext.hasAnyPrimaryChange()) {
+                rootContext = null; // deletes the model context
                 changed = true;     // regardless of whether rootContext was changed or not
             }
 
             if (changed) {
-                rootJob.storeModelContext(rootContext);
-                rootJob.commitChanges(result);
+                rootWfTask.storeModelContext(rootContext);
+                rootWfTask.commitChanges(result);
             }
 
         } catch (SchemaException e) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 package com.evolveum.midpoint.web.component.input;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.AjaxButton;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.behavior.AttributeAppender;
 import org.apache.wicket.model.AbstractReadOnlyModel;
@@ -31,7 +32,7 @@ import org.apache.wicket.model.IModel;
  *
  *  @author shood
  * */
-public class TwoStateBooleanPanel extends SimplePanel<Boolean>{
+public class TwoStateBooleanPanel extends BasePanel<Boolean>{
 
     private static final String ID_BUTTON_ONE = "optionOne";
     private static final String ID_BUTTON_TWO = "optionTwo";
@@ -50,7 +51,7 @@ public class TwoStateBooleanPanel extends SimplePanel<Boolean>{
         initLayout(optionOneLabel, optionTwoLabel, buttonCssClass);
     }
 
-    protected void initLayout(final String optionOneLabel, final String optionTwoLabel, final String buttonCssClass){
+    private void initLayout(final String optionOneLabel, final String optionTwoLabel, final String buttonCssClass){
 
         AjaxButton buttonFalse = new AjaxButton(ID_BUTTON_ONE, new AbstractReadOnlyModel<String>() {
 
@@ -129,4 +130,9 @@ public class TwoStateBooleanPanel extends SimplePanel<Boolean>{
      *  Override to provide custom action on change state event
      * */
     protected void onStateChanged(AjaxRequestTarget target, Boolean newValue){}
+
+    public void setPanelEnabled(boolean isEnabled){
+        get(ID_BUTTON_ONE).setEnabled(isEnabled);
+        get(ID_BUTTON_TWO).setEnabled(isEnabled);
+    }
 }

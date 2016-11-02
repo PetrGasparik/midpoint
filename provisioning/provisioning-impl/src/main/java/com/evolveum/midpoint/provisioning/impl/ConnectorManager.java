@@ -16,7 +16,6 @@
 package com.evolveum.midpoint.provisioning.impl;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +23,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,7 +32,6 @@ import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-import com.evolveum.midpoint.common.monitor.InternalMonitor;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.prism.PrismContainer;
 import com.evolveum.midpoint.prism.PrismContext;
@@ -44,9 +44,13 @@ import com.evolveum.midpoint.provisioning.ucf.api.ConnectorFactory;
 import com.evolveum.midpoint.provisioning.ucf.api.ConnectorInstance;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
 import com.evolveum.midpoint.repo.api.RepositoryService;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.schema.internals.InternalMonitor;
 import com.evolveum.midpoint.schema.processor.ResourceSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.statistics.ConnectorOperationalStatus;
 import com.evolveum.midpoint.schema.util.ConnectorTypeUtil;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
@@ -60,6 +64,7 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorHostType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
@@ -142,7 +147,7 @@ public class ConnectorManager {
 			throws ObjectNotFoundException, SchemaException, CommunicationException, ConfigurationException {
 		ResourceType resourceType = resource.asObjectable();
 		
-		ConnectorType connectorType = getConnectorType(resourceType, result);
+		ConnectorType connectorType = getConnectorTypeReadOnly(resourceType, result);
 		ConnectorInstance connector = null;
 		try {
 
@@ -153,10 +158,16 @@ public class ConnectorManager {
 			result.recordFatalError(e.getMessage(), e);
 			throw new ObjectNotFoundException(e.getMessage(), e);
 		}
+		ConnectorConfigurationType connectorConfigurationType = resourceType.getConnectorConfiguration();
+		if (connectorConfigurationType == null) {
+			SchemaException e = new SchemaException("No connector configuration in "+resource);
+			result.recordFatalError(e);
+			throw e;
+		}
 		try {
-			connector.configure(resourceType.getConnectorConfiguration().asPrismContainerValue(), result);
+			connector.configure(connectorConfigurationType.asPrismContainerValue(), result);
 			
-			ResourceSchema resourceSchema = RefinedResourceSchema.getResourceSchema(resourceType, prismContext);
+			ResourceSchema resourceSchema = RefinedResourceSchemaImpl.getResourceSchema(resourceType, prismContext);
 			Collection<Object> capabilities = ResourceTypeUtil.getNativeCapabilitiesCollection(resourceType);
 			
 			connector.initialize(resourceSchema, capabilities, ResourceTypeUtil.isCaseIgnoreAttributeNames(resourceType), result);
@@ -184,7 +195,7 @@ public class ConnectorManager {
 		return connector;
 	}
 
-	public ConnectorType getConnectorType(ResourceType resourceType, OperationResult result)
+	public ConnectorType getConnectorTypeReadOnly(ResourceType resourceType, OperationResult result)
 			throws ObjectNotFoundException, SchemaException {
 		ConnectorType connectorType = resourceType.getConnector();
 		if (connectorType == null) {
@@ -197,13 +208,16 @@ public class ConnectorManager {
 			String connOid = resourceType.getConnectorRef().getOid();
 			connectorType = connectorTypeCache.get(connOid);
 			if (connectorType == null) {
-				PrismObject<ConnectorType> repoConnector = repositoryService.getObject(ConnectorType.class, connOid, null, result);
+				Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createReadOnly());
+				PrismObject<ConnectorType> repoConnector = repositoryService.getObject(ConnectorType.class, connOid, 
+						options, result);
 				connectorType = repoConnector.asObjectable();
 				connectorTypeCache.put(connOid, connectorType);
 			} else {
 				String currentConnectorVersion = repositoryService.getVersion(ConnectorType.class, connOid, result);
 				if (!currentConnectorVersion.equals(connectorType.getVersion())) {
-					PrismObject<ConnectorType> repoConnector = repositoryService.getObject(ConnectorType.class, connOid, null, result);
+					Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createReadOnly());
+					PrismObject<ConnectorType> repoConnector = repositoryService.getObject(ConnectorType.class, connOid, options, result);
 					connectorType = repoConnector.asObjectable();
 					connectorTypeCache.put(connOid, connectorType);
 				}
@@ -404,12 +418,10 @@ public class ConnectorManager {
 	}
 
 	private boolean isInRepo(ConnectorType connectorType, OperationResult result) throws SchemaException {
-		AndFilter filter = AndFilter.createAnd(
-				EqualFilter.createEqual(SchemaConstants.C_CONNECTOR_FRAMEWORK, ConnectorType.class, prismContext, null, connectorType.getFramework()),
-				EqualFilter.createEqual(SchemaConstants.C_CONNECTOR_CONNECTOR_TYPE, ConnectorType.class, prismContext, null, connectorType.getConnectorType()));
-	
-		ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-		
+		ObjectQuery query = QueryBuilder.queryFor(ConnectorType.class, prismContext)
+				.item(SchemaConstants.C_CONNECTOR_FRAMEWORK).eq(connectorType.getFramework())
+				.and().item(SchemaConstants.C_CONNECTOR_CONNECTOR_TYPE).eq(connectorType.getConnectorType())
+				.build();
 
 		if (LOGGER.isTraceEnabled()) {
 			LOGGER.trace("Looking for connector in repository:\n{}", query.debugDump());
@@ -496,6 +508,11 @@ public class ConnectorManager {
 
 	public void connectorFrameworkSelfTest(OperationResult parentTestResult, Task task) {
 		connectorFactory.selfTest(parentTestResult);
+	}
+	
+	public ConnectorOperationalStatus getConnectorOperationalStatus(PrismObject<ResourceType> resource, OperationResult result) throws ObjectNotFoundException, SchemaException, CommunicationException, ConfigurationException {
+		ConnectorInstance connectorInstance = getConfiguredConnectorInstance(resource, false, result);
+		return connectorInstance.getOperationalStatus();
 	}
 
 	public void shutdown() {

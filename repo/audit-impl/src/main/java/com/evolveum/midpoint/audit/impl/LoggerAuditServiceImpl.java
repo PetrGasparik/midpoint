@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.common.LoggingConfigurationManager;
 import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.schema.ObjectDeltaOperation;
 import com.evolveum.midpoint.task.api.LightweightIdentifierGenerator;
 import com.evolveum.midpoint.task.api.Task;
@@ -37,7 +38,6 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CleanupPolicyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 /**
  * @author semancik
@@ -86,7 +86,7 @@ public class LoggerAuditServiceImpl implements AuditService {
 				", toid=" + record.getTaskOID() + 
 				", hid=" + record.getHostIdentifier() +
 				", I=" + formatObject(record.getInitiator()) +
-				", T=" + formatObject(record.getTarget()) + 
+				", T=" + formatReference(record.getTarget()) + 
 				", TO=" + formatObject(record.getTargetOwner()) + 
 				", D=" + formatDeltaSummary(record.getDeltas()) + 
 				", ch=" + record.getChannel() +
@@ -129,11 +129,14 @@ public class LoggerAuditServiceImpl implements AuditService {
 		return object.asObjectable().toDebugType()+":"+object.getOid()+"("+object.getElementName()+")";
 	}
 
-	private static String formatUser(UserType user) {
-		if (user == null) {
-			return "null";
+	private String formatReference(PrismReferenceValue refVal) {
+    	if (refVal == null) {
+    		return "null";
+    	}
+		if (refVal.getObject() != null) {
+			return formatObject(refVal.getObject());
 		}
-		return user.getOid()+"("+user.getName()+")";
+		return refVal.toString();
 	}
 
 	private String formatDeltaSummary(Collection<ObjectDeltaOperation<? extends ObjectType>> collection) {
@@ -156,8 +159,22 @@ public class LoggerAuditServiceImpl implements AuditService {
 
 	@Override
 	public List<AuditEventRecord> listRecords(String query, Map<String, Object> params) {
-		// TODO Auto-generated method stub
-		return null;
+		throw new UnsupportedOperationException("Object retrieval not supported");
 	}
 
+    @Override
+    public long countObjects(String query, Map<String, Object> params){
+    	throw new UnsupportedOperationException("Object retrieval not supported");
+    }
+
+	@Override
+	public boolean supportsRetrieval() {
+		return false;
+	}
+	
+	// This method is never used. It is here only for maven dependency plugin to properly detect common component usage.
+	@SuppressWarnings("unused")
+	private void fakeMethod() {
+		LoggingConfigurationManager.getCurrentlyUsedVersion();
+	}
 }

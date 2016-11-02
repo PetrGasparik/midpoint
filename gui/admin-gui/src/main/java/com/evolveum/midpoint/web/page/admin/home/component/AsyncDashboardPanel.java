@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 package com.evolveum.midpoint.web.page.admin.home.component;
 
+import com.evolveum.midpoint.gui.api.GuiStyleConstants;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.web.component.AsyncUpdatePanel;
 import com.evolveum.midpoint.web.component.util.CallableResult;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
@@ -37,8 +37,9 @@ import org.apache.wicket.util.time.Duration;
  * @author lazyman
  */
 public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, CallableResult<T>> {
+	private static final long serialVersionUID = 1L;
 
-    protected static final String ID_DASHBOARD_PARENT = "dashboardParent";
+	protected static final String ID_DASHBOARD_PARENT = "dashboardParent";
     protected static final String ID_DASHBOARD_TITLE = "dashboardTitle";
     private static final String ID_TITLE = "title";
     private static final String ID_PRELOADER_CONTAINER = "preloaderContainer";
@@ -47,18 +48,29 @@ public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, Call
     private static final String ID_CONTENT = "content";
     private static final String ID_ICON = "icon";
 
-    public AsyncDashboardPanel(String id, IModel<String> title, String icon, DashboardColor color) {
-        this(id, title, icon, new Model(), color);
+    public AsyncDashboardPanel(String id, IModel<String> title, String icon, String boxCssClasses) {
+        this(id, title, icon, new Model(), boxCssClasses);
+    }
+
+    public AsyncDashboardPanel(String id, IModel<String> title, String icon, String boxCssClasses, boolean noPadding) {
+        this(id, title, icon, new Model(), Duration.seconds(DEFAULT_TIMER_DURATION),boxCssClasses, noPadding);
     }
 
     public AsyncDashboardPanel(String id, IModel<String> title, String icon, IModel<V> callableParameterModel,
-                               DashboardColor color) {
-        this(id, title, icon, callableParameterModel, Duration.seconds(DEFAULT_TIMER_DURATION), color);
+    		String boxCssClasses) {
+        this(id, title, icon, callableParameterModel, Duration.seconds(DEFAULT_TIMER_DURATION), boxCssClasses);
     }
 
     public AsyncDashboardPanel(String id, IModel<String> title, String icon, IModel<V> callableParameterModel,
-                               Duration durationSecs, DashboardColor color) {
+                               Duration durationSecs, String boxCssClasses) {
+        this(id, title, icon, callableParameterModel, Duration.seconds(DEFAULT_TIMER_DURATION), boxCssClasses, false);
+    }
+
+    public AsyncDashboardPanel(String id, IModel<String> title, String icon, IModel<V> callableParameterModel,
+                               Duration durationSecs, String boxCssClasses, boolean noPadding) {
         super(id, callableParameterModel, durationSecs);
+        
+        initLayout(noPadding);
 
         WebMarkupContainer dashboardTitle = (WebMarkupContainer) get(
                 createComponentPath(ID_DASHBOARD_PARENT, ID_DASHBOARD_TITLE));
@@ -66,19 +78,18 @@ public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, Call
         Label label = (Label) dashboardTitle.get(ID_TITLE);
         label.setDefaultModel(title);
 
-        if (color == null) {
-            color = DashboardColor.GRAY;
+        if (boxCssClasses == null) {
+        	boxCssClasses = GuiStyleConstants.CLASS_BOX_DEFAULT;
         }
         Component dashboardParent = get(ID_DASHBOARD_PARENT);
-        dashboardParent.add(new AttributeAppender("class", " " + color.getCssClass()));
+        dashboardParent.add(new AttributeAppender("class", " " + boxCssClasses));
 
         WebMarkupContainer iconI = new WebMarkupContainer(ID_ICON);
         iconI.add(AttributeModifier.replace("class", icon));
         dashboardTitle.add(iconI);
     }
 
-    @Override
-    protected void initLayout() {
+    private void initLayout(boolean noPadding) {
         WebMarkupContainer dashboardParent = new WebMarkupContainer(ID_DASHBOARD_PARENT);
         add(dashboardParent);
 
@@ -89,8 +100,11 @@ public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, Call
         dashboardTitle.add(title);
 
         WebMarkupContainer dashboardContent = new WebMarkupContainer(ID_DASHBOARD_CONTENT);
-        dashboardContent.add(AttributeModifier.append("style", getDashboardBodyCss()));
         dashboardParent.add(dashboardContent);
+
+        if (noPadding) {
+            dashboardContent.add(AttributeAppender.append("class", "no-padding"));
+        }
 
         dashboardContent.add(new Label(ID_CONTENT));
 
@@ -105,10 +119,6 @@ public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, Call
         dashboardContent.add(preloaderContainer);
 
         preloaderContainer.add(getLoadingComponent(ID_PRELOADER));
-    }
-
-    public String getDashboardBodyCss() {
-        return "padding: 0px;";
     }
 
     @Override
@@ -143,7 +153,7 @@ public abstract class AsyncDashboardPanel<V, T> extends AsyncUpdatePanel<V, Call
         CallableResult<T> result = (CallableResult<T>) getModel().getObject();
         if (result != null && result.getResult() != null) {
             OperationResult opResult = result.getResult();
-            if (!WebMiscUtil.isSuccessOrHandledError(opResult)) {
+            if (!WebComponentUtil.isSuccessOrHandledError(opResult)) {
                 page.showResult(opResult);
             }
         }

@@ -20,11 +20,9 @@ import com.evolveum.midpoint.prism.PrismConstants;
 import com.evolveum.midpoint.prism.Recomputable;
 import com.evolveum.midpoint.prism.Structured;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.prism.path.ItemPathSegment;
 import com.evolveum.midpoint.prism.path.NameItemPathSegment;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
-import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 
@@ -46,7 +44,7 @@ import javax.xml.namespace.QName;
  * 				
  * @author Radovan Semancik
  */
-public class PolyString implements Matchable<PolyString>, Recomputable, Structured, DebugDumpable, Serializable {
+public class PolyString implements Matchable<PolyString>, Recomputable, Structured, DebugDumpable, Serializable, Comparable<Object> {
 	private static final long serialVersionUID = -5070443143609226661L;
 
 	public static final QName F_ORIG = new QName(PrismConstants.NS_TYPES, "orig");
@@ -136,12 +134,33 @@ public class PolyString implements Matchable<PolyString>, Recomputable, Structur
 		return new PolyString(this.orig.substring(index, index+1));
 	}
 	
+	@Override
+	public int compareTo(Object other) {
+		if (other == null) {
+			return 1;
+		}
+		String otherString = other.toString();
+		return this.orig.compareTo(otherString);
+	}
+	
+//	public PolyString getAt(Range at) {
+//		// TODO
+//	}
+//
+//	public PolyString getAt(IntRange at) {
+//		// TODO
+//	}
+	
 	public int length() {
 		return orig.length();
 	}
 	
 	public PolyString trim() {
 		return new PolyString(orig.trim(), norm.trim());
+	}
+	
+	public String substring(int from, int to) {
+		return this.orig.substring(from,to);
 	}
 
 	@Override
@@ -256,5 +275,13 @@ public class PolyString implements Matchable<PolyString>, Recomputable, Structur
 
 	public static PolyString toPolyString(PolyStringType value) {
 		return value != null ? value.toPolyString() : null;
+	}
+
+	public static PolyStringType toPolyStringType(PolyString value) {
+		return value != null ? new PolyStringType(value) : null;
+	}
+
+	public static PolyString fromOrig(String orig) {
+		return new PolyString(orig);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,18 @@
 
 package com.evolveum.midpoint.web.page.admin.certification.dto;
 
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.schema.util.CertCampaignTypeUtil;
 import com.evolveum.midpoint.web.component.data.column.InlineMenuable;
 import com.evolveum.midpoint.web.component.menu.cog.InlineMenuItem;
 import com.evolveum.midpoint.web.component.util.Selectable;
-import com.evolveum.midpoint.web.component.util.SelectableBean;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignStateType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationStageType;
 import org.apache.commons.lang.time.DurationFormatUtils;
-import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.StringResourceModel;
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlSchemaType;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,7 +62,7 @@ public class CertCampaignListItemDto extends Selectable implements InlineMenuabl
     }
 
     public String getName() {
-        return WebMiscUtil.getName(campaign);
+        return WebComponentUtil.getName(campaign);
     }
 
     public String getOid() {
@@ -83,7 +78,7 @@ public class CertCampaignListItemDto extends Selectable implements InlineMenuabl
     }
 
     public Integer getCurrentStageNumber() {
-        int currentStage = campaign.getCurrentStageNumber();
+        int currentStage = campaign.getStageNumber();
         if (AccessCertificationCampaignStateType.IN_REVIEW_STAGE.equals(campaign.getState()) ||
                 AccessCertificationCampaignStateType.REVIEW_STAGE_DONE.equals(campaign.getState())) {
             return currentStage;
@@ -100,11 +95,11 @@ public class CertCampaignListItemDto extends Selectable implements InlineMenuabl
         AccessCertificationStageType currentStage = CertCampaignTypeUtil.getCurrentStage(campaign);
         XMLGregorianCalendar end;
         Boolean stageLevelInfo;
-        if (campaign.getCurrentStageNumber() == 0) {
-            end = campaign.getEnd();
+        if (campaign.getStageNumber() == 0) {
+            end = campaign.getEnd();            // quite useless, as "end" denotes real campaign end
             stageLevelInfo = false;
         } else if (currentStage != null) {
-            end = currentStage.getEnd();
+            end = currentStage.getDeadline();
             stageLevelInfo = true;
         } else {
             end = null;
@@ -125,12 +120,14 @@ public class CertCampaignListItemDto extends Selectable implements InlineMenuabl
             //todo i18n for durations
             if (delta > 0) {
                 String key = stageLevelInfo ? "PageCertCampaigns.inForStage" : "PageCertCampaigns.inForCampaign";
-                return new StringResourceModel(key, page, null, null,
-                        DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
+                return PageBase.createStringResourceStatic(page, key, DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
+//                return new StringResourceModel(key, page, null, null,
+//                        DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
             } else if (delta < 0) {
                 String key = stageLevelInfo ? "PageCertCampaigns.agoForStage" : "PageCertCampaigns.agoForCampaign";
-                return new StringResourceModel(key, page, null, null,
-                        DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
+                return PageBase.createStringResourceStatic(page, key, DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
+//                return new StringResourceModel(key, page, null, null,
+//                        DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
             } else {
                 String key = stageLevelInfo ? "PageCertCampaigns.nowForStage" : "PageCertCampaigns.nowForCampaign";
                 return page.getString(key);

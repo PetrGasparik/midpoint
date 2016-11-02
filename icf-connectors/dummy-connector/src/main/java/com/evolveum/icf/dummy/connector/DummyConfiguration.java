@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
  * Extends the {@link AbstractConfiguration} class to provide all the necessary
  * parameters to initialize the Test Connector.
  *
- * @author $author$
- * @version $Revision$ $Date$
  */
 public class DummyConfiguration extends AbstractConfiguration {
 
@@ -55,6 +53,11 @@ public class DummyConfiguration extends AbstractConfiguration {
 	private boolean generateAccountDescriptionOnUpdate = false;        // simulates volatile behavior (on update)
 	private String[] forbiddenNames = new String[0];
 	private boolean useLegacySchema = true;
+	private String requiredBaseContextOrgName = null;
+	private Integer minPasswordLength = null;
+	private boolean addConnectorStateAttributes = false;
+	private boolean supportReturnDefaultAttributes = false;				// used e.g. for livesync vs. auxiliary object classes test
+	private boolean requireNameHint = false;
 
 	/**
      * Defines name of the dummy resource instance. There may be several dummy resource running in
@@ -304,6 +307,50 @@ public class DummyConfiguration extends AbstractConfiguration {
 
 	public void setUseLegacySchema(boolean useLegacySchema) {
 		this.useLegacySchema = useLegacySchema;
+	}
+
+	@ConfigurationProperty(displayMessageKey = "UI_REQUIRED_BASE_CONTEXT_ORG_NAME",
+			helpMessageKey = "UI_REQUIRED_BASE_CONTEXT_ORG_NAME_HELP")
+	public String getRequiredBaseContextOrgName() {
+		return requiredBaseContextOrgName;
+	}
+
+	public void setRequiredBaseContextOrgName(String requiredBaseContextOrgName) {
+		this.requiredBaseContextOrgName = requiredBaseContextOrgName;
+	}
+
+	public Integer getMinPasswordLength() {
+		return minPasswordLength;
+	}
+
+	public void setMinPasswordLength(Integer minPasswordLength) {
+		this.minPasswordLength = minPasswordLength;
+	}
+
+	public boolean isAddConnectorStateAttributes() {
+		return addConnectorStateAttributes;
+	}
+
+	public void setAddConnectorStateAttributes(boolean addConnectorStateAttributes) {
+		this.addConnectorStateAttributes = addConnectorStateAttributes;
+	}
+
+	@ConfigurationProperty
+	public boolean isSupportReturnDefaultAttributes() {
+		return supportReturnDefaultAttributes;
+	}
+
+	public void setSupportReturnDefaultAttributes(boolean supportReturnDefaultAttributes) {
+		this.supportReturnDefaultAttributes = supportReturnDefaultAttributes;
+	}
+
+	@ConfigurationProperty
+	public boolean isRequireNameHint() {
+		return requireNameHint;
+	}
+
+	public void setRequireNameHint(boolean requireNameHint) {
+		this.requireNameHint = requireNameHint;
 	}
 
 	/**

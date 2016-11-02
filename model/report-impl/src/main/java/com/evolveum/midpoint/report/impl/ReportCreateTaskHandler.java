@@ -75,7 +75,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportParameterType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SubreportType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
-import java.lang.reflect.Constructor;
 import net.sf.jasperreports.engine.JRParameter;
 import net.sf.jasperreports.engine.fill.JRAbstractLRUVirtualizer;
 import net.sf.jasperreports.engine.fill.JRFileVirtualizer;
@@ -476,6 +475,12 @@ public class ReportCreateTaskHandler implements TaskHandler {
         subResult = parentResult.createSubresult(ReportCreateTaskHandler.class.getName() + "createRepourtOutput");
 
         modelService.executeChanges(deltas, null, task, subResult);
+
+		String outputOid = objectDelta.getOid();
+		LOGGER.debug("Created report output with OID {}", outputOid);
+		PrismProperty<String> outputOidProperty = prismContext.getSchemaRegistry().findPropertyDefinitionByElementName(ReportConstants.REPORT_OUTPUT_OID_PROPERTY_NAME).instantiate();
+		outputOidProperty.setRealValue(outputOid);
+		task.setExtensionPropertyImmediate(outputOidProperty, subResult);
 
         subResult.computeStatus();
     }

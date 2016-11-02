@@ -17,15 +17,17 @@
 package com.evolveum.midpoint.notifications.impl;
 
 import com.evolveum.midpoint.notifications.api.EventHandler;
+import com.evolveum.midpoint.notifications.api.NotificationFunctions;
 import com.evolveum.midpoint.notifications.api.NotificationManager;
+import com.evolveum.midpoint.notifications.api.events.BaseEvent;
 import com.evolveum.midpoint.notifications.api.events.Event;
 import com.evolveum.midpoint.notifications.api.events.WorkflowEventCreator;
 import com.evolveum.midpoint.notifications.api.transports.Transport;
 import com.evolveum.midpoint.notifications.impl.events.workflow.DefaultWorkflowEventCreator;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.task.api.TaskManager;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
@@ -33,13 +35,10 @@ import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.EventHandlerType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.NotificationConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
-import com.evolveum.midpoint.xml.ns.model.workflow.process_instance_state_3.ProcessInstanceState;
-
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-
-import javax.xml.bind.JAXBElement;
 
 import java.util.HashMap;
 
@@ -51,19 +50,25 @@ import java.util.HashMap;
 public class NotificationManagerImpl implements NotificationManager {
 
     private static final Trace LOGGER = TraceManager.getTrace(NotificationManager.class);
+	private static final String OPERATION_PROCESS_EVENT = NotificationManager.class + ".processEvent";
 
-    @Autowired(required = true)
+	@Autowired
     @Qualifier("cacheRepositoryService")
     private transient RepositoryService cacheRepositoryService;
 
     @Autowired
     private DefaultWorkflowEventCreator defaultWorkflowEventCreator;
 
+	@Autowired
+	private NotificationFunctions notificationFunctions;
+
+	@Autowired
+	private TaskManager taskManager;
+
     private boolean disabled = false;               // for testing purposes (in order for model-intest to run more quickly)
 
-    private HashMap<Class<? extends EventHandlerType>,EventHandler> handlers = new HashMap<Class<? extends EventHandlerType>,EventHandler>();
+    private HashMap<Class<? extends EventHandlerType>,EventHandler> handlers = new HashMap<>();
     private HashMap<String,Transport> transports = new HashMap<String,Transport>();
-    private HashMap<Class<? extends ProcessInstanceState>,WorkflowEventCreator> workflowEventCreators = new HashMap<>();        // key = class of type ProcessInstanceState
 
     public void registerEventHandler(Class<? extends EventHandlerType> clazz, EventHandler handler) {
         LOGGER.trace("Registering event handler " + handler + " for " + clazz);
@@ -81,7 +86,7 @@ public class NotificationManagerImpl implements NotificationManager {
 
     @Override
     public void registerTransport(String name, Transport transport) {
-        LOGGER.trace("Registering notification transport " + transport + " under name " + name);
+        LOGGER.trace("Registering notification transport {} under name {}", transport, name);
         transports.put(name, transport);
     }
 
@@ -98,58 +103,83 @@ public class NotificationManagerImpl implements NotificationManager {
     }
 
     @Override
-    public void registerWorkflowEventCreator(Class<? extends ProcessInstanceState> clazz, WorkflowEventCreator workflowEventCreator) {
-        // TODO think again about this mechanism
-        if (workflowEventCreators.containsKey(clazz)) {
-            LOGGER.warn("Multiple registrations of workflow event creators for class {}", clazz.getName());
-        }
-        workflowEventCreators.put(clazz, workflowEventCreator);
+    public WorkflowEventCreator getWorkflowEventCreator(Task wfTask) {
+		// TODO
+        return defaultWorkflowEventCreator;
     }
 
-    @Override
-    public WorkflowEventCreator getWorkflowEventCreator(PrismObject<? extends ProcessInstanceState> instanceState) {
-        WorkflowEventCreator workflowEventCreator = workflowEventCreators.get(instanceState.asObjectable().getClass());
-        if (workflowEventCreator == null) {
-            return defaultWorkflowEventCreator;
-        } else {
-            return workflowEventCreator;
-        }
+    public void processEvent(@Nullable Event event) {
+		Task task = taskManager.createTaskInstance(OPERATION_PROCESS_EVENT);
+        processEvent(event, task, task.getResult());
     }
 
-    // event may be null
-    public void processEvent(Event event) {
-        processEvent(event, null, new OperationResult("dummy"));
-    }
-
-    // event may be null
-    public void processEvent(Event event, Task task, OperationResult result) {
+    public void processEvent(@Nullable Event event, Task task, OperationResult result) {
         if (event == null) {
             return;
         }
 
-        if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("NotificationManager processing event " + event);
+		if (event instanceof BaseEvent) {
+			((BaseEvent) event).setNotificationFunctions(notificationFunctions);
+		}
+
+		LOGGER.trace("NotificationManager processing event {}", event);
+
+        if (event.getAdHocHandler() != null) {
+            processEvent(event, event.getAdHocHandler(), task, result);
         }
 
-        SystemConfigurationType systemConfigurationType = NotificationsUtil.getSystemConfiguration(cacheRepositoryService, result);
+        SystemConfigurationType systemConfigurationType = NotificationFuctionsImpl.getSystemConfiguration(cacheRepositoryService, result);
         if (systemConfigurationType == null) {      // something really wrong happened (or we are doing initial import of objects)
             return;
         }
+        
+//        boolean specificSecurityPoliciesDefined = false;
+//        if (systemConfigurationType.getGlobalSecurityPolicyRef() != null) {
+//        
+//        	SecurityPolicyType securityPolicyType = NotificationFuctionsImpl.getSecurityPolicyConfiguration(systemConfigurationType.getGlobalSecurityPolicyRef(), cacheRepositoryService, result);
+//        	if (securityPolicyType != null && securityPolicyType.getAuthentication() != null) {
+//        		
+//        		for (MailAuthenticationPolicyType mailPolicy : securityPolicyType.getAuthentication().getMailAuthentication()) {
+//        			NotificationConfigurationType notificationConfigurationType = mailPolicy.getNotificationConfiguration();
+//        			if (notificationConfigurationType != null) {
+//        				specificSecurityPoliciesDefined = true;
+//        				processNotifications(notificationConfigurationType, event, task, result);
+//        			}
+//        		}
+//        		
+//        		for (SmsAuthenticationPolicyType mailPolicy : securityPolicyType.getAuthentication().getSmsAuthentication()) {
+//        			NotificationConfigurationType notificationConfigurationType = mailPolicy.getNotificationConfiguration();
+//        			if (notificationConfigurationType != null) {
+//        				specificSecurityPoliciesDefined = true;
+//        				processNotifications(notificationConfigurationType, event, task, result);
+//        			}
+//        		}
+//        		
+//        		return;
+//        	}
+//        }
+//        
+//        if (specificSecurityPoliciesDefined) {
+//        	LOGGER.trace("Specific policy for notifier set in security configuration, skupping notifiers defined in system configuration.");
+//            return;
+//        }
+        
         if (systemConfigurationType.getNotificationConfiguration() == null) {
-            if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("No notification configuration in repository, exiting the change listener.");
-            }
+			LOGGER.trace("No notification configuration in repository, finished event processing.");
             return;
         }
+        
+        NotificationConfigurationType notificationConfigurationType = systemConfigurationType.getNotificationConfiguration(); 
+        processNotifications(notificationConfigurationType, event, task, result);
 
-        NotificationConfigurationType notificationConfigurationType = systemConfigurationType.getNotificationConfiguration();
+		LOGGER.trace("NotificationManager successfully processed event {} ({} top level handler(s))", event, notificationConfigurationType.getHandler().size());
+    }
+    
+    private void processNotifications(NotificationConfigurationType notificationConfigurationType, Event event, Task task, OperationResult result){
+    	
 
         for (EventHandlerType eventHandlerType : notificationConfigurationType.getHandler()) {
             processEvent(event, eventHandlerType, task, result);
-        }
-
-        if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("NotificationManager successfully processed event " + event + " (" +notificationConfigurationType.getHandler().size() + " top level handler(s))");
         }
     }
 

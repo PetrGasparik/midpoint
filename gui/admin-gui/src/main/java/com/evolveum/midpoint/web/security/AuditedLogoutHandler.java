@@ -20,15 +20,14 @@ import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditEventStage;
 import com.evolveum.midpoint.audit.api.AuditEventType;
 import com.evolveum.midpoint.audit.api.AuditService;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.security.api.MidPointPrincipal;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.task.api.TaskManager;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.logout.SimpleUrlLogoutSuccessHandler;
@@ -36,7 +35,6 @@ import org.springframework.security.web.authentication.logout.SimpleUrlLogoutSuc
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
 import java.io.IOException;
 
 /**
@@ -45,9 +43,9 @@ import java.io.IOException;
 public class AuditedLogoutHandler extends SimpleUrlLogoutSuccessHandler {
 
     @Autowired
-    transient TaskManager taskManager;
+    private TaskManager taskManager;
     @Autowired
-    transient AuditService auditService;
+    private AuditService auditService;
 
     @Override
     public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication)
@@ -68,7 +66,7 @@ public class AuditedLogoutHandler extends SimpleUrlLogoutSuccessHandler {
 
         AuditEventRecord record = new AuditEventRecord(AuditEventType.TERMINATE_SESSION, AuditEventStage.REQUEST);
         record.setInitiator(user);
-        record.setParameter(WebMiscUtil.getName(user));
+        record.setParameter(WebComponentUtil.getName(user));
 
         record.setChannel(SchemaConstants.CHANNEL_GUI_USER_URI);
         record.setTimestamp(System.currentTimeMillis());

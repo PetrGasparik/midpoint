@@ -15,13 +15,7 @@
  */
 package com.evolveum.midpoint.model.impl.lens.projector;
 
-import java.util.Collection;
-import java.util.regex.Pattern;
-
 import javax.xml.namespace.QName;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import com.evolveum.midpoint.common.refinery.RefinedAttributeDefinition;
 import com.evolveum.midpoint.prism.PrismProperty;
@@ -49,7 +43,17 @@ public class ValueMatcher<T> {
 
 	public static <T> ValueMatcher<T> createMatcher(RefinedAttributeDefinition rAttrDef, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
 		QName matchingRuleQName = rAttrDef.getMatchingRuleQName();
-		MatchingRule<Object> matchingRule = matchingRuleRegistry.getMatchingRule(matchingRuleQName, rAttrDef.getTypeName());
+		MatchingRule<T> matchingRule;
+		try {
+			matchingRule = matchingRuleRegistry.getMatchingRule(matchingRuleQName, rAttrDef.getTypeName());
+		} catch (SchemaException e) {
+			throw new SchemaException(e.getMessage()+", defined for attribute "+rAttrDef.getName(), e);
+		}
+		return new ValueMatcher<T>(matchingRule);
+	}
+	
+	public static <T> ValueMatcher<T> createDefaultMatcher(QName type, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
+		MatchingRule<Object> matchingRule = matchingRuleRegistry.getMatchingRule(null, type);
 		return new ValueMatcher<T>((MatchingRule<T>) matchingRule);
 	}
 	

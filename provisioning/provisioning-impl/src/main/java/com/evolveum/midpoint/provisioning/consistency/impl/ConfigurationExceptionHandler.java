@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ package com.evolveum.midpoint.provisioning.consistency.impl;
 
 import java.util.Collection;
 
-import com.evolveum.midpoint.provisioning.impl.ConstraintsChecker;
-import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -28,32 +26,47 @@ import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.provisioning.api.ResourceOperationDescription;
 import com.evolveum.midpoint.provisioning.consistency.api.ErrorHandler;
-import com.evolveum.midpoint.provisioning.consistency.api.ErrorHandler.FailedOperation;
+import com.evolveum.midpoint.provisioning.impl.ConstraintsChecker;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.DeltaConvertor;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
 @Component
 public class ConfigurationExceptionHandler extends ErrorHandler {
+	
+	private static final Trace LOGGER = TraceManager.getTrace(ConfigurationExceptionHandler.class);
 
 	@Autowired
 	@Qualifier("cacheRepositoryService")
 	private RepositoryService cacheRepositoryService;
 	
 	@Override
-	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, boolean compensate,
+	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, 
+			boolean doDiscovery, boolean compensate,
 			Task task, OperationResult parentResult) throws SchemaException, GenericFrameworkException, CommunicationException,
 			ObjectNotFoundException, ObjectAlreadyExistsException, ConfigurationException {
 
+		if (!doDiscovery) {
+			parentResult.recordFatalError(ex);
+			if (ex instanceof ConfigurationException) {
+				throw (ConfigurationException)ex;
+			} else {
+				throw new ConfigurationException(ex.getMessage(), ex);
+			}
+		}
+		
         ObjectDelta delta = null;
 		switch (op) {
             case ADD:
@@ -73,7 +86,7 @@ public class ConfigurationExceptionHandler extends ErrorHandler {
                 delta = ObjectDelta.createModifyDelta(shadow.getOid(), modifications, shadow.getClass(), prismContext);
                 break;
             case GET:
-                OperationResult operationResult = parentResult.createSubresult("Compensation for configuration problem. Operation: " + op.name());
+                OperationResult operationResult = parentResult.createSubresult("com.evolveum.midpoint.provisioning.consistency.impl.ConfigurationExceptionHandler.handleError." + op.name());
                 operationResult.addParam("shadow", shadow);
                 operationResult.addParam("currentOperation", op);
                 operationResult.addParam("exception", ex.getMessage());
@@ -87,14 +100,14 @@ public class ConfigurationExceptionHandler extends ErrorHandler {
                 return shadow;
         }
 
-        if (op != FailedOperation.GET){
-//		Task task = taskManager.createTaskInstance();
-		ResourceOperationDescription operationDescription = createOperationDescription(shadow, ex, shadow.getResource(),
-				delta, task, parentResult);
-		changeNotificationDispatcher.notifyFailure(operationDescription, task, parentResult);
+        if (op != FailedOperation.GET) {
+	//		Task task = taskManager.createTaskInstance();
+			ResourceOperationDescription operationDescription = createOperationDescription(shadow, ex, shadow.getResource(),
+					delta, task, parentResult);
+			changeNotificationDispatcher.notifyFailure(operationDescription, task, parentResult);
 		}
 		
-		if (shadow.getOid() == null){
+		if (shadow.getOid() == null) {
 			throw new ConfigurationException("Configuration error: "+ex.getMessage(), ex);
 		}
 		
@@ -105,6 +118,20 @@ public class ConfigurationExceptionHandler extends ErrorHandler {
 					modification, parentResult);
 		} catch (Exception e) {
 			//this should not happen. But if it happens, we should return original exception
+			LOGGER.error("Unexpected error while modifying shadow {}: {}", shadow, e.getMessage(), e);
+			if (ex instanceof SchemaException) {
+				throw ((SchemaException)ex);
+			} else if (ex instanceof GenericFrameworkException) {
+				throw ((GenericFrameworkException)ex);
+			} else if (ex instanceof CommunicationException) {
+				throw ((CommunicationException)ex);
+			} else if (ex instanceof ObjectNotFoundException) {
+				throw ((ObjectNotFoundException)ex);
+			} else if (ex instanceof ObjectAlreadyExistsException) {
+				throw ((ObjectAlreadyExistsException)ex);
+			} else if (ex instanceof ConfigurationException) {
+				throw ((ConfigurationException)ex);
+			} 
 		}
 		
 		parentResult.recordFatalError("Configuration error: " + ex.getMessage(), ex);

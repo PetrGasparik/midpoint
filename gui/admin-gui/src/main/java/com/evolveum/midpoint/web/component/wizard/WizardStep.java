@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,34 @@
 
 package com.evolveum.midpoint.web.component.wizard;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.xml.namespace.QName;
+
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
+import org.apache.commons.lang.StringUtils;
+import org.apache.wicket.Component;
+import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.extensions.wizard.IWizard;
+import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.model.IModel;
+import org.apache.wicket.model.StringResourceModel;
+import org.apache.wicket.validation.IValidatable;
+import org.apache.wicket.validation.IValidator;
+
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
+import com.evolveum.midpoint.gui.api.page.PageBase;
 import com.evolveum.midpoint.prism.Definition;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.schema.processor.ResourceSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
-import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import org.apache.commons.lang.StringUtils;
-import org.apache.wicket.Component;
-import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.extensions.wizard.IWizard;
-import org.apache.wicket.markup.html.basic.Label;
-import org.apache.wicket.model.AbstractReadOnlyModel;
-import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.StringResourceModel;
-import org.apache.wicket.validation.IValidatable;
-import org.apache.wicket.validation.IValidator;
-
-import javax.xml.namespace.QName;
-import java.util.ArrayList;
-import java.util.List;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author lazyman
@@ -51,21 +56,21 @@ public class WizardStep extends org.apache.wicket.extensions.wizard.WizardStep {
     public WizardStep(PageBase pageBase) {
         this.pageBase = pageBase;
         String key = getClass().getSimpleName() + ".title";
-        setTitleModel(new StringResourceModel(key, this, null, key));
+        setTitleModel(pageBase.createStringResource(key));
     }
 
     @Override
     public Component getHeader(String id, Component parent, IWizard wizard) {
-        return new Label(id, new AbstractReadOnlyModel<String>() {
-
-            @Override
-            public String getObject() {
-                return getTitle();
-            }
-        });
+		return new Label(id, "");		// we don't want to display step names twice (in upper bar and in page header)
+//        return new Label(id, new AbstractReadOnlyModel<String>() {
+//            @Override
+//            public String getObject() {
+//                return getTitle();
+//            }
+//        });
     }
 
-    public PageBase getPageBase() {
+	public PageBase getPageBase() {
         return pageBase;
     }
 
@@ -74,7 +79,7 @@ public class WizardStep extends org.apache.wicket.extensions.wizard.WizardStep {
     }
 
     public StringResourceModel createStringResource(String resourceKey, Object... objects) {
-        return new StringResourceModel(resourceKey, this, null, resourceKey, objects);
+    	return PageBase.createStringResourceStatic(this, resourceKey, objects);
     }
 
     public StringResourceModel createStringResource(Enum e) {
@@ -109,23 +114,20 @@ public class WizardStep extends org.apache.wicket.extensions.wizard.WizardStep {
         return StringUtils.join(components, ":");
     }
 
+	@NotNull
     protected List<QName> loadResourceObjectClassList(IModel<PrismObject<ResourceType>> model, Trace LOGGER, String message){
         List<QName> list = new ArrayList<>();
-
         try {
-            ResourceSchema schema = RefinedResourceSchema.getResourceSchema(model.getObject(), getPageBase().getPrismContext());
-
-            if(schema != null){
-                for(Definition def: schema.getDefinitions()){
+            ResourceSchema schema = RefinedResourceSchemaImpl.getResourceSchema(model.getObject(), getPageBase().getPrismContext());
+            if (schema != null) {
+                for (Definition def: schema.getDefinitions()) {
                     list.add(def.getTypeName());
                 }
             }
-
-        } catch (Exception e){
-            LoggingUtils.logException(LOGGER, message, e);
+        } catch (SchemaException|RuntimeException e){
+            LoggingUtils.logUnexpectedException(LOGGER, message, e);
             error(message + " " + e.getMessage());
         }
-
         return list;
     }
 
@@ -158,4 +160,14 @@ public class WizardStep extends org.apache.wicket.extensions.wizard.WizardStep {
     public void setResult(OperationResult result) {
         this.result = result;
     }
+
+	@Override
+	public boolean isComplete() {
+		if (!super.isComplete()) {
+			return false;
+		}
+
+		PageResourceWizard pageResourceWizard = (PageResourceWizard) getPageBase();
+		return !pageResourceWizard.getIssuesModel().getObject().hasErrorsFor(getClass());
+	}
 }

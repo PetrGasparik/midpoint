@@ -20,7 +20,6 @@ import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.path.ItemPathSegment;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.util.ExpressionUtil;
@@ -28,7 +27,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import org.apache.commons.lang.StringUtils;
 
-import javax.xml.bind.JAXBElement;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,49 +102,25 @@ public class MappingTypeDto implements Serializable {
         loadConditions(prismContext);
     }
 
-    private void loadExpressions(PrismContext context){
-        expression = ExpressionUtil.loadExpression(mappingObject, context, LOGGER);
+    private void loadExpressions(PrismContext context) {
+        expression = ExpressionUtil.loadExpression(mappingObject.getExpression(), context, LOGGER);
 
         expressionType = ExpressionUtil.getExpressionType(expression);
-        if(expressionType != null && expressionType.equals(ExpressionUtil.ExpressionEvaluatorType.SCRIPT)){
+        if (expressionType != null && expressionType.equals(ExpressionUtil.ExpressionEvaluatorType.SCRIPT)) {
             expressionLanguage = ExpressionUtil.getExpressionLanguage(expression);
         }
     }
 
-    private void loadConditions(PrismContext context){
-        if(mappingObject.getCondition() != null && mappingObject.getCondition().getExpressionEvaluator() != null
-                && !mappingObject.getCondition().getExpressionEvaluator().isEmpty()){
+    private void loadConditions(PrismContext context) {
+		condition = ExpressionUtil.loadExpression(mappingObject.getCondition(), context, LOGGER);
 
-            try {
-                if(mappingObject.getCondition().getExpressionEvaluator().size() == 1){
-                    condition = context.serializeAtomicValue(mappingObject.getCondition().getExpressionEvaluator().get(0), PrismContext.LANG_XML);
-                } else{
-                    StringBuilder sb = new StringBuilder();
-                    for(JAXBElement<?> element: mappingObject.getCondition().getExpressionEvaluator()){
-                        String subElement = context.serializeAtomicValue(element, PrismContext.LANG_XML);
-                        sb.append(subElement).append("\n");
-                    }
-                    condition = sb.toString();
-
-                }
-
-                conditionType = ExpressionUtil.getExpressionType(condition);
-                if(conditionType != null && conditionType.equals(ExpressionUtil.ExpressionEvaluatorType.SCRIPT)){
-                    conditionLanguage = ExpressionUtil.getExpressionLanguage(expression);
-                }
-            } catch (SchemaException e) {
-                //TODO - how can we show this error to user?
-                LoggingUtils.logException(LOGGER, "Could not load expressions from mapping.", e, e.getStackTrace());
-                condition = e.getMessage();
-            }
-        }
+		conditionType = ExpressionUtil.getExpressionType(condition);
+		if (conditionType != null && conditionType.equals(ExpressionUtil.ExpressionEvaluatorType.SCRIPT)) {
+			conditionLanguage = ExpressionUtil.getExpressionLanguage(condition);
+		}
     }
 
-    private JAXBElement<?> deserializeExpression(PrismContext prismContext, String xmlCode) throws SchemaException{
-        return prismContext.parseAnyValueAsJAXBElement(xmlCode, PrismContext.LANG_XML);
-    }
-
-    public void cancelChanges(){
+    public void cancelChanges() {
         mappingObject.setName(oldMappingObject.getName());
         mappingObject.setDescription(oldMappingObject.getDescription());
         mappingObject.setAuthoritative(oldMappingObject.isAuthoritative());
@@ -186,32 +160,18 @@ public class MappingTypeDto implements Serializable {
 
         mappingObject.getSource().addAll(mappingSourceList);
 
-        if(expression != null){
+        if (expression != null) {
             if(mappingObject.getExpression() == null){
                 mappingObject.setExpression(new ExpressionType());
             }
-
-            //TODO - dirty fix for MID-2335
-            if(ExpressionUtil.ExpressionEvaluatorType.SCRIPT.equals(expressionType)){
-                expression = expression.replace("<script>", "<script xmlns=\"http://midpoint.evolveum.com/xml/ns/public/common/common-3\">");
-            }
-
-            mappingObject.getExpression().getExpressionEvaluator().clear();
-            mappingObject.getExpression().getExpressionEvaluator().add(deserializeExpression(prismContext, expression));
+            ExpressionUtil.parseExpressionEvaluators(expression, mappingObject.getExpression(), prismContext);
         }
 
-        if(condition != null){
-            if(mappingObject.getCondition() != null){
+        if (condition != null) {
+            if (mappingObject.getCondition() == null) {
                 mappingObject.setCondition(new ExpressionType());
             }
-
-            //TODO - dirty fix for MID-2335
-            if(ExpressionUtil.ExpressionEvaluatorType.SCRIPT.equals(conditionType)){
-                condition = condition.replace("<script>", "<script xmlns=\"http://midpoint.evolveum.com/xml/ns/public/common/common-3\">");
-            }
-
-            mappingObject.getCondition().getExpressionEvaluator().clear();
-            mappingObject.getCondition().getExpressionEvaluator().add(deserializeExpression(prismContext, condition));
+			ExpressionUtil.parseExpressionEvaluators(condition, mappingObject.getCondition(), prismContext);
         }
 
         return mappingObject;
@@ -401,16 +361,14 @@ public class MappingTypeDto implements Serializable {
         sb.append("-");
         sb.append(" (");
         if(mapping.getExpression() != null && mapping.getExpression().getExpressionEvaluator() != null){
-            sb.append(ExpressionUtil.getExpressionType(ExpressionUtil.loadExpression(mapping, context, LOGGER)));
+            sb.append(ExpressionUtil.getExpressionType(ExpressionUtil.loadExpression(mapping.getExpression(), context, LOGGER)));
         }
         sb.append(")");
         sb.append("->");
 
-        if(mapping.getTarget() != null){
+        if (mapping.getTarget() != null) {
             MappingTargetDeclarationType target = mapping.getTarget();
-            if(target.getPath() != null && target.getPath().getItemPath() != null
-                    && target.getPath().getItemPath().getSegments() != null){
-
+            if (target.getPath() != null && !ItemPath.isNullOrEmpty(target.getPath().getItemPath())) {
                 List<ItemPathSegment> segments = target.getPath().getItemPath().getSegments();
                 sb.append(segments.get(segments.size() - 1));
             }

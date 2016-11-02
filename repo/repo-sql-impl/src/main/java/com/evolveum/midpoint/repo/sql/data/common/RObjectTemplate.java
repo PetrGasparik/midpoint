@@ -22,12 +22,14 @@ import com.evolveum.midpoint.repo.sql.data.common.enums.RObjectTemplateType;
 import com.evolveum.midpoint.repo.sql.data.common.other.RReferenceOwner;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectTemplateType;
 import org.hibernate.annotations.Cascade;
 import org.hibernate.annotations.ForeignKey;
+import org.hibernate.annotations.Persister;
 import org.hibernate.annotations.Where;
 
 import javax.persistence.*;
@@ -41,17 +43,18 @@ import java.util.Set;
 @Entity
 @ForeignKey(name = "fk_object_template")
 @Table(uniqueConstraints = @UniqueConstraint(name = "uc_object_template_name", columnNames = {"name_norm"}))
+@Persister(impl = MidPointJoinedPersister.class)
 public class RObjectTemplate extends RObject<ObjectTemplateType> {
 
     private RPolyString name;
     private RObjectTemplateType type;
-    private Set<RObjectReference> includeRef;
+    private Set<RObjectReference<RObjectTemplate>> includeRef;
 
     @Where(clause = RObjectReference.REFERENCE_TYPE + "= 7")
     @OneToMany(mappedBy = RObjectReference.F_OWNER, orphanRemoval = true)
     @ForeignKey(name = "none")
     @Cascade({org.hibernate.annotations.CascadeType.ALL})
-    public Set<RObjectReference> getIncludeRef() {
+    public Set<RObjectReference<RObjectTemplate>> getIncludeRef() {
         if (includeRef == null) {
             includeRef = new HashSet<>();
         }
@@ -72,7 +75,7 @@ public class RObjectTemplate extends RObject<ObjectTemplateType> {
         return name;
     }
 
-    public void setIncludeRef(Set<RObjectReference> includeRef) {
+    public void setIncludeRef(Set<RObjectReference<RObjectTemplate>> includeRef) {
         this.includeRef = includeRef;
     }
 

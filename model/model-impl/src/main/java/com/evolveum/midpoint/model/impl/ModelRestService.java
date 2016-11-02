@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Evolveum
+ * Copyright (c) 2013-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,27 +29,41 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
-import javax.ws.rs.core.UriBuilder;
 import javax.ws.rs.core.UriInfo;
+import javax.xml.bind.JAXBException;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.model.api.*;
+import com.evolveum.midpoint.model.api.validator.ResourceValidator;
+import com.evolveum.midpoint.model.api.validator.Scope;
+import com.evolveum.midpoint.model.api.validator.ValidationResult;
+import com.evolveum.midpoint.model.impl.util.RestServiceUtil;
+import com.evolveum.midpoint.prism.Item;
+import com.evolveum.midpoint.prism.path.ItemPath;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.task.api.TaskManager;
+import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
+import com.evolveum.midpoint.xml.ns._public.common.api_types_3.*;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import com.evolveum.midpoint.xml.ns._public.model.model_3.ExecuteScriptsResponseType;
+import com.evolveum.midpoint.xml.ns._public.model.scripting_3.ItemListType;
+import com.evolveum.midpoint.xml.ns._public.model.scripting_3.ScriptingExpressionType;
+import com.evolveum.prism.xml.ns._public.types_3.RawType;
 import org.apache.commons.lang.Validate;
 import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.evolveum.midpoint.audit.api.AuditEventRecord;
-import com.evolveum.midpoint.audit.api.AuditEventStage;
-import com.evolveum.midpoint.audit.api.AuditEventType;
-import com.evolveum.midpoint.audit.api.AuditService;
-import com.evolveum.midpoint.model.api.ModelExecuteOptions;
-import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.impl.rest.PATCH;
+import com.evolveum.midpoint.model.impl.security.SecurityHelper;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
@@ -58,91 +72,156 @@ import com.evolveum.midpoint.prism.query.QueryJaxbConvertor;
 import com.evolveum.midpoint.schema.DeltaConvertor;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.ObjectTypes;
-import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.task.api.TaskManager;
 import com.evolveum.midpoint.util.MiscUtil;
-import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ConsistencyViolationException;
-import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectListType;
-import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectModificationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectShadowChangeDescriptionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 import com.evolveum.prism.xml.ns._public.query_3.QueryType;
-import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 
+/**
+ * @author katkav
+ * @author semancik
+ */
 @Service
 @Produces({"application/xml", "application/json"})
 public class ModelRestService {
-	
-	@Autowired(required= true)
+
+	public static final String CLASS_DOT = ModelRestService.class.getName() + ".";
+	public static final String OPERATION_REST_SERVICE = CLASS_DOT + "restService";
+	public static final String OPERATION_GET = CLASS_DOT + "get";
+	public static final String OPERATION_ADD_OBJECT = CLASS_DOT + "addObject";
+	public static final String OPERATION_DELETE_OBJECT = CLASS_DOT + "deleteObject";
+	public static final String OPERATION_MODIFY_OBJECT = CLASS_DOT + "modifyObject";
+	public static final String OPERATION_NOTIFY_CHANGE = CLASS_DOT + "notifyChange";
+	public static final String OPERATION_FIND_SHADOW_OWNER = CLASS_DOT + "findShadowOwner";
+	public static final String OPERATION_SEARCH_OBJECTS = CLASS_DOT + "searchObjects";
+	public static final String OPERATION_IMPORT_FROM_RESOURCE = CLASS_DOT + "importFromResource";
+	public static final String OPERATION_TEST_RESOURCE = CLASS_DOT + "testResource";
+	public static final String OPERATION_SUSPEND_TASKS = CLASS_DOT + "suspendTasks";
+	public static final String OPERATION_SUSPEND_AND_DELETE_TASKS = CLASS_DOT + "suspendAndDeleteTasks";
+	public static final String OPERATION_RESUME_TASKS = CLASS_DOT + "resumeTasks";
+	public static final String OPERATION_SCHEDULE_TASKS_NOW = CLASS_DOT + "scheduleTasksNow";
+	public static final String OPERATION_EXECUTE_SCRIPT = CLASS_DOT + "executeScript";
+	public static final String OPERATION_COMPARE = CLASS_DOT + "compare";
+	public static final String OPERATION_GET_LOG_FILE_CONTENT = CLASS_DOT + "getLogFileContent";
+	public static final String OPERATION_GET_LOG_FILE_SIZE = CLASS_DOT + "getLogFileSize";
+	private static final String CURRENT = "current";
+	private static final String VALIDATE = "validate";
+
+	@Autowired
 	private ModelCrudService model;
-	
-	@Autowired(required = true)
-	private TaskManager taskManager;
-	
-	@Autowired(required = true)
-	private AuditService auditService;
-	
-	@Autowired(required = true)
+
+	@Autowired
+	private ScriptingService scriptingService;
+
+	@Autowired
+	private ModelService modelService;
+
+	@Autowired
+	private ModelDiagnosticService modelDiagnosticService;
+
+	@Autowired
+	private ModelInteractionService modelInteraction;
+
+	@Autowired
 	private PrismContext prismContext;
-	
-	
+
+	@Autowired
+	private SecurityHelper securityHelper;
+
+	@Autowired
+	private TaskManager taskManager;
+
+	@Autowired
+	private ResourceValidator resourceValidator;
+
 	private static final Trace LOGGER = TraceManager.getTrace(ModelRestService.class);
-	
+
 	public static final long WAIT_FOR_TASK_STOP = 2000L;
-	private static final String OPTIONS = "options";
-	
+
 	public ModelRestService() {
 		// nothing to do
 	}
-	
+
+	@GET
+	@Path("/users/{id}/policy")
+	public Response getValuePolicyForUser(@PathParam("id") String oid, @Context MessageContext mc) {
+		LOGGER.debug("getValuePolicyForUser start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_GET);
+
+		Response response;
+		try {
+			Collection<SelectorOptions<GetOperationOptions>> options =
+					SelectorOptions.createCollection(GetOperationOptions.createRaw());
+			PrismObject<UserType> user = model.getObject(UserType.class, oid, options, task, parentResult);
+
+			CredentialsPolicyType policy = modelInteraction.getCredentialsPolicy(user, task, parentResult);
+
+			ResponseBuilder builder = Response.ok();
+			builder.entity(policy);
+			response = builder.build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
+		}
+
+		parentResult.computeStatus();
+		finishRequest(task);
+
+		LOGGER.debug("getValuePolicyForUser finish");
+
+		return response;
+	}
+
 	@GET
 	@Path("/{type}/{id}")
-//	@Produces({"application/xml"})
 	public <T extends ObjectType> Response getObject(@PathParam("type") String type, @PathParam("id") String id,
+			@QueryParam("options") List<String> options,
+			@QueryParam("include") List<String> include,
+			@QueryParam("exclude") List<String> exclude,
 			@Context MessageContext mc){
-		LOGGER.info("model rest service for get operation start");
-		
-		Task task = taskManager.createTaskInstance("get");
-		OperationResult parentResult = task.getResult();
-		initRequest(task, mc);
-		
+		LOGGER.debug("model rest service for get operation start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_GET);
+
 		Class<T> clazz = ObjectTypes.getClassFromRestType(type);
+		Collection<SelectorOptions<GetOperationOptions>> getOptions = GetOperationOptions.fromRestOptions(options, include, exclude);
 		Response response;
-		
+
 		try {
-			PrismObject<T> object = model.getObject(clazz, id, null, task, parentResult);
+			PrismObject<T> object;
+			if (NodeType.class.equals(clazz) && CURRENT.equals(id)) {
+				String nodeId = taskManager.getNodeId();
+				ObjectQuery query = QueryBuilder.queryFor(NodeType.class, prismContext)
+						.item(NodeType.F_NODE_IDENTIFIER).eq(nodeId)
+						.build();
+			 	List<PrismObject<NodeType>> objects = model.searchObjects(NodeType.class, query, getOptions, task, parentResult);
+				if (objects.isEmpty()) {
+					throw new ObjectNotFoundException("Current node (id " + nodeId + ") couldn't be found.");
+				} else if (objects.size() > 1) {
+					throw new IllegalStateException("More than one 'current' node (id " + nodeId + ") found.");
+				} else {
+					object = (PrismObject<T>) objects.get(0);
+				}
+			} else {
+				object = model.getObject(clazz, id, getOptions, task, parentResult);
+			}
+			removeExcludes(object, exclude);		// temporary measure until fixed in repo
+
 			ResponseBuilder builder = Response.ok();
 			builder.entity(object);
 			response = builder.build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).build();
-		} catch (SchemaException e) {
-			response =  Response.status(Status.CONFLICT).type(MediaType.TEXT_HTML).entity(e.getMessage()).build();
-		} catch (CommunicationException e) {
-			response =  Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response =  Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response =  Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
 
@@ -151,191 +230,171 @@ public class ModelRestService {
 	@Path("/{type}")
 //	@Produces({"text/html", "application/xml"})
 	@Consumes({"application/xml", "application/json"})
-	public <T extends ObjectType> Response addObject(@PathParam("type") String type, PrismObject<T> object, @QueryParam("options") List<String> options, 
+	public <T extends ObjectType> Response addObject(@PathParam("type") String type, PrismObject<T> object,
+													 @QueryParam("options") List<String> options,
 			@Context UriInfo uriInfo, @Context MessageContext mc) {
-		LOGGER.info("model rest service for add operation start");
-		
-		Task task = taskManager.createTaskInstance("add");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+		LOGGER.debug("model rest service for add operation start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_ADD_OBJECT);
+
 		Class clazz = ObjectTypes.getClassFromRestType(type);
 		if (!object.getCompileTimeClass().equals(clazz)){
-			auditLogout(task);
-			return Response.status(Status.BAD_REQUEST).entity(
-					"Request to add object of type "
-							+ object.getCompileTimeClass().getSimpleName()
-							+ " to the collection of " + type).type(MediaType.TEXT_HTML).build();
+			finishRequest(task);
+			return RestServiceUtil.buildErrorResponse(Status.BAD_REQUEST, "Request to add object of type "
+					+ object.getCompileTimeClass().getSimpleName() + " to the collection of " + type);
 		}
-		
-		
+
+
 		ModelExecuteOptions modelExecuteOptions = ModelExecuteOptions.fromRestOptions(options);
-		
+
 		String oid;
 		Response response;
 		try {
 			oid = model.addObject(object, modelExecuteOptions, task, parentResult);
-			LOGGER.info("returned oid :  {}", oid );
-			
-			URI resourceURI = uriInfo.getAbsolutePathBuilder().path(oid).build(oid);
-			ResponseBuilder builder = clazz.isAssignableFrom(TaskType.class) ? Response.accepted().location(resourceURI) : Response.created(resourceURI);
-			
+			LOGGER.debug("returned oid :  {}", oid );
+
+			ResponseBuilder builder;
+
+			if (oid != null) {
+				URI resourceURI = uriInfo.getAbsolutePathBuilder().path(oid).build(oid);
+				builder = clazz.isAssignableFrom(TaskType.class) ?		// TODO not the other way around?
+						Response.accepted().location(resourceURI) : Response.created(resourceURI);
+			} else {
+				// OID might be null e.g. if the object creation is a subject of workflow approval
+				builder = Response.accepted();			// TODO is this ok ?
+			}
+			// (not used currently)
+			//validateIfRequested(object, options, builder, task, parentResult);
 			response = builder.build();
-		} catch (ObjectAlreadyExistsException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ExpressionEvaluationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (PolicyViolationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
+	}
+
+	// currently unused; but potentially useful in future
+	private <T extends ObjectType> void validateIfRequested(PrismObject<?> object,
+			List<String> options, ResponseBuilder builder, Task task,
+			OperationResult parentResult) {
+		if (options != null && options.contains(VALIDATE) && object.asObjectable() instanceof ResourceType) {
+			ValidationResult validationResult = resourceValidator
+					.validate((PrismObject<ResourceType>) object, Scope.THOROUGH, null, task, parentResult);
+			builder.entity(validationResult.toValidationResultType());			// TODO move to parentResult, and return the result!
+		}
 	}
 
 	@PUT
 	@Path("/{type}/{id}")
 //	@Produces({"text/html", "application/xml"})
-	public <T extends ObjectType> Response addObject(@PathParam("type") String type, @PathParam("id") String id, 
-			PrismObject<T> object, @QueryParam("options") List<String> options, @Context UriInfo uriInfo, 
+	public <T extends ObjectType> Response addObject(@PathParam("type") String type, @PathParam("id") String id,
+			PrismObject<T> object, @QueryParam("options") List<String> options, @Context UriInfo uriInfo,
 			@Context Request request, @Context MessageContext mc){
-	
-		LOGGER.info("model rest service for add operation start");
 
-		Task task = taskManager.createTaskInstance("add");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+		LOGGER.debug("model rest service for add operation start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_ADD_OBJECT);
+
 		Class clazz = ObjectTypes.getClassFromRestType(type);
 		if (!object.getCompileTimeClass().equals(clazz)){
-			auditLogout(task);
-			return Response.status(Status.BAD_REQUEST).entity(
-					"Request to add object of type "
-							+ object.getCompileTimeClass().getSimpleName()
-							+ " to the collection of " + type).type(MediaType.TEXT_HTML).build();
+			finishRequest(task);
+			return RestServiceUtil.buildErrorResponse(Status.BAD_REQUEST, "Request to add object of type "
+					+ object.getCompileTimeClass().getSimpleName()
+					+ " to the collection of " + type);
 		}
-		
+
 		ModelExecuteOptions modelExecuteOptions = ModelExecuteOptions.fromRestOptions(options);
-		if (modelExecuteOptions == null || !ModelExecuteOptions.isOverwrite(modelExecuteOptions)){
+		if (modelExecuteOptions == null) {
 			modelExecuteOptions = ModelExecuteOptions.createOverwrite();
+		} else if (!ModelExecuteOptions.isOverwrite(modelExecuteOptions)){
+			modelExecuteOptions.setOverwrite(Boolean.TRUE);
 		}
-		
+
 		String oid;
 		Response response;
 		try {
 			oid = model.addObject(object, modelExecuteOptions, task, parentResult);
-			LOGGER.info("returned oid :  {}", oid );
-			
+			LOGGER.debug("returned oid :  {}", oid );
+
 			URI resourceURI = uriInfo.getAbsolutePathBuilder().path(oid).build(oid);
-			ResponseBuilder builder = clazz.isAssignableFrom(TaskType.class) ? Response.accepted().location(resourceURI) : Response.created(resourceURI);
-			
+			ResponseBuilder builder = clazz.isAssignableFrom(TaskType.class) ?
+					Response.accepted().location(resourceURI) : Response.created(resourceURI);
+
+			// (not used currently)
+			//validateIfRequested(object, options, builder, task, parentResult);
 			response = builder.build();
 		} catch (ObjectAlreadyExistsException e) {
 			response = Response.serverError().entity(e.getMessage()).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ExpressionEvaluationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (PolicyViolationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
-	
+
 	@DELETE
 	@Path("/{type}/{id}")
 //	@Produces({"text/html", "application/xml"})
-	public Response deleteObject(@PathParam("type") String type, @PathParam("id") String id, 
+	public Response deleteObject(@PathParam("type") String type, @PathParam("id") String id,
 			@QueryParam("options") List<String> options, @Context MessageContext mc){
 
-		LOGGER.info("model rest service for delete operation start");
-		
-		Task task = taskManager.createTaskInstance("delete");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+		LOGGER.debug("model rest service for delete operation start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_DELETE_OBJECT);
+
 		Class clazz = ObjectTypes.getClassFromRestType(type);
 		Response response;
 		try {
 			if (clazz.isAssignableFrom(TaskType.class)){
 				model.suspendAndDeleteTasks(MiscUtil.createCollection(id), WAIT_FOR_TASK_STOP, true, parentResult);
 				parentResult.computeStatus();
-				auditLogout(task);
+				finishRequest(task);
 				if (parentResult.isSuccess()){
 					return Response.noContent().build();
 				}
-				
+
 				return Response.serverError().entity(parentResult.getMessage()).build();
-				
-			} 
-			
+
+			}
+
 			ModelExecuteOptions modelExecuteOptions = ModelExecuteOptions.fromRestOptions(options);
-			
+
 			model.deleteObject(clazz, id, modelExecuteOptions, task, parentResult);
 			response = Response.noContent().build();
-			
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConsistencyViolationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (PolicyViolationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
-	
+
 	@POST
 	@Path("/{type}/{oid}")
-	public <T extends ObjectType> Response modifyObjectPost(@PathParam("type") String type, @PathParam("oid") String oid, 
+	public <T extends ObjectType> Response modifyObjectPost(@PathParam("type") String type, @PathParam("oid") String oid,
 			ObjectModificationType modificationType, @QueryParam("options") List<String> options, @Context MessageContext mc) {
 		return modifyObjectPatch(type, oid, modificationType, options, mc);
 	}
-	
+
 	@PATCH
 	@Path("/{type}/{oid}")
 //	@Produces({"text/html", "application/xml"})
-	public <T extends ObjectType> Response modifyObjectPatch(@PathParam("type") String type, @PathParam("oid") String oid, 
+	public <T extends ObjectType> Response modifyObjectPatch(@PathParam("type") String type, @PathParam("oid") String oid,
 			ObjectModificationType modificationType, @QueryParam("options") List<String> options, @Context MessageContext mc) {
-		
-		LOGGER.info("model rest service for modify operation start");
-		
-		Task task = taskManager.createTaskInstance("modifyObject");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+
+		LOGGER.debug("model rest service for modify operation start");
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_MODIFY_OBJECT);
+
 		Class clazz = ObjectTypes.getClassFromRestType(type);
 		Response response;
 		try {
@@ -343,39 +402,25 @@ public class ModelRestService {
 			Collection<? extends ItemDelta> modifications = DeltaConvertor.toModifications(modificationType, clazz, prismContext);
 			model.modifyObject(clazz, oid, modifications, modelExecuteOptions, task, parentResult);
 			response = Response.noContent().build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ExpressionEvaluationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ObjectAlreadyExistsException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (PolicyViolationException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
-	
+
 	@POST
 	@Path("/notifyChange")
-	public Response notifyChange(ResourceObjectShadowChangeDescriptionType changeDescription, 
+	public Response notifyChange(ResourceObjectShadowChangeDescriptionType changeDescription,
 			@Context UriInfo uriInfo, @Context MessageContext mc) {
-		LOGGER.info("model rest service for notify change operation start");
+		LOGGER.debug("model rest service for notify change operation start");
 		Validate.notNull(changeDescription, "Chnage description must not be null");
-		Task task = taskManager.createTaskInstance("notifyChange");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_NOTIFY_CHANGE);
+
 		Response response;
 		try {
 			model.notifyChange(changeDescription, parentResult, task);
@@ -388,129 +433,106 @@ public class ModelRestService {
 //				changeDescription.get
 //			}
 //			response = Response.seeOther((uriInfo.getBaseUriBuilder().path(this.getClass(), "getObject").build(ObjectTypes.TASK.getRestType(), task.getOid()))).build();
-		} catch (ObjectAlreadyExistsException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
 
 
-	
+
 	@GET
 	@Path("/shadows/{oid}/owner")
 //	@Produces({"text/html", "application/xml"})
 	public Response findShadowOwner(@PathParam("oid") String shadowOid, @Context MessageContext mc){
-		
-		LOGGER.info("model rest service for find shadow owner operation start");
 
-		Task task = taskManager.createTaskInstance("find shadow owner");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_FIND_SHADOW_OWNER);
+
 		Response response;
 		try {
 			PrismObject<UserType> user = model.findShadowOwner(shadowOid, task, parentResult);
 			response = Response.ok().entity(user).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
 		} catch (ConfigurationException e) {
-			response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+			response = RestServiceUtil.buildErrorResponse(Status.INTERNAL_SERVER_ERROR, e.getMessage());
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
 
 	@POST
 	@Path("/{type}/search")
 //	@Produces({"text/html", "application/xml"})
-	public Response searchObjects(@PathParam("type") String type, QueryType queryType, @Context MessageContext mc){
-	
-		LOGGER.info("model rest service for find shadow owner operation start");
+	public Response searchObjects(@PathParam("type") String type, QueryType queryType,
+			@QueryParam("options") List<String> options,
+			@QueryParam("include") List<String> include,
+			@QueryParam("exclude") List<String> exclude,
+			@Context MessageContext mc){
 
-		Task task = taskManager.createTaskInstance("searchObjects");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_SEARCH_OBJECTS);
 
 		Class clazz = ObjectTypes.getClassFromRestType(type);
 		Response response;
-		try {	
+		try {
 			ObjectQuery query = QueryJaxbConvertor.createObjectQuery(clazz, queryType, prismContext);
-		
-			List<PrismObject<? extends ShadowType>> objects = model.searchObjects(clazz, query, null, task, parentResult);
-		
+			Collection<SelectorOptions<GetOperationOptions>> searchOptions = GetOperationOptions.fromRestOptions(options, include, exclude);
+			List<PrismObject<? extends ShadowType>> objects = model.searchObjects(clazz, query, searchOptions, task, parentResult);
+
 			ObjectListType listType = new ObjectListType();
 			for (PrismObject<? extends ObjectType> o : objects) {
+				removeExcludes(o, exclude);		// temporary measure until fixed in repo
 				listType.getObject().add(o.asObjectable());
 			}
-		
+
 			response = Response.ok().entity(listType).build();
-		
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
+	}
+
+	private void removeExcludes(PrismObject<? extends ObjectType> object, List<String> exclude) {
+		for (ItemPath path : ItemPath.fromStringList(exclude)) {
+			Item item = object.findItem(path);		// reduce to "removeItem" after fixing that method implementation
+			if (item != null) {
+				object.removeItem(item.getPath(), Item.class);
+			}
+		}
 	}
 
 	@POST
 	@Path("/resources/{resourceOid}/import/{objectClass}")
 //	@Produces({"text/html", "application/xml"})
-	public Response importFromResource(@PathParam("resourceOid") String resourceOid, @PathParam("objectClass") String objectClass, 
-			@Context MessageContext mc, @Context UriInfo uriInfo) {	
-		LOGGER.info("model rest service for import from resource operation start");
+	public Response importFromResource(@PathParam("resourceOid") String resourceOid, @PathParam("objectClass") String objectClass,
+			@Context MessageContext mc, @Context UriInfo uriInfo) {
+		LOGGER.debug("model rest service for import from resource operation start");
 
-		Task task = taskManager.createTaskInstance("importFromResource");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_IMPORT_FROM_RESOURCE);
 
 		QName objClass = new QName(MidPointConstants.NS_RI, objectClass);
 		Response response;
 		try {
 			model.importFromResource(resourceOid, objClass, task, parentResult);
-			response = Response.seeOther((uriInfo.getBaseUriBuilder().path(this.getClass(), "getObject").build(ObjectTypes.TASK.getRestType(), task.getOid()))).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (CommunicationException e) {
-			response = Response.status(Status.GATEWAY_TIMEOUT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (ConfigurationException e) {
-			response = Response.status(Status.BAD_GATEWAY).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+			response = Response.seeOther((uriInfo.getBaseUriBuilder().path(this.getClass(), "getObject")
+					.build(ObjectTypes.TASK.getRestType(), task.getOid()))).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		
+
 		parentResult.computeStatus();
-		auditLogout(task);
+		finishRequest(task);
 		return response;
 	}
 
@@ -518,31 +540,35 @@ public class ModelRestService {
 	@Path("/resources/{resourceOid}/test")
 //	@Produces({"text/html", "application/xml"})
 	public Response testResource(@PathParam("resourceOid") String resourceOid, @Context MessageContext mc) {
-		LOGGER.info("model rest service for test resource operation start");
+		LOGGER.debug("model rest service for test resource operation start");
 
-		Task task = taskManager.createTaskInstance("testResource");
-		initRequest(task, mc);
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_TEST_RESOURCE);
 
 		Response response;
+		OperationResult testResult = null;
 		try {
-			OperationResult result = model.testResource(resourceOid, task);
-			response = Response.ok(result).build();
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+			testResult = model.testResource(resourceOid, task);
+			response = Response.ok(testResult).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-	
-		auditLogout(task);
+
+		if (testResult != null) {
+			parentResult.getSubresults().add(testResult);
+		}
+
+		finishRequest(task);
 		return response;
 	}
-	
+
 	@POST
 	@Path("/tasks/{oid}/suspend")
     public Response suspendTasks(@PathParam("oid") String taskOid, @Context MessageContext mc) {
-		
-		Task task = taskManager.createTaskInstance("suspendTasks");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_SUSPEND_TASKS);
+
 		Response response;
 		Collection<String> taskOids = MiscUtil.createCollection(taskOid);
 		try {
@@ -553,24 +579,21 @@ public class ModelRestService {
 			} else {
 				response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(parentResult.getMessage()).build();
 			}
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		auditLogout(task);
+
+		finishRequest(task);
 		return response;
     }
 
 //	@DELETE
 //	@Path("tasks/{oid}/suspend")
     public Response suspendAndDeleteTasks(@PathParam("oid") String taskOid, @Context MessageContext mc) {
-    	Task task = taskManager.createTaskInstance("suspendAndDeleteTasks");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
-		
+
+    	Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_SUSPEND_AND_DELETE_TASKS);
+
 		Response response;
 		Collection<String> taskOids = MiscUtil.createCollection(taskOid);
 		try {
@@ -582,25 +605,20 @@ public class ModelRestService {
 			} else {
 				response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(parentResult.getMessage()).build();
 			}
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-        
-		auditLogout(task);
+
+		finishRequest(task);
 		return response;
     }
-	
-	
+
 	@POST
 	@Path("/tasks/{oid}/resume")
     public Response resumeTasks(@PathParam("oid") String taskOid, @Context MessageContext mc) {
-		Task task = taskManager.createTaskInstance("resumeTasks");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_RESUME_TASKS);
 
 		Response response;
 		Collection<String> taskOids = MiscUtil.createCollection(taskOid);
@@ -614,14 +632,11 @@ public class ModelRestService {
 			} else {
 				response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(parentResult.getMessage()).build();
 			}
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
-		auditLogout(task);
+
+		finishRequest(task);
 		return response;
     }
 
@@ -629,9 +644,10 @@ public class ModelRestService {
 	@POST
 	@Path("tasks/{oid}/run")
     public Response scheduleTasksNow(@PathParam("oid") String taskOid, @Context MessageContext mc) {
-		Task task = taskManager.createTaskInstance("scheduleTasksNow");
-		initRequest(task, mc);
-		OperationResult parentResult = task.getResult();
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult parentResult = task.getResult().createSubresult(OPERATION_SCHEDULE_TASKS_NOW);
+
 		Collection<String> taskOids = MiscUtil.createCollection(taskOid);
 
 		Response response;
@@ -645,19 +661,162 @@ public class ModelRestService {
 			} else {
 				response = Response.status(Status.INTERNAL_SERVER_ERROR).entity(parentResult.getMessage()).build();
 			}
-		} catch (ObjectNotFoundException e) {
-			response = Response.status(Status.NOT_FOUND).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SchemaException e) {
-			response = Response.status(Status.CONFLICT).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
-		} catch (SecurityViolationException e) {
-			response = Response.status(Status.FORBIDDEN).entity(e.getMessage()).type(MediaType.TEXT_HTML).build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
 		}
 
-		auditLogout(task);
+		finishRequest(task);
 		return response;
     }
-	
-//    @GET
+
+	@POST
+	@Path("/rpc/executeScript")
+	//	@Produces({"text/html", "application/xml"})
+	@Consumes({"application/xml" })
+	public <T extends ObjectType> Response executeScript(ScriptingExpressionType scriptingExpression,
+			@QueryParam("asynchronous") Boolean asynchronous,
+			@Context UriInfo uriInfo, @Context MessageContext mc) {
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult result = task.getResult().createSubresult(OPERATION_EXECUTE_SCRIPT);
+
+		String oid;
+		Response response;
+		try {
+			ResponseBuilder builder;
+			if (Boolean.TRUE.equals(asynchronous)) {
+				scriptingService.evaluateExpression(scriptingExpression, task, result);
+				URI resourceUri = uriInfo.getAbsolutePathBuilder().path(task.getOid()).build(task.getOid());
+				builder = Response.created(resourceUri);
+			} else {
+				ScriptExecutionResult executionResult = scriptingService.evaluateExpression(scriptingExpression, task, result);
+
+				ExecuteScriptsResponseType operationOutput = new ExecuteScriptsResponseType();
+				operationOutput.setResult(result.createOperationResultType());
+				ScriptOutputsType outputs = new ScriptOutputsType();
+				operationOutput.setOutputs(outputs);
+				SingleScriptOutputType output = new SingleScriptOutputType();
+				output.setTextOutput(executionResult.getConsoleOutput());
+				output.setXmlData(prepareXmlData(executionResult.getDataOutput()));
+				outputs.getOutput().add(output);
+
+				builder = Response.ok();
+				builder.entity(operationOutput);
+			}
+
+			response = builder.build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't execute script.", ex);
+		}
+
+		result.computeStatus();
+		finishRequest(task);
+		return response;
+	}
+
+	private ItemListType prepareXmlData(List<Item> output) throws JAXBException, SchemaException {
+		ItemListType itemListType = new ItemListType();
+		if (output != null) {
+			for (Item item : output) {
+				RawType rawType = new RawType(prismContext.xnodeSerializer().serialize(item), prismContext);
+				itemListType.getItem().add(rawType);
+			}
+		}
+		return itemListType;
+	}
+
+	@POST
+	@Path("/rpc/compare")
+	//	@Produces({"text/html", "application/xml"})
+	@Consumes({"application/xml" })
+	public <T extends ObjectType> Response compare(PrismObject<T> clientObject,
+			@QueryParam("readOptions") List<String> restReadOptions,
+			@QueryParam("compareOptions") List<String> restCompareOptions,
+			@QueryParam("ignoreItems") List<String> restIgnoreItems,
+			@Context MessageContext mc) {
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult result = task.getResult().createSubresult(OPERATION_COMPARE);
+
+		Response response;
+		try {
+			ResponseBuilder builder;
+			List<ItemPath> ignoreItemPaths = ItemPath.fromStringList(restIgnoreItems);
+			final GetOperationOptions getOpOptions = GetOperationOptions.fromRestOptions(restReadOptions);
+			Collection<SelectorOptions<GetOperationOptions>> readOptions =
+					getOpOptions != null ? SelectorOptions.createCollection(getOpOptions) : null;
+			ModelCompareOptions compareOptions = ModelCompareOptions.fromRestOptions(restCompareOptions);
+			CompareResultType compareResult = modelService.compareObject(clientObject, readOptions, compareOptions, ignoreItemPaths, task, result);
+
+			builder = Response.ok();
+			builder.entity(compareResult);
+
+			response = builder.build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
+		}
+
+		result.computeStatus();
+		finishRequest(task);
+		return response;
+	}
+
+	@GET
+	@Path("/log/size")
+	@Produces({"text/plain"})
+	public Response getLogFileSize(@Context MessageContext mc) {
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult result = task.getResult().createSubresult(OPERATION_GET_LOG_FILE_SIZE);
+
+		Response response;
+		try {
+			long size = modelDiagnosticService.getLogFileSize(task, result);
+
+			ResponseBuilder builder = Response.ok();
+			builder.entity(String.valueOf(size));
+			response = builder.build();
+		} catch (Exception ex) {
+			response = RestServiceUtil.handleException(ex);
+		}
+
+		result.computeStatus();
+		finishRequest(task);
+		return response;
+	}
+
+	@GET
+	@Path("/log")
+	@Produces({"text/plain"})
+	public Response getLog(@QueryParam("fromPosition") Long fromPosition, @QueryParam("maxSize") Long maxSize, @Context MessageContext mc) {
+
+		Task task = RestServiceUtil.initRequest(mc);
+		OperationResult result = task.getResult().createSubresult(OPERATION_GET_LOG_FILE_CONTENT);
+
+		Response response;
+		try {
+			LogFileContentType content = modelDiagnosticService.getLogFileContent(fromPosition, maxSize, task, result);
+
+			ResponseBuilder builder = Response.ok();
+			builder.entity(content.getContent());
+			builder.header("ReturnedDataPosition", content.getAt());
+			builder.header("ReturnedDataComplete", content.isComplete());
+			builder.header("CurrentLogFileSize", content.getLogFileSize());
+
+			response = builder.build();
+		} catch (Exception ex) {
+			LoggingUtils.logUnexpectedException(LOGGER, "Cannot get log file content: fromPosition={}, maxSize={}", ex, fromPosition, maxSize);
+			response = RestServiceUtil.handleException(ex);
+		}
+
+		result.computeStatus();
+		finishRequest(task);
+		return response;
+	}
+
+
+	//    @GET
 //    @Path("tasks/{oid}")
 //    public Response getTaskByIdentifier(@PathParam("oid") String identifier) throws SchemaException, ObjectNotFoundException {
 //    	OperationResult parentResult = new OperationResult("getTaskByIdentifier");
@@ -695,55 +854,8 @@ public class ModelRestService {
 //    	model.synchronizeTasks(parentResult);
 //    }
 
-
-    private ModelExecuteOptions getOptions(UriInfo uriInfo){
-    	List<String> options = uriInfo.getQueryParameters().get(OPTIONS);
-		return ModelExecuteOptions.fromRestOptions(options);
-    }
-    
-	private void initRequest(Task task, MessageContext mc) {
-		UserType user = (UserType) mc.get("authenticatedUser");
-		task.setOwner(user.asPrismObject());
-		task.setChannel(SchemaConstants.CHANNEL_REST_URI);
-		auditLoginSuccess(task);
+	private void finishRequest(Task task) {
+		RestServiceUtil.finishRequest(task, securityHelper);
 	}
-    
-    private void auditLoginSuccess(Task task) {
-		AuditEventRecord record = new AuditEventRecord(AuditEventType.CREATE_SESSION, AuditEventStage.REQUEST);
-        PrismObject<UserType> owner = task.getOwner();
-        if (owner != null) {
-	        record.setInitiator(owner);
-	        PolyStringType name = owner.asObjectable().getName();
-	        if (name != null) {
-	        	record.setParameter(name.getOrig());
-	        }
-        }
 
-        record.setChannel(SchemaConstants.CHANNEL_REST_URI);
-        record.setTimestamp(System.currentTimeMillis());
-        record.setSessionIdentifier(task.getTaskIdentifier());
-        
-        record.setOutcome(OperationResultStatus.SUCCESS);
-		auditService.audit(record, task);
-	}
-    
-    private void auditLogout(Task task) {
-		AuditEventRecord record = new AuditEventRecord(AuditEventType.TERMINATE_SESSION, AuditEventStage.REQUEST);
-		PrismObject<UserType> owner = task.getOwner();
-        if (owner != null) {
-	        record.setInitiator(owner);
-	        PolyStringType name = owner.asObjectable().getName();
-	        if (name != null) {
-	        	record.setParameter(name.getOrig());
-	        }
-        }
-
-        record.setChannel(SchemaConstants.CHANNEL_REST_URI);
-        record.setTimestamp(System.currentTimeMillis());
-        record.setSessionIdentifier(task.getTaskIdentifier());
-        
-        record.setOutcome(OperationResultStatus.SUCCESS);
-
-        auditService.audit(record, task);
-	}
 }

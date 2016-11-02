@@ -17,27 +17,26 @@
 package com.evolveum.midpoint.web.page.admin.resources;
 
 
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.query.*;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.page.admin.PageAdmin;
-import com.evolveum.midpoint.web.page.admin.resources.dto.ResourceDto;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
@@ -45,7 +44,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.RestartResponseException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.model.IModel;
 import org.apache.wicket.util.string.StringValue;
 
 import java.util.Collection;
@@ -62,6 +60,10 @@ public class PageAdminResources extends PageAdmin {
     private static final String OPERATION_SAVE_SYNC_TASK = DOT_CLASS + "saveSyncTask";
 
     protected static final Trace LOGGER = TraceManager.getTrace(PageAdminResources.class);
+    
+    public static final String AUTH_CONNECTOR_HOSTS_ALL = AuthorizationConstants.AUTZ_UI_CONNECTOR_HOSTS_ALL_URL;
+    public static final String AUTH_CONNECTOR_HOSTS_ALL_LABEL = "PageAdminResources.auth.connectorHostsAll.label";
+    public static final String AUTH_CONNECTOR_HOSTS_ALL_DESCRIPTION = "PageAdminResources.auth.connectorHostsAll.description";
 
     public static final String AUTH_RESOURCE_ALL = AuthorizationConstants.AUTZ_UI_RESOURCES_ALL_URL;
     public static final String AUTH_RESOURCE_ALL_LABEL = "PageAdminResources.auth.resourcesAll.label";
@@ -92,11 +94,11 @@ public class PageAdminResources extends PageAdmin {
             }
 
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't get resource", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get resource", ex);
             result.recordFatalError("Couldn't get resource, reason: " + ex.getMessage(), ex);
         }
 
-        if (!WebMiscUtil.isSuccessOrHandledError(result)) {
+        if (!WebComponentUtil.isSuccessOrHandledError(result)) {
             if (resource != null) {
                 showResult(result);
             } else {
@@ -108,30 +110,23 @@ public class PageAdminResources extends PageAdmin {
         return resource;
     }
 
-    protected void deleteSyncTokenPerformed(AjaxRequestTarget target, IModel<ResourceDto> model){
-        ResourceDto dto = model.getObject();
-        String resourceOid = dto.getOid();
+    protected void deleteSyncTokenPerformed(AjaxRequestTarget target, ResourceType resourceType){
+//        ResourceDto dto = model.getObject();
+        String resourceOid = resourceType.getOid();
         String handlerUri = "http://midpoint.evolveum.com/xml/ns/public/model/synchronization/task/live-sync/handler-3";
         ObjectReferenceType resourceRef = new ObjectReferenceType();
         resourceRef.setOid(resourceOid);
         PrismObject<TaskType> oldTask;
 
         OperationResult result = new OperationResult(OPERATION_DELETE_SYNC_TOKEN);
-        ObjectQuery query;
+        ObjectQuery query = QueryBuilder.queryFor(TaskType.class, getPrismContext())
+                .item(TaskType.F_OBJECT_REF).ref(resourceOid)
+                .and().item(TaskType.F_HANDLER_URI).eq(handlerUri)
+                .build();
 
-        ObjectFilter refFilter = RefFilter.createReferenceEqual(TaskType.F_OBJECT_REF, TaskType.class,
-                getPrismContext(), resourceOid);
+        List<PrismObject<TaskType>> taskList = WebModelServiceUtils.searchObjects(TaskType.class, query, result, this);
 
-        ObjectFilter filterHandleUri = EqualFilter.createEqual(TaskType.F_HANDLER_URI, TaskType.class,
-                getPrismContext(), null, handlerUri);
-
-        query = new ObjectQuery();
-        query.setFilter(AndFilter.createAnd(refFilter, filterHandleUri));
-
-        List<PrismObject<TaskType>> taskList = WebModelUtils.searchObjects(TaskType.class, query,
-                result, this);
-
-        if(taskList.size() != 1){
+        if (taskList.size() != 1) {
             error(getString("pageResource.message.invalidTaskSearch"));
         } else {
             oldTask = taskList.get(0);
@@ -162,9 +157,9 @@ public class PageAdminResources extends PageAdmin {
         }
 
         try {
-            getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), null, task, result);
+            getModelService().executeChanges(WebComponentUtil.createDeltaCollection(delta), null, task, result);
         } catch (Exception e){
-            LoggingUtils.logException(LOGGER, "Couldn't save task.", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't save task.", e);
             result.recordFatalError("Couldn't save task.", e);
         }
         result.recomputeStatus();

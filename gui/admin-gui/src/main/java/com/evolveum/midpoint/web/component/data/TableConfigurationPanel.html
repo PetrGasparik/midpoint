@@ -17,10 +17,11 @@
 <!DOCTYPE html>
 <html xmlns:wicket="http://wicket.apache.org">
 <wicket:panel>
-    <div wicket:id="cogButton" class="btn-group pull-right" style="margin-left: 10px; margin-top:2px;">
+    <div wicket:id="cogButton" class="btn-group btn-group-sm pull-right" style="margin-left: 10px;">
         <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"
                 aria-haspopup="true" aria-expanded="false">
-            <i class="fa fa-cog"></i><span class="caret" style="margin-left: 10px;"></span>
+            <i class="fa fa-cog"></i>
+            <!--<span class="caret" style="margin-left: 10px;"></span>-->
         </button>
         <ul class="dropdown-menu">
             <li><a wicket:id="pageSize"><wicket:message key="TableConfigurationPanel.pageSize"/></a></li>
@@ -33,9 +34,13 @@
         <h3 class="popover-title"><wicket:message key="PageSizePopover.title"/></h3>
         <div class="popover-content">
             <form wicket:id="form">
+             	<div class="row">
+       	 			<span wicket:id="inputFeedback" class="text-danger"/>
+   				</div>
                 <div class="input-group">
                     <input wicket:id="input" type="text" size="1" style="display: inline-block; width: auto;"
                            class="form-control input-sm">
+                          
                     <span class="input-group-btn">
                         <button wicket:id="button" type="button" class="btn btn-sm btn-success">
                             <i class="fa fa-check"></i>

@@ -20,7 +20,6 @@ import com.evolveum.midpoint.audit.api.AuditEventStage;
 import com.evolveum.midpoint.audit.api.AuditEventType;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.common.Clock;
-import com.evolveum.midpoint.common.InternalsConfig;
 import com.evolveum.midpoint.model.api.ModelAuthorizationAction;
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
 import com.evolveum.midpoint.model.api.PolicyViolationException;
@@ -29,15 +28,18 @@ import com.evolveum.midpoint.model.api.context.ModelState;
 import com.evolveum.midpoint.model.api.hooks.ChangeHook;
 import com.evolveum.midpoint.model.api.hooks.HookOperationMode;
 import com.evolveum.midpoint.model.api.hooks.HookRegistry;
+import com.evolveum.midpoint.model.common.SystemObjectCache;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
 import com.evolveum.midpoint.model.common.expression.evaluator.caching.AssociationSearchExpressionEvaluatorCache;
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpression;
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpressionFactory;
+import com.evolveum.midpoint.model.impl.ModelObjectResolver;
 import com.evolveum.midpoint.model.impl.controller.ModelUtils;
 import com.evolveum.midpoint.model.impl.lens.projector.ContextLoader;
 import com.evolveum.midpoint.model.impl.lens.projector.FocusConstraintsChecker;
 import com.evolveum.midpoint.model.impl.lens.projector.Projector;
 import com.evolveum.midpoint.model.impl.sync.RecomputeTaskHandler;
+import com.evolveum.midpoint.model.impl.util.Utils;
 import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.Item;
 import com.evolveum.midpoint.prism.PrismContainer;
@@ -51,10 +53,11 @@ import com.evolveum.midpoint.prism.delta.ContainerDelta;
 import com.evolveum.midpoint.prism.delta.DeltaSetTriple;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.parser.QueryConvertor;
+import com.evolveum.midpoint.prism.marshaller.QueryConvertor;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.RefFilter;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.provisioning.api.ChangeNotificationDispatcher;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
@@ -65,6 +68,7 @@ import com.evolveum.midpoint.schema.ObjectDeltaOperation;
 import com.evolveum.midpoint.schema.constants.ExpressionConstants;
 import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.schema.internals.InternalsConfig;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.schema.util.SystemConfigurationTypeUtil;
@@ -115,7 +119,6 @@ import javax.xml.namespace.QName;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -156,6 +159,12 @@ public class Clockwork {
     @Autowired(required = true)
     @Qualifier("cacheRepositoryService")
     private transient RepositoryService repositoryService;
+    
+    @Autowired(required = true)
+	private ModelObjectResolver objectResolver;
+    
+    @Autowired(required = true)
+	private SystemObjectCache systemObjectCache;
 
 	@Autowired
 	private transient ProvisioningService provisioningService;
@@ -246,8 +255,8 @@ public class Clockwork {
 	}
 
 	private <F extends ObjectType> int getMaxClicks(LensContext<F> context, OperationResult result) throws SchemaException, ObjectNotFoundException {
-		PrismObject<SystemConfigurationType> sysconfigObject = LensUtil.getSystemConfiguration(context, repositoryService, result);
-		Integer maxClicks = SystemConfigurationTypeUtil.getMaxModelClicks(sysconfigObject);
+		PrismObject<SystemConfigurationType> systemConfiguration = systemObjectCache.getSystemConfiguration(result);
+		Integer maxClicks = SystemConfigurationTypeUtil.getMaxModelClicks(systemConfiguration);
 		if (maxClicks == null) {
 			return DEFAULT_MAX_CLICKS;
 		} else {
@@ -337,7 +346,8 @@ public class Clockwork {
 					}
 					return mode;
 			}		
-			
+			result.recomputeStatus();
+			result.cleanupResult();
 			return invokeHooks(context, task, result);
 			
 		} catch (CommunicationException e) {
@@ -382,7 +392,7 @@ public class Clockwork {
     	// TODO: following two parts should be merged together in later versions
     	
     	// Execute configured scripting hooks
-    	PrismObject<SystemConfigurationType> systemConfiguration = LensUtil.getSystemConfiguration(context, repositoryService, result);
+    	PrismObject<SystemConfigurationType> systemConfiguration = systemObjectCache.getSystemConfiguration(result);
     	// systemConfiguration may be null in some tests
     	if (systemConfiguration != null) {
 	    	ModelHooksType modelHooks = systemConfiguration.asObjectable().getModelHooks();
@@ -479,7 +489,7 @@ public class Clockwork {
 		}
 		variables.addVariableDefinition(ExpressionConstants.VAR_FOCUS, focus);
 		
-		LensUtil.evaluateScript(scriptExpression, context, variables, shortDesc, task, result);
+		Utils.evaluateScript(scriptExpression, context, variables, false, shortDesc, task, result);
 	}
 
     private <F extends ObjectType> void processInitialToPrimary(LensContext<F> context, Task task, OperationResult result) {
@@ -625,8 +635,9 @@ public class Clockwork {
         PrismPropertyDefinition propertyDef = prismContext.getSchemaRegistry()
                 .findPropertyDefinitionByElementName(SchemaConstants.MODEL_EXTENSION_OBJECT_QUERY);
         PrismReferenceValue referenceValue = new PrismReferenceValue(context.getFocusContext().getOid(), RoleType.COMPLEX_TYPE);
-        ObjectFilter refFilter = RefFilter.createReferenceEqual(new ItemPath(UserType.F_ASSIGNMENT, AssignmentType.F_TARGET_REF),
-                UserType.class, prismContext, referenceValue);
+        ObjectFilter refFilter = QueryBuilder.queryFor(FocusType.class, prismContext)
+				.item(FocusType.F_ASSIGNMENT, AssignmentType.F_TARGET_REF).ref(referenceValue)
+				.buildFilter();
         SearchFilterType filterType = QueryConvertor.createSearchFilterType(refFilter, prismContext);
         QueryType queryType = new QueryType();
         queryType.setFilter(filterType);
@@ -641,6 +652,7 @@ public class Clockwork {
         reconTask.setHandlerUri(RecomputeTaskHandler.HANDLER_URI);
         reconTask.setCategory(TaskCategory.RECOMPUTATION);
         taskManager.switchToBackground(reconTask, result);
+		result.setBackgroundTaskOid(reconTask.getOid());
         result.recordStatus(OperationResultStatus.IN_PROGRESS, "Reconciliation task switched to background");
         return HookOperationMode.BACKGROUND;
     }
@@ -740,6 +752,9 @@ public class Clockwork {
 			Collection<ObjectDeltaOperation<? extends ObjectType>> clonedDeltas = ObjectDeltaOperation.cloneDeltaCollection(context.getPrimaryChanges());
 			checkNamesArePresent(clonedDeltas, primaryObject);
 			auditRecord.addDeltas(clonedDeltas);
+			if (auditRecord.getTarget() == null) {
+				auditRecord.setTarget(Utils.determineAuditTargetDeltaOps(clonedDeltas));
+			}
 		} else if (stage == AuditEventStage.EXECUTION) {
 			auditRecord.setOutcome(result.getComputeStatus());
 			Collection<ObjectDeltaOperation<? extends ObjectType>> unauditedExecutedDeltas = context.getUnauditedExecutedDeltas();
@@ -952,14 +967,8 @@ public class Clockwork {
 		try {
 			
 			final LensFocusContext<F> focusContext = context.getFocusContext();
-			OwnerResolver ownerResolver = null;
+			OwnerResolver ownerResolver = new LensOwnerResolver<>(context, objectResolver, task, result);
 			if (focusContext != null) {
-				ownerResolver = new OwnerResolver() {
-					@Override
-					public <F extends FocusType> PrismObject<F> resolveOwner(PrismObject<ShadowType> shadow) {
-						return (PrismObject<F>) focusContext.getObjectCurrent();
-					}
-				};
 				authorizeElementContext(context, focusContext, ownerResolver, true, task, result);
 			}
 			for (LensProjectionContext projectionContext: context.getProjectionContexts()) {
@@ -986,6 +995,9 @@ public class Clockwork {
 			}
 			String operationUrl = ModelUtils.getOperationUrlFromDelta(primaryDelta);
 			ObjectSecurityConstraints securityConstraints = securityEnforcer.compileSecurityConstraints(object, ownerResolver);
+			if (securityConstraints == null) {
+				throw new AuthorizationException("Access denied");
+			}
 
 			if (isFocus) {
 				// Process assignments first. If the assignments are allowed then we

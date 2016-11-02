@@ -45,20 +45,16 @@ import javax.xml.bind.JAXBException;
 import javax.xml.namespace.QName;
 import javax.xml.ws.Holder;
 
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.task.api.TaskManagerException;
+import com.evolveum.midpoint.util.exception.*;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 import org.opends.server.core.ModifyOperation;
 import org.opends.server.protocols.internal.InternalSearchOperation;
-import org.opends.server.types.Attribute;
-import org.opends.server.types.AttributeValue;
-import org.opends.server.types.DereferencePolicy;
-import org.opends.server.types.DirectoryException;
-import org.opends.server.types.Entry;
+import org.opends.server.types.*;
 import org.opends.server.types.ModificationType;
-import org.opends.server.types.RawModification;
-import org.opends.server.types.ResultCode;
-import org.opends.server.types.Entry;
-import org.opends.server.types.SearchScope;
 import org.opends.server.util.ChangeRecordEntry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
@@ -74,14 +70,6 @@ import com.evolveum.midpoint.common.refinery.RefinedAttributeDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.model.test.AbstractModelIntegrationTest;
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Item;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
@@ -90,7 +78,7 @@ import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.match.MatchingRule;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.prism.match.StringIgnoreCaseMatchingRule;
-import com.evolveum.midpoint.prism.parser.util.XNodeProcessorUtil;
+import com.evolveum.midpoint.prism.marshaller.XNodeProcessorUtil;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.QueryJaxbConvertor;
@@ -110,6 +98,7 @@ import com.evolveum.midpoint.schema.processor.ObjectClassComplexTypeDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
@@ -126,11 +115,6 @@ import com.evolveum.midpoint.test.util.TestUtil;
 import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.JAXBUtil;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectDeltaListType;
@@ -476,7 +460,12 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
         OperationResult provisioningSelfTestResult = modelDiagnosticService.provisioningSelfTest(task);
 
         // THEN
-        assertSuccess("Provisioning self test", provisioningSelfTestResult);
+        display("Repository self test result", provisioningSelfTestResult);
+        // There may be warning about illegal key size on some platforms. As far as it is warning and not error we are OK
+        // the system will fall back to a interoperable key size
+		if (provisioningSelfTestResult.getStatus() != OperationResultStatus.SUCCESS && provisioningSelfTestResult.getStatus() != OperationResultStatus.WARNING) {
+			AssertJUnit.fail("Provisioning self-test failed: "+provisioningSelfTestResult);
+		}
 }
 
     
@@ -575,10 +564,10 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
     }
 
     private void checkOpenDjSchema(ResourceType resource, String source) throws SchemaException {
-        ResourceSchema schema = RefinedResourceSchema.getResourceSchema(resource, prismContext);
+        ResourceSchema schema = RefinedResourceSchemaImpl.getResourceSchema(resource, prismContext);
         ObjectClassComplexTypeDefinition accountDefinition = schema.findDefaultObjectClassDefinition(ShadowKindType.ACCOUNT);
         assertNotNull("Schema does not define any account (resource from " + source + ")", accountDefinition);
-        Collection<? extends ResourceAttributeDefinition> identifiers = accountDefinition.getIdentifiers();
+        Collection<? extends ResourceAttributeDefinition> identifiers = accountDefinition.getPrimaryIdentifiers();
         assertFalse("No account identifiers (resource from " + source + ")", identifiers == null || identifiers.isEmpty());
         // TODO: check for naming attributes and display names, etc
 
@@ -1056,14 +1045,14 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
         // GIVEN
         OperationResult result = new OperationResult(TestSanityLegacy.class.getName() + ".test016ProvisioningSearchAccountsIterative");
 
-        RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resourceTypeOpenDjrepo, prismContext);
+        RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resourceTypeOpenDjrepo, prismContext);
         final RefinedObjectClassDefinition refinedAccountDefinition = refinedSchema.getDefaultRefinedDefinition(ShadowKindType.ACCOUNT);
 
         QName objectClass = refinedAccountDefinition.getObjectClassDefinition().getTypeName();
         ObjectQuery q = ObjectQueryUtil.createResourceAndObjectClassQuery(resourceTypeOpenDjrepo.getOid(), objectClass, prismContext);
 //        ObjectQuery q = QueryConvertor.createObjectQuery(ResourceObjectShadowType.class, query, prismContext);
 
-        final Collection<ObjectType> objects = new HashSet<ObjectType>();
+        final Collection<ObjectType> objects = new HashSet<>();
         final MatchingRule caseIgnoreMatchingRule = matchingRuleRegistry.getMatchingRule(StringIgnoreCaseMatchingRule.NAME, DOMUtil.XSD_STRING);
         ResultHandler handler = new ResultHandler<ObjectType>() {
 
@@ -1249,7 +1238,7 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
         passwordDelta.setPath(ModelClientUtil.createItemPathType("credentials/password/value"));
         ProtectedStringType pass = new ProtectedStringType();
         pass.setClearValue(NEW_PASSWORD);
-        XNode passValue = prismContext.getBeanConverter().marshall(pass);
+        XNode passValue = ((PrismContextImpl) prismContext).getBeanMarshaller().marshall(pass);
         System.out.println("PASSWORD VALUE: " + passValue.debugDump());
         RawType passwordValue = new RawType(passValue, prismContext);
         passwordDelta.getValue().add(passwordValue);
@@ -2819,15 +2808,19 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
 
         waitFor("Waiting for import to complete", new Checker() {
             @Override
-            public boolean check() throws Exception {
+            public boolean check() throws CommonException {
                 Holder<OperationResultType> resultHolder = new Holder<OperationResultType>();
                 Holder<ObjectType> objectHolder = new Holder<ObjectType>();
                 OperationResult opResult = new OperationResult("import check");
                 assertNoRepoCache();
                 SelectorQualifiedGetOptionsType options = new SelectorQualifiedGetOptionsType();
-                modelWeb.getObject(ObjectTypes.TASK.getTypeQName(), taskOid,
-                        options, objectHolder, resultHolder);
-                assertNoRepoCache();
+				try {
+					modelWeb.getObject(ObjectTypes.TASK.getTypeQName(), taskOid,
+							options, objectHolder, resultHolder);
+				} catch (FaultMessage faultMessage) {
+					throw new SystemException(faultMessage);
+				}
+				assertNoRepoCache();
                 //				display("getObject result (wait loop)",resultHolder.value);
                 TestUtil.assertSuccess("getObject has failed", resultHolder.value);
                 Task task = taskManager.createTaskInstance(objectHolder.value.asPrismObject(), opResult);
@@ -3573,7 +3566,7 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
         ItemDeltaType passwordDelta = new ItemDeltaType();
         passwordDelta.setModificationType(ModificationTypeType.REPLACE);
         passwordDelta.setPath(ModelClientUtil.createItemPathType("credentials/password/value"));
-        RawType passwordValue = new RawType(prismContext.getBeanConverter().marshall(ModelClientUtil.createProtectedString(newPassword)), prismContext);
+        RawType passwordValue = new RawType(((PrismContextImpl) prismContext).getBeanMarshaller().marshall(ModelClientUtil.createProtectedString(newPassword)), prismContext);
         passwordDelta.getValue().add(passwordValue);
     	
 //    	ItemDeltaType mod1 = new ItemDeltaType();
@@ -3677,9 +3670,13 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
         taskManager.shutdown();
         waitFor("waiting for task manager shutdown", new Checker() {
             @Override
-            public boolean check() throws Exception {
-                return taskManager.getLocallyRunningTasks(new OperationResult("dummy")).isEmpty();
-            }
+            public boolean check() throws CommonException {
+				try {
+					return taskManager.getLocallyRunningTasks(new OperationResult("dummy")).isEmpty();
+				} catch (TaskManagerException e) {
+					throw new SystemException(e);
+				}
+			}
 
             @Override
             public void timeout() {
@@ -3782,7 +3779,7 @@ public class TestSanityLegacy extends AbstractModelIntegrationTest {
 
         waitFor("Waiting for sync cycle to detect change", new Checker() {
             @Override
-            public boolean check() throws Exception {
+            public boolean check() throws CommonException {
                 syncCycle.refresh(result);
                 display("SyncCycle while waiting for sync cycle to detect change", syncCycle);
                 if (syncCycle.getExecutionStatus() != TaskExecutionStatus.RUNNABLE) {

@@ -18,7 +18,6 @@ package com.evolveum.midpoint.schema.util;
 
 import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.xnode.PrimitiveXNode;
 import com.evolveum.midpoint.prism.xnode.XNode;
@@ -29,12 +28,10 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ApprovalSchemaType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.LoginEventType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectFactory;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceAttributeDefinitionType;
 import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 import com.evolveum.prism.xml.ns._public.types_3.RawType;
-import org.apache.commons.lang.StringUtils;
 
 import javax.xml.bind.JAXBElement;
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -127,11 +124,16 @@ public class ValueDisplayUtil {
             return sb.toString();
         } else if (value instanceof QName) {
             QName qname = (QName) value;
-            if (StringUtils.isNotEmpty(qname.getNamespaceURI())) {
-                return qname.getLocalPart() + " (in " + qname.getNamespaceURI() + ")";
-            } else {
-                return qname.getLocalPart();
-            }
+            return qname.getLocalPart();
+//            if (StringUtils.isNotEmpty(qname.getNamespaceURI())) {
+//                return qname.getLocalPart() + " (in " + qname.getNamespaceURI() + ")";
+//            } else {
+//                return qname.getLocalPart();
+//            }
+        } else if (value instanceof Number) {
+			return String.valueOf(value);
+        } else if (value instanceof byte[]) {
+            return "(binary data)";
         } else {
             return "(a value of type " + value.getClass().getName() + ")";  // todo i18n
         }

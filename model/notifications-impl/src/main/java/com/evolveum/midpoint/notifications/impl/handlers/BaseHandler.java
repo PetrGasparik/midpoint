@@ -20,12 +20,14 @@ import com.evolveum.midpoint.model.common.expression.Expression;
 import com.evolveum.midpoint.model.common.expression.ExpressionEvaluationContext;
 import com.evolveum.midpoint.model.common.expression.ExpressionFactory;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
+import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.notifications.api.EventHandler;
 import com.evolveum.midpoint.notifications.api.events.Event;
 import com.evolveum.midpoint.notifications.impl.NotificationManagerImpl;
-import com.evolveum.midpoint.notifications.impl.NotificationsUtil;
+import com.evolveum.midpoint.notifications.impl.NotificationFuctionsImpl;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismPropertyDefinition;
+import com.evolveum.midpoint.prism.PrismPropertyDefinitionImpl;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
@@ -61,7 +63,7 @@ public abstract class BaseHandler implements EventHandler {
     protected NotificationManagerImpl notificationManager;
 
     @Autowired
-    protected NotificationsUtil notificationsUtil;
+    protected NotificationFuctionsImpl notificationsUtil;
 
     @Autowired
     protected PrismContext prismContext;
@@ -127,10 +129,10 @@ public abstract class BaseHandler implements EventHandler {
     		Task task, OperationResult result) throws ObjectNotFoundException, SchemaException, ExpressionEvaluationException {
 
         QName resultName = new QName(SchemaConstants.NS_C, "result");
-        PrismPropertyDefinition<Boolean> resultDef = new PrismPropertyDefinition<>(resultName, DOMUtil.XSD_BOOLEAN, prismContext);
+        PrismPropertyDefinition<Boolean> resultDef = new PrismPropertyDefinitionImpl<>(resultName, DOMUtil.XSD_BOOLEAN, prismContext);
         Expression<PrismPropertyValue<Boolean>,PrismPropertyDefinition<Boolean>> expression = expressionFactory.makeExpression(expressionType, resultDef, shortDesc, task, result);
         ExpressionEvaluationContext params = new ExpressionEvaluationContext(null, expressionVariables, shortDesc, task, result);
-        PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> exprResultTriple = expression.evaluate(params);
+        PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> exprResultTriple = ModelExpressionThreadLocalHolder.evaluateExpressionInContext(expression, params, task, result);
 
         Collection<PrismPropertyValue<Boolean>> exprResult = exprResultTriple.getZeroSet();
         if (exprResult.size() == 0) {
@@ -165,13 +167,14 @@ public abstract class BaseHandler implements EventHandler {
     		String shortDesc, Task task, OperationResult result) throws ObjectNotFoundException, SchemaException, ExpressionEvaluationException {
 
         QName resultName = new QName(SchemaConstants.NS_C, "result");
-        PrismPropertyDefinition<String> resultDef = new PrismPropertyDefinition<>(resultName, DOMUtil.XSD_STRING, prismContext);
+        PrismPropertyDefinition<String> resultDef = new PrismPropertyDefinitionImpl<>(resultName, DOMUtil.XSD_STRING, prismContext);
 
         Expression<PrismPropertyValue<String>,PrismPropertyDefinition<String>> expression = expressionFactory.makeExpression(expressionType, resultDef, shortDesc, task, result);
         ExpressionEvaluationContext params = new ExpressionEvaluationContext(null, expressionVariables, shortDesc, task, result);
-        PrismValueDeltaSetTriple<PrismPropertyValue<String>> exprResult = expression.evaluate(params);
+        PrismValueDeltaSetTriple<PrismPropertyValue<String>> exprResult = ModelExpressionThreadLocalHolder
+				.evaluateExpressionInContext(expression, params, task, result);
 
-        List<String> retval = new ArrayList<String>();
+        List<String> retval = new ArrayList<>();
         for (PrismPropertyValue<String> item : exprResult.getZeroSet()) {
             retval.add(item.getValue());
         }

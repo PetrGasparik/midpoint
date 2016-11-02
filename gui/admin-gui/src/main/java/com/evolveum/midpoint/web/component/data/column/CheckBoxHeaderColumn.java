@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,13 @@ import com.evolveum.midpoint.web.component.data.BaseSortableDataProvider;
 import com.evolveum.midpoint.web.component.data.SelectableDataTable;
 import com.evolveum.midpoint.web.component.data.TableHeadersToolbar;
 import com.evolveum.midpoint.web.component.util.Selectable;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+
 import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.DataTable;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.repeater.data.IDataProvider;
-import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.apache.wicket.util.iterator.ComponentHierarchyIterator;
@@ -45,28 +46,47 @@ public class CheckBoxHeaderColumn<T extends Serializable> extends CheckBoxColumn
     public CheckBoxHeaderColumn() {
         super(null);
     }
+    
+    private boolean visible = true;
 
     @Override
-    public Component getHeader(String componentId) {
+    public Component getHeader(final String componentId) {
         final IModel<Boolean> model = new Model<Boolean>(false);
         CheckBoxPanel panel = new CheckBoxPanel(componentId, model, getEnabled()) {
 
             @Override
             public void onUpdate(AjaxRequestTarget target) {
-                DataTable table = findParent(DataTable.class);
+            	DataTable table = findParent(DataTable.class);
                 boolean selected = model.getObject() != null ? model.getObject() : false;
 
                 onUpdateHeader(target, selected, table);
             }
         };
         panel.setOutputMarkupId(true);
+        panel.add(new VisibleEnableBehaviour() {
+        	
+        	@Override
+        	public boolean isVisible() {
+        		return CheckBoxHeaderColumn.this.isCheckboxVisible();
+        	}
+        	
+        });
 
         return panel;
     }
+    
 
     @Override
     public String getCssClass() {
         return "icon";
+    }
+    
+    protected boolean isCheckboxVisible(){
+    	return visible;
+    }
+    
+    public void setCheckboxVisible(boolean visible){
+    	this.visible = visible;
     }
 
     /**

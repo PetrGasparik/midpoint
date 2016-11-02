@@ -6,7 +6,9 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
+import com.evolveum.midpoint.web.component.prism.ObjectWrapperFactory;
 import com.evolveum.midpoint.web.page.self.PageSelfDashboard;
+
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.wicket.RestartResponseException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
@@ -16,6 +18,9 @@ import org.apache.wicket.markup.html.list.ListItem;
 import org.apache.wicket.markup.html.list.ListView;
 import org.apache.wicket.model.IModel;
 
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
 import com.evolveum.midpoint.prism.crypto.Protector;
@@ -36,14 +41,10 @@ import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.AjaxSubmitButton;
 import com.evolveum.midpoint.web.component.prism.ContainerStatus;
 import com.evolveum.midpoint.web.component.prism.ObjectWrapper;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.ObjectWrapperUtil;
-import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.web.page.admin.home.component.MyPasswordQuestionsPanel;
 import com.evolveum.midpoint.web.page.admin.home.dto.PasswordQuestionsDto;
 import com.evolveum.midpoint.web.page.admin.home.dto.SecurityQuestionAnswerDTO;
 import com.evolveum.midpoint.web.security.SecurityUtils;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsPolicyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -163,7 +164,7 @@ public class PageMyPasswordQuestions extends PageAdminHome {
                             decoded = protector.decryptString(securityQuestionAnswerType.getQuestionAnswer());
 
                         } catch (EncryptionException e) {
-                            LoggingUtils.logException(LOGGER, "Couldn't decrypt user answer", e);
+                            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't decrypt user answer", e);
 
                         }
                     }
@@ -446,7 +447,7 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 	}
 
 	private void cancelPerformed(AjaxRequestTarget target){
-        if (WebMiscUtil.isAuthorized(AuthorizationConstants.AUTZ_UI_DASHBOARD_URL,
+        if (WebComponentUtil.isAuthorized(AuthorizationConstants.AUTZ_UI_DASHBOARD_URL,
                 AuthorizationConstants.AUTZ_UI_HOME_ALL_URL)) {
             setResponsePage(PageDashboard.class);
         } else {
@@ -469,32 +470,29 @@ public class PageMyPasswordQuestions extends PageAdminHome {
 			result.recordSuccess();
 		} catch (Exception ex) {
 			result.recordFatalError("Couldn't get user.", ex);
-			LoggingUtils.logException(LOGGER, "Couldn't load user PageMyQuestions", ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load user PageMyQuestions", ex);
 		}
 
-		if (!result.isSuccess()) {
-			showResultInSession(result);
-		}
-
+			showResult(result, false);
+		
 		if (user == null) {
 
 			throw new RestartResponseException(PageDashboard.class);
 		}
 
 		ContainerStatus status = ContainerStatus.MODIFYING;
-		ObjectWrapper wrapper = null;
+		ObjectWrapperFactory owf = new ObjectWrapperFactory(this);
+		ObjectWrapper wrapper;
 		try{
-			wrapper = ObjectWrapperUtil.createObjectWrapper("pageMyPasswordQuestions.userDetails", null, user, status, this);
+			wrapper = owf.createObjectWrapper("pageMyPasswordQuestions.userDetails", null, user, status);
 		} catch (Exception ex){
 			result.recordFatalError("Couldn't get user.", ex);
-			LoggingUtils.logException(LOGGER, "Couldn't load user", ex);
-			wrapper = new ObjectWrapper("pageMyPasswordQuestions.userDetails", null, user, null, status, this);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load user", ex);
+			wrapper = owf.createObjectWrapper("pageMyPasswordQuestions.userDetails", null, user, null, null, status, false);
 		}
 		//        ObjectWrapper wrapper = new ObjectWrapper("pageUser.userDetails", null, user, status);
-		if (wrapper.getResult() != null && !WebMiscUtil.isSuccessOrHandledError(wrapper.getResult())) {
-			showResultInSession(wrapper.getResult());
-		}
-
+			showResult(wrapper.getResult(), false);
+		
 
 		return wrapper;
 	}

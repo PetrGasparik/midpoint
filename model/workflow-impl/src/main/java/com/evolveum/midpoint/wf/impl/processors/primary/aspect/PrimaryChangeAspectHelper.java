@@ -17,45 +17,44 @@
 package com.evolveum.midpoint.wf.impl.processors.primary.aspect;
 
 import com.evolveum.midpoint.model.api.context.ModelContext;
-import com.evolveum.midpoint.model.api.context.ModelElementContext;
-import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.model.common.expression.Expression;
+import com.evolveum.midpoint.model.common.expression.ExpressionEvaluationContext;
+import com.evolveum.midpoint.model.common.expression.ExpressionFactory;
+import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
+import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.repo.api.RepositoryService;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.DOMUtil;
+import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.wf.impl.jobs.WfTaskUtil;
+import com.evolveum.midpoint.wf.impl.tasks.WfTaskUtil;
 import com.evolveum.midpoint.wf.impl.messages.ProcessEvent;
-import com.evolveum.midpoint.wf.impl.processors.primary.PcpJob;
+import com.evolveum.midpoint.schema.ObjectTreeDeltas;
+import com.evolveum.midpoint.wf.impl.processors.primary.PcpWfTask;
 import com.evolveum.midpoint.wf.util.ApprovalUtils;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.GenericPcpAspectConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PcpAspectConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PrimaryChangeProcessorConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.WfConfigurationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.velocity.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import javax.xml.namespace.QName;
+import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
 
 /**
  * @author mederly
@@ -75,6 +74,9 @@ public class PrimaryChangeAspectHelper {
     @Autowired
     private PrismContext prismContext;
 
+    @Autowired
+    private ExpressionFactory expressionFactory;
+
     //region ========================================================================== Jobs-related methods
     //endregion
 
@@ -87,48 +89,35 @@ public class PrimaryChangeAspectHelper {
      * DeltaIn contains a delta that has to be approved. Workflow answers simply yes/no.
      * Therefore, we either copy DeltaIn to DeltaOut, or generate an empty list of modifications.
      */
-    public List<ObjectDelta<Objectable>> prepareDeltaOut(ProcessEvent event, PcpJob pcpJob, OperationResult result) throws SchemaException {
-        List<ObjectDelta<Objectable>> deltaIn = pcpJob.retrieveDeltasToProcess();
+    public ObjectTreeDeltas prepareDeltaOut(ProcessEvent event, PcpWfTask pcpJob, OperationResult result) throws SchemaException {
+        ObjectTreeDeltas deltaIn = pcpJob.retrieveDeltasToProcess();
         if (ApprovalUtils.isApproved(event.getAnswer())) {
-            return new ArrayList<>(deltaIn);
-        } else {
-            return new ArrayList<>();
-        }
-    }
-
-    //endregion
-
-    //region ========================================================================== Miscellaneous
-    public String getObjectOid(ModelContext<?> modelContext) {
-        ModelElementContext<UserType> fc = (ModelElementContext<UserType>) modelContext.getFocusContext();
-        String objectOid = null;
-        if (fc.getObjectNew() != null && fc.getObjectNew().getOid() != null) {
-            return fc.getObjectNew().getOid();
-        } else if (fc.getObjectOld() != null && fc.getObjectOld().getOid() != null) {
-            return fc.getObjectOld().getOid();
+            return deltaIn;
         } else {
             return null;
         }
     }
 
-    public PrismObject<UserType> getRequester(Task task, OperationResult result) {
-        // let's get fresh data (not the ones read on user login)
-        PrismObject<UserType> requester = null;
-        try {
-            requester = ((PrismObject<UserType>) repositoryService.getObject(UserType.class, task.getOwner().getOid(), null, result));
-        } catch (ObjectNotFoundException e) {
-            LoggingUtils.logException(LOGGER, "Couldn't get data about task requester (" + task.getOwner() + "), because it does not exist in repository anymore. Using cached data.", e);
-            requester = task.getOwner().clone();
-        } catch (SchemaException e) {
-            LoggingUtils.logException(LOGGER, "Couldn't get data about task requester (" + task.getOwner() + "), due to schema exception. Using cached data.", e);
-            requester = task.getOwner().clone();
+    //endregion
+
+    public ShadowType resolveTargetUnchecked(ShadowAssociationType association, OperationResult result) throws SchemaException, ObjectNotFoundException {
+
+        if (association == null) {
+            return null;
         }
 
-        if (requester != null) {
-            resolveRolesAndOrgUnits(requester, result);
+        ObjectReferenceType shadowRef = association.getShadowRef();
+        if (shadowRef == null || shadowRef.getOid() == null) {
+            throw new IllegalStateException("None or null-OID shadowRef in " + association);
         }
-
-        return requester;
+        PrismObject<ShadowType> shadow = shadowRef.asReferenceValue().getObject();
+        if (shadow == null) {
+            Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(
+                    GetOperationOptions.createNoFetch());
+            shadow = repositoryService.getObject(ShadowType.class, shadowRef.getOid(), options, result);
+            shadowRef.asReferenceValue().setObject(shadow);
+        }
+        return shadow.asObjectable();
     }
 
     public <T extends ObjectType> T resolveTargetRefUnchecked(AssignmentType a, OperationResult result) throws SchemaException, ObjectNotFoundException {
@@ -309,10 +298,58 @@ public class PrimaryChangeAspectHelper {
         return change.getObjectTypeClass();
     }
 
-    //endregion
-
     public boolean hasApproverInformation(PcpAspectConfigurationType config) {
         return config != null && (!config.getApproverRef().isEmpty() || !config.getApproverExpression().isEmpty() || config.getApprovalSchema() != null);
     }
+
+    //endregion
+
+    //region ========================================================================== Expression evaluation
+
+    public boolean evaluateApplicabilityCondition(PcpAspectConfigurationType config, ModelContext modelContext, Serializable itemToApprove,
+                                                  ExpressionVariables additionalVariables, PrimaryChangeAspect aspect, Task task, OperationResult result) {
+
+        if (config == null || config.getApplicabilityCondition() == null) {
+            return true;
+        }
+
+        ExpressionType expressionType = config.getApplicabilityCondition();
+
+        QName resultName = new QName(SchemaConstants.NS_C, "result");
+        PrismPropertyDefinition<Boolean> resultDef = new PrismPropertyDefinitionImpl(resultName, DOMUtil.XSD_BOOLEAN, prismContext);
+
+        ExpressionVariables expressionVariables = new ExpressionVariables();
+        expressionVariables.addVariableDefinition(SchemaConstants.C_MODEL_CONTEXT, modelContext);
+        expressionVariables.addVariableDefinition(SchemaConstants.C_ITEM_TO_APPROVE, itemToApprove);
+        if (additionalVariables != null) {
+            expressionVariables.addVariableDefinitions(additionalVariables);
+        }
+
+        PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> exprResultTriple;
+        try {
+            Expression<PrismPropertyValue<Boolean>,PrismPropertyDefinition<Boolean>> expression =
+                    expressionFactory.makeExpression(expressionType, resultDef,
+                            "applicability condition expression", task, result);
+            ExpressionEvaluationContext params = new ExpressionEvaluationContext(null, expressionVariables,
+                    "applicability condition expression", task, result);
+
+			exprResultTriple = ModelExpressionThreadLocalHolder.evaluateExpressionInContext(expression, params, task, result);
+        } catch (SchemaException|ExpressionEvaluationException|ObjectNotFoundException|RuntimeException e) {
+            // TODO report as a specific exception?
+            throw new SystemException("Couldn't evaluate applicability condition in aspect "
+                    + aspect.getClass().getSimpleName() + ": " + e.getMessage(), e);
+        }
+
+        Collection<PrismPropertyValue<Boolean>> exprResult = exprResultTriple.getZeroSet();
+        if (exprResult.size() == 0) {
+            return false;
+        } else if (exprResult.size() > 1) {
+            throw new IllegalStateException("Applicability condition expression should return exactly one boolean value; it returned " + exprResult.size() + " ones");
+        }
+        Boolean boolResult = exprResult.iterator().next().getValue();
+        return boolResult != null ? boolResult : false;
+    }
+
+    //endregion
 
 }

@@ -13,6 +13,9 @@ AS
     SET NOCOUNT ON;
 
     DELETE FROM m_sequence;
+    DELETE FROM m_acc_cert_case_reference;
+    DELETE FROM m_acc_cert_decision;
+    DELETE FROM m_acc_cert_case;
     DELETE FROM m_acc_cert_campaign;
     DELETE FROM m_acc_cert_definition;
     DELETE FROM m_audit_delta;
@@ -57,6 +60,8 @@ AS
     DELETE FROM m_org_closure;
     DELETE FROM m_org;
     DELETE FROM m_role;
+    DELETE FROM m_service_type;
+    DELETE FROM m_service;
     DELETE FROM m_abstract_role;
     DELETE FROM m_system_configuration;
     DELETE FROM m_generic_object;

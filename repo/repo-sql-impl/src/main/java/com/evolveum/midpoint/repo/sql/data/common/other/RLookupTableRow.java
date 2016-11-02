@@ -4,8 +4,12 @@ import com.evolveum.midpoint.repo.sql.data.common.RLookupTable;
 import com.evolveum.midpoint.repo.sql.data.common.container.Container;
 import com.evolveum.midpoint.repo.sql.data.common.embedded.RPolyString;
 import com.evolveum.midpoint.repo.sql.data.common.id.RContainerId;
+import com.evolveum.midpoint.repo.sql.query.definition.OwnerIdGetter;
+import com.evolveum.midpoint.repo.sql.query2.definition.IdQueryProperty;
+import com.evolveum.midpoint.repo.sql.query2.definition.NotQueryable;
 import com.evolveum.midpoint.repo.sql.type.XMLGregorianCalendarType;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
+import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.LookupTableRowType;
 import org.hibernate.annotations.ForeignKey;
 import org.hibernate.annotations.GenericGenerator;
@@ -20,12 +24,12 @@ import java.util.Date;
 @Entity
 @Table(indexes = {
 //todo create indexes after lookup api is created (when we know how we will search through lookup table [lazyman]
-//        @Index(name = "i_row_key", columnList = "key"),
-//        @Index(name = "i_row_label_orig", columnList = "label.orig"),
-//        @Index(name = "i_row_label_norm", columnList = "label.norm")
+//        @Index(name = "iRowKey", columnList = "key"),
+//        @Index(name = "iRowLabelOrig", columnList = "label.orig"),
+//        @Index(name = "iRowLabelNorm", columnList = "label.norm")
 },
 uniqueConstraints = {
-        @UniqueConstraint(name = "uc_row_key", columnNames = {"row_key"})
+        @UniqueConstraint(name = "uc_row_key", columnNames = {"owner_oid", "row_key"})
 })
 @IdClass(RContainerId.class)
 public class RLookupTableRow implements Container<RLookupTable> {
@@ -47,11 +51,13 @@ public class RLookupTableRow implements Container<RLookupTable> {
     @MapsId("owner")
     @ManyToOne(fetch = FetchType.LAZY)
     @Override
+    @NotQueryable
     public RLookupTable getOwner() {
         return owner;
     }
 
     @Column(name = "owner_oid", length = RUtil.COLUMN_LENGTH_OID, nullable = false)
+    @OwnerIdGetter()
     public String getOwnerOid() {
         if (owner != null && ownerOid == null) {
             ownerOid = owner.getOid();
@@ -63,6 +69,7 @@ public class RLookupTableRow implements Container<RLookupTable> {
     @GeneratedValue(generator = "ContainerIdGenerator")
     @GenericGenerator(name = "ContainerIdGenerator", strategy = "com.evolveum.midpoint.repo.sql.util.ContainerIdGenerator")
     @Column(name = "id")
+    @IdQueryProperty
     public Integer getId() {
         return id;
     }
@@ -164,21 +171,24 @@ public class RLookupTableRow implements Container<RLookupTable> {
         return row;
     }
 
-    public static RLookupTableRow toRepo(RLookupTable owner, LookupTableRowType row) {
+    public static RLookupTableRow toRepo(RLookupTable owner, LookupTableRowType row) throws SchemaException {
         RLookupTableRow rRow = toRepo(row);
         rRow.setOwner(owner);
         return rRow;
     }
 
-    public static RLookupTableRow toRepo(String ownerOid, LookupTableRowType row) {
+    public static RLookupTableRow toRepo(String ownerOid, LookupTableRowType row) throws SchemaException {
         RLookupTableRow rRow = toRepo(row);
         rRow.setOwnerOid(ownerOid);
         return rRow;
     }
 
-    private static RLookupTableRow toRepo(LookupTableRowType row) {
+    private static RLookupTableRow toRepo(LookupTableRowType row) throws SchemaException {
         RLookupTableRow rRow = new RLookupTableRow();
         rRow.setId(RUtil.toInteger(row.getId()));
+        if (row.getKey() == null) {
+            throw new SchemaException("Attempt to insert a row with no key");
+        }
         rRow.setKey(row.getKey());
         rRow.setLabel(RPolyString.copyFromJAXB(row.getLabel()));
         rRow.setLastChangeTimestamp(row.getLastChangeTimestamp());
@@ -190,5 +200,17 @@ public class RLookupTableRow implements Container<RLookupTable> {
         rRow.setValue(row.getValue());
 
         return rRow;
+    }
+
+    @Override
+    public String toString() {
+        return "RLookupTableRow{" +
+                "id=" + id +
+                ", owner=" + owner +
+                ", ownerOid='" + ownerOid + '\'' +
+                ", key='" + key + '\'' +
+                ", value='" + value + '\'' +
+                ", label=" + label +
+                '}';
     }
 }

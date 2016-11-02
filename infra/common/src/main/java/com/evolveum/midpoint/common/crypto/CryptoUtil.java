@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,10 @@ import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.util.exception.TunnelException;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MailServerConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.NotificationConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -50,6 +53,8 @@ import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
  *
  */
 public class CryptoUtil {
+	
+	private static final Trace LOGGER = TraceManager.getTrace(CryptoUtil.class);
 
 	/**
 	 * Encrypts all encryptable values in the object.
@@ -269,21 +274,39 @@ public class CryptoUtil {
 				providerResult.addContext("properties", propXml);
 				providerResult.recordSuccess();
 			} catch (Throwable e) {
+				LOGGER.error("Security self test (provider properties) failed: ", e.getMessage() ,e);
 				providerResult.recordFatalError(e);
 			}
 		}
 		
-		securitySelfTestAlgorithm("AES", "AES/CBC/PKCS5Padding",result);
+		securitySelfTestAlgorithm("AES", "AES/CBC/PKCS5Padding", null, false, result);
+		OperationResult cryptoResult = result.getLastSubresult();
+		if (cryptoResult.isError()) {
+			// Do a test encryption. It happens sometimes that the key generator
+            // generates a key that is not supported by the cipher.
+			// Fall back to known key size supported by all JCE implementations
+			securitySelfTestAlgorithm("AES", "AES/CBC/PKCS5Padding", 128, true, result);
+			OperationResult cryptoResult2 = result.getLastSubresult();
+			if (cryptoResult2.isSuccess()) {
+				cryptoResult.setStatus(OperationResultStatus.HANDLED_ERROR);
+			}
+		}
 		
 		result.computeStatus();
 	}
 
-	private static void securitySelfTestAlgorithm(String algorithmName, String transformationName, OperationResult parentResult) {
+	private static void securitySelfTestAlgorithm(String algorithmName, String transformationName, 
+			Integer keySize, boolean critical, OperationResult parentResult) {
 		OperationResult subresult = parentResult.createSubresult(CryptoUtil.class.getName()+".securitySelfTest.algorithm."+algorithmName);
 		try {
 			KeyGenerator keyGenerator = KeyGenerator.getInstance(algorithmName);
+			if (keySize != null) {
+				keyGenerator.init(keySize);
+			}
 			subresult.addReturn("keyGeneratorProvider", keyGenerator.getProvider().getName());
 			subresult.addReturn("keyGeneratorAlgorithm", keyGenerator.getAlgorithm());
+			subresult.addReturn("keyGeneratorKeySize", keySize);
+			
 			SecretKey key = keyGenerator.generateKey();
 			subresult.addReturn("keyAlgorithm", key.getAlgorithm());
 			subresult.addReturn("keyLength", key.getEncoded().length*8);
@@ -314,8 +337,18 @@ public class CryptoUtil {
 			} else {
 				subresult.recordSuccess();
 			}
+            LOGGER.debug("Security self test (algorithmName={}, transformationName={}, keySize={}) success", 
+					new Object[] {algorithmName, transformationName, keySize});
 		} catch (Throwable e) {
-			subresult.recordFatalError(e);
+			if (critical) {
+				LOGGER.error("Security self test (algorithmName={}, transformationName={}, keySize={}) failed: {}", 
+						new Object[] {algorithmName, transformationName, keySize, e.getMessage() ,e});
+				subresult.recordFatalError(e);
+			} else {
+				LOGGER.warn("Security self test (algorithmName={}, transformationName={}, keySize={}) failed: {} (failure is expected in some cases)", 
+						new Object[] {algorithmName, transformationName, keySize, e.getMessage() ,e});
+				subresult.recordWarning(e);
+			}
 		}
 	}
 

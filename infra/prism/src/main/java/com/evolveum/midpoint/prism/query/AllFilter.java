@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Evolveum
+ * Copyright (c) 2014-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -40,13 +37,14 @@ public class AllFilter extends ObjectFilter {
 		return new AllFilter();
 	}
 	
+	@SuppressWarnings("CloneDoesntCallSuperClone")
 	@Override
 	public AllFilter clone() {
 		return new AllFilter();
 	}
 
 	@Override
-	public void checkConsistence() {
+	public void checkConsistence(boolean requireDefinitions) {
 		// nothing to do
 	}
 
@@ -61,7 +59,6 @@ public class AllFilter extends ObjectFilter {
 		DebugUtil.indentDebugDump(sb, indent);
 		sb.append("ALL");
 		return sb.toString();
-
 	}
 	
 	@Override
@@ -74,4 +71,13 @@ public class AllFilter extends ObjectFilter {
 		return true;
 	}
 
+	@Override
+	public boolean equals(Object obj, boolean exact) {
+		return obj instanceof AllFilter;
+	}
+
+	@Override
+	public int hashCode() {
+		return 0;
+	}
 }

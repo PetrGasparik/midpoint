@@ -15,7 +15,6 @@
  */
 package com.evolveum.midpoint.model.impl.util;
 
-import com.evolveum.midpoint.model.impl.sync.TaskHandlerUtil;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.repo.cache.RepositoryCache;
@@ -53,6 +52,7 @@ public abstract class AbstractSearchIterativeResultHandler<O extends ObjectType>
 
 	public static final int WORKER_THREAD_WAIT_FOR_REQUEST = 500;
 	public static final long PROGRESS_UPDATE_INTERVAL = 3000L;
+	private static final long REQUEST_QUEUE_OFFER_TIMEOUT = 1000L;
 
 	private final TaskManager taskManager;
 	private Task coordinatorTask;
@@ -175,7 +175,11 @@ public abstract class AbstractSearchIterativeResultHandler<O extends ObjectType>
 		if (requestQueue != null) {
 			// by not putting anything in the parent result we hope the status will be SUCCESS
 			try {
-				requestQueue.put(request);				// blocking if no free space in the queue
+				while (!requestQueue.offer(request, REQUEST_QUEUE_OFFER_TIMEOUT, TimeUnit.MILLISECONDS)) {
+					if (shouldStop(parentResult)) {
+						return false;
+					}
+				}
 			} catch (InterruptedException e) {
 				recordInterrupted(parentResult);
 				return false;
@@ -184,23 +188,25 @@ public abstract class AbstractSearchIterativeResultHandler<O extends ObjectType>
 			processRequest(request, coordinatorTask, parentResult);			// coordinator is also a worker here
 		}
 
-		// stop can be requested either internally (by handler or error in any worker thread)
-		// or externally (by the task manager)
+		return !shouldStop(parentResult);
+	}
 
+	// stop can be requested either internally (by handler or error in any worker thread)
+	// or externally (by the task manager)
+	private boolean shouldStop(OperationResult parentResult) {
 		if (stopRequestedByAnyWorker.get()) {
-			return false;
+			return true;
 		}
 
 		if (!coordinatorTask.canRun()) {
 			recordInterrupted(parentResult);
-			return false;
+			return true;
 		}
-
-		return true;
+		return false;
 	}
 
 	private void recordInterrupted(OperationResult parentResult) {
-		parentResult.createSubresult(taskOperationPrefix + ".handle").recordPartialError("Interrupted");
+		parentResult.createSubresult(taskOperationPrefix + ".handle").recordWarning("Interrupted");
 		if (LOGGER.isWarnEnabled()) {
             LOGGER.warn("{} {} interrupted",new Object[]{
                     getProcessShortNameCapitalized(), getContextDesc()});
@@ -246,7 +252,7 @@ public abstract class AbstractSearchIterativeResultHandler<O extends ObjectType>
 				opResult.addSubresult(workerSpecificResult);
 			}
 		}
-		opResult.computeStatus("Errors during processing");
+		opResult.computeStatus("Issues during processing");
 
 		if (getErrors() > 0) {
 			opResult.setStatus(OperationResultStatus.PARTIAL_ERROR);

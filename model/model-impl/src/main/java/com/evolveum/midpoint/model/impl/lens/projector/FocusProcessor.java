@@ -15,7 +15,7 @@
  */
 package com.evolveum.midpoint.model.impl.lens.projector;
 
-import static com.evolveum.midpoint.common.InternalsConfig.consistencyChecks;
+import static com.evolveum.midpoint.schema.internals.InternalsConfig.consistencyChecks;
 
 import javax.xml.datatype.XMLGregorianCalendar;
 
@@ -64,12 +64,15 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.IterationSpecificationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.LockoutStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectPolicyConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectTemplateMappingEvaluationPhaseType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectTemplateType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PropertyConstraintType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
@@ -87,39 +90,40 @@ public class FocusProcessor {
 	private static final Trace LOGGER = TraceManager.getTrace(FocusProcessor.class);
 
 	private PrismContainerDefinition<ActivationType> activationDefinition;
+	private PrismPropertyDefinition<Integer> failedLoginsDefinition;
 	
-	@Autowired(required = true)
+	@Autowired
     private InboundProcessor inboundProcessor;
 	
-	@Autowired(required = true)
+	@Autowired
     private AssignmentProcessor assignmentProcessor;
 	
-	@Autowired(required = true)
+	@Autowired
 	private ObjectTemplateProcessor objectTemplateProcessor;
 	
-	@Autowired(required = true)
+	@Autowired
 	private MappingFactory mappingFactory;
 
-	@Autowired(required = true)
+	@Autowired
 	private PrismContext prismContext;
 
-	@Autowired(required = true)
+	@Autowired
 	private CredentialsProcessor credentialsProcessor;
 	
-	@Autowired(required = true)
+	@Autowired
 	private ModelObjectResolver modelObjectResolver;
 	
-	@Autowired(required = true)
+	@Autowired
 	private ActivationComputer activationComputer;
 	
-	@Autowired(required = true)
+	@Autowired
 	private ExpressionFactory expressionFactory;
 
-	@Autowired(required = true)
+	@Autowired
 	@Qualifier("cacheRepositoryService")
 	private transient RepositoryService cacheRepositoryService;
 	
-	@Autowired(required = true)
+	@Autowired
     private MappingEvaluator mappingHelper;
 
 	<O extends ObjectType, F extends FocusType> void processFocus(LensContext<O> context, String activityDescription, 
@@ -172,10 +176,11 @@ public class FocusProcessor {
 			ObjectPolicyConfigurationType objectPolicyConfigurationType = focusContext.getObjectPolicyConfigurationType();
 			applyObjectPolicyConstraints(focusContext, objectPolicyConfigurationType);
 		
-			ExpressionVariables variables = Utils.getDefaultExpressionVariables(focusContext.getObjectNew(), null, null, null, context.getSystemConfiguration());
+			ExpressionVariables variablesPreIteration = Utils.getDefaultExpressionVariables(focusContext.getObjectNew(), 
+					null, null, null, context.getSystemConfiguration(), focusContext);
 			if (iterationToken == null) {
 				iterationToken = LensUtil.formatIterationToken(context, focusContext, 
-						iterationSpecificationType, iteration, expressionFactory, variables, task, result);
+						iterationSpecificationType, iteration, expressionFactory, variablesPreIteration, task, result);
 			}
 			
 			// We have to remember the token and iteration in the context.
@@ -187,15 +192,15 @@ public class FocusProcessor {
 			// if the context is re-projected.
 			focusContext.setIteration(iteration);
 			focusContext.setIterationToken(iterationToken);
-			LOGGER.trace("Focus {} processing, iteration {}, token '{}'", new Object[]{focusContext.getHumanReadableName(), iteration, iterationToken});
+			LOGGER.trace("Focus {} processing, iteration {}, token '{}'", focusContext.getHumanReadableName(), iteration, iterationToken);
 			
 			String conflictMessage;
 			if (!LensUtil.evaluateIterationCondition(context, focusContext, 
-					iterationSpecificationType, iteration, iterationToken, true, expressionFactory, variables, task, result)) {
+					iterationSpecificationType, iteration, iterationToken, true, expressionFactory, variablesPreIteration, task, result)) {
 				
 				conflictMessage = "pre-iteration condition was false";
 				LOGGER.debug("Skipping iteration {}, token '{}' for {} because the pre-iteration condition was false",
-						new Object[]{iteration, iterationToken, focusContext.getHumanReadableName()});
+						iteration, iterationToken, focusContext.getHumanReadableName());
 			} else {
 				
 				// INBOUND
@@ -278,20 +283,21 @@ public class FocusProcessor {
 		        checker.check(previewObjectNew, result);
 		        if (checker.isSatisfiesConstraints()) {
 		        	LOGGER.trace("Current focus satisfies uniqueness constraints. Iteration {}, token '{}'", iteration, iterationToken);
-		        	
+		        	ExpressionVariables variablesPostIteration = Utils.getDefaultExpressionVariables(focusContext.getObjectNew(), 
+		        			null, null, null, context.getSystemConfiguration(), focusContext);		        	
 		        	if (LensUtil.evaluateIterationCondition(context, focusContext, 
-		        			iterationSpecificationType, iteration, iterationToken, false, expressionFactory, variables, 
+		        			iterationSpecificationType, iteration, iterationToken, false, expressionFactory, variablesPostIteration, 
 		        			task, result)) {
 	    				// stop the iterations
 	    				break;
 	    			} else {
 	    				conflictMessage = "post-iteration condition was false";
 	    				LOGGER.debug("Skipping iteration {}, token '{}' for {} because the post-iteration condition was false",
-	    						new Object[]{iteration, iterationToken, focusContext.getHumanReadableName()});
+								iteration, iterationToken, focusContext.getHumanReadableName());
 	    			}
 		        } else {
 			        LOGGER.trace("Current focus does not satisfy constraints. Conflicting object: {}; iteration={}, maxIterations={}",
-			        		new Object[]{checker.getConflictingObject(), iteration, maxIterations});
+							checker.getConflictingObject(), iteration, maxIterations);
 			        conflictMessage = checker.getMessages();
 		        }
 		        
@@ -341,7 +347,7 @@ public class FocusProcessor {
 			return;
 		}
 		
-		PrismObject<F> focusNew = focusContext.getObjectNew();
+		final PrismObject<F> focusNew = focusContext.getObjectNew();
 		if (focusNew == null) {
 			// This is delete. Nothing to do.
 			return;
@@ -379,21 +385,19 @@ public class FocusProcessor {
 		// Deprecated
 		if (BooleanUtils.isTrue(objectPolicyConfigurationType.isOidNameBoundMode())) {
 			// Generate the name now - unless it is already present
-			if (focusNew != null) {
-				PolyStringType focusNewName = focusNew.asObjectable().getName();
-				if (focusNewName == null) {
-					String newValue = focusNew.getOid();
-					if (newValue == null) {
-						newValue = OidUtil.generateOid();
-					}
-					LOGGER.trace("Generating new name (bound to OID): {}", newValue);
-					PrismObjectDefinition<F> focusDefinition = focusContext.getObjectDefinition();
-					PrismPropertyDefinition<PolyString> focusNameDef = focusDefinition.findPropertyDefinition(FocusType.F_NAME);
-					PropertyDelta<PolyString> nameDelta = focusNameDef.createEmptyDelta(new ItemPath(FocusType.F_NAME));
-					nameDelta.setValueToReplace(new PrismPropertyValue<PolyString>(new PolyString(newValue), OriginType.USER_POLICY, null));
-					focusContext.swallowToSecondaryDelta(nameDelta);
-					focusContext.recompute();
+			PolyStringType focusNewName = focusNew.asObjectable().getName();
+			if (focusNewName == null) {
+				String newValue = focusNew.getOid();
+				if (newValue == null) {
+					newValue = OidUtil.generateOid();
 				}
+				LOGGER.trace("Generating new name (bound to OID): {}", newValue);
+				PrismObjectDefinition<F> focusDefinition = focusContext.getObjectDefinition();
+				PrismPropertyDefinition<PolyString> focusNameDef = focusDefinition.findPropertyDefinition(FocusType.F_NAME);
+				PropertyDelta<PolyString> nameDelta = focusNameDef.createEmptyDelta(new ItemPath(FocusType.F_NAME));
+				nameDelta.setValueToReplace(new PrismPropertyValue<PolyString>(new PolyString(newValue), OriginType.USER_POLICY, null));
+				focusContext.swallowToSecondaryDelta(nameDelta);
+				focusContext.recompute();
 			}
 		}
 	}
@@ -438,28 +442,45 @@ public class FocusProcessor {
 			return;
 		}
 		
+		processActivationAdministrativeAndValidity(focusContext, now, result);
+		
+		if (focusContext.canRepresent(UserType.class)) {
+			processActivationLockout((LensFocusContext<UserType>) focusContext, now, result);
+		}
+	}
+		
+	private <F extends FocusType> void processActivationAdministrativeAndValidity(LensFocusContext<F> focusContext, XMLGregorianCalendar now, 
+			OperationResult result) 
+			throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException, PolicyViolationException {	
+		
 		TimeIntervalStatusType validityStatusNew = null;
 		TimeIntervalStatusType validityStatusCurrent = null;
 		XMLGregorianCalendar validityChangeTimestamp = null;
 		
+		String lifecycleStateNew = null;
+		String lifecycleStateCurrent = null;
 		ActivationType activationNew = null;
 		ActivationType activationCurrent = null;
 		
 		PrismObject<F> focusNew = focusContext.getObjectNew();
 		if (focusNew != null) {
-			activationNew = focusNew.asObjectable().getActivation();
+			F focusTypeNew = focusNew.asObjectable();
+			activationNew = focusTypeNew.getActivation();
 			if (activationNew != null) {
 				validityStatusNew = activationComputer.getValidityStatus(activationNew, now);
 				validityChangeTimestamp = activationNew.getValidityChangeTimestamp();
 			}
+			lifecycleStateNew = focusTypeNew.getLifecycleState();
 		}
 		
 		PrismObject<F> focusCurrent = focusContext.getObjectCurrent();
 		if (focusCurrent != null) {
-			activationCurrent = focusCurrent.asObjectable().getActivation();
+			F focusCurrentType = focusCurrent.asObjectable();
+			activationCurrent = focusCurrentType.getActivation();
 			if (activationCurrent != null) {
 				validityStatusCurrent = activationComputer.getValidityStatus(activationCurrent, validityChangeTimestamp);
 			}
+			lifecycleStateCurrent = focusCurrentType.getLifecycleState();
 		}
 		
 		if (validityStatusCurrent == validityStatusNew) {
@@ -475,8 +496,8 @@ public class FocusProcessor {
 			recordValidityDelta(focusContext, validityStatusNew, now);
 		}
 		
-		ActivationStatusType effectiveStatusNew = activationComputer.getEffectiveStatus(activationNew, validityStatusNew, ActivationStatusType.ENABLED);
-		ActivationStatusType effectiveStatusCurrent = activationComputer.getEffectiveStatus(activationCurrent, validityStatusCurrent, ActivationStatusType.ENABLED);
+		ActivationStatusType effectiveStatusNew = activationComputer.getEffectiveStatus(lifecycleStateNew, activationNew, validityStatusNew);
+		ActivationStatusType effectiveStatusCurrent = activationComputer.getEffectiveStatus(lifecycleStateCurrent, activationCurrent, validityStatusCurrent);
 		
 		if (effectiveStatusCurrent == effectiveStatusNew) {
 			// No change, (almost) no work
@@ -497,6 +518,90 @@ public class FocusProcessor {
 			LOGGER.trace("Effective status change {} -> {}", effectiveStatusCurrent, effectiveStatusNew);
 			recordEffectiveStatusDelta(focusContext, effectiveStatusNew, now);
 		}
+		
+		
+	}
+	
+	private <F extends FocusType> void processActivationLockout(LensFocusContext<UserType> focusContext, XMLGregorianCalendar now, 
+			OperationResult result) 
+			throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException, PolicyViolationException {	
+		
+		ObjectDelta<UserType> focusPrimaryDelta = focusContext.getPrimaryDelta();
+		if (focusPrimaryDelta != null) {
+			PropertyDelta<LockoutStatusType> lockoutStatusDelta = focusContext.getPrimaryDelta().findPropertyDelta(SchemaConstants.PATH_ACTIVATION_LOCKOUT_STATUS);
+			if (lockoutStatusDelta != null) {
+				if (lockoutStatusDelta.isAdd()) {
+					for (PrismPropertyValue<LockoutStatusType> pval: lockoutStatusDelta.getValuesToAdd()) {
+						if (pval.getValue() == LockoutStatusType.LOCKED) {
+							throw new SchemaException("Lockout status cannot be changed to LOCKED value");
+						}
+					}
+				} else if (lockoutStatusDelta.isReplace()) {
+					for (PrismPropertyValue<LockoutStatusType> pval: lockoutStatusDelta.getValuesToReplace()) {
+						if (pval.getValue() == LockoutStatusType.LOCKED) {
+							throw new SchemaException("Lockout status cannot be changed to LOCKED value");
+						}
+					}
+				}
+			}
+		}
+		
+		ActivationType activationNew = null;
+		ActivationType activationCurrent = null;
+		
+		LockoutStatusType lockoutStatusNew = null;
+		LockoutStatusType lockoutStatusCurrent = null;
+		
+		PrismObject<UserType> focusNew = focusContext.getObjectNew();
+		if (focusNew != null) {
+			activationNew = focusNew.asObjectable().getActivation();
+			if (activationNew != null) {
+				lockoutStatusNew = activationNew.getLockoutStatus();
+			}
+		}
+		
+		PrismObject<UserType> focusCurrent = focusContext.getObjectCurrent();
+		if (focusCurrent != null) {
+			activationCurrent = focusCurrent.asObjectable().getActivation();
+			if (activationCurrent != null) {
+				lockoutStatusCurrent = activationCurrent.getLockoutStatus();
+			}
+		}
+		
+		if (lockoutStatusNew == lockoutStatusCurrent) {
+			// No change, (almost) no work
+			LOGGER.trace("Skipping lockout processing because there was no change ({} -> {})", lockoutStatusCurrent, lockoutStatusNew);
+			return;
+		}
+		
+		LOGGER.trace("Lockout change {} -> {}", lockoutStatusCurrent, lockoutStatusNew);
+		
+		if (lockoutStatusNew == LockoutStatusType.NORMAL) {
+			
+			CredentialsType credentialsTypeNew = focusNew.asObjectable().getCredentials();
+			if (credentialsTypeNew != null) {
+				PasswordType passwordTypeNew = credentialsTypeNew.getPassword();
+				if (passwordTypeNew != null) {
+					Integer failedLogins = passwordTypeNew.getFailedLogins();
+					if (failedLogins != null && failedLogins != 0) {
+						PrismPropertyDefinition<Integer> failedLoginsDef = getFailedLoginsDefinition();
+						PropertyDelta<Integer> failedLoginsDelta = failedLoginsDef.createEmptyDelta(SchemaConstants.PATH_CREDENTIALS_PASSWORD_FAILED_LOGINS);
+						failedLoginsDelta.setValueToReplace(new PrismPropertyValue<Integer>(0, OriginType.USER_POLICY, null));
+						focusContext.swallowToProjectionWaveSecondaryDelta(failedLoginsDelta);
+					}
+				}
+			}
+			
+			if (activationNew != null && activationNew.getLockoutExpirationTimestamp() != null) {
+				PrismContainerDefinition<ActivationType> activationDefinition = getActivationDefinition();
+				PrismPropertyDefinition<XMLGregorianCalendar> lockoutExpirationTimestampDef = activationDefinition.findPropertyDefinition(ActivationType.F_LOCKOUT_EXPIRATION_TIMESTAMP);
+				PropertyDelta<XMLGregorianCalendar> lockoutExpirationTimestampDelta 
+						= lockoutExpirationTimestampDef.createEmptyDelta(new ItemPath(UserType.F_ACTIVATION, ActivationType.F_LOCKOUT_EXPIRATION_TIMESTAMP));
+				lockoutExpirationTimestampDelta.setValueToReplace();
+				focusContext.swallowToProjectionWaveSecondaryDelta(lockoutExpirationTimestampDelta);
+			}
+		}
+		
 	}
 	
 	private <F extends ObjectType> void recordValidityDelta(LensFocusContext<F> focusContext, TimeIntervalStatusType validityStatusNew,
@@ -546,6 +651,14 @@ public class FocusProcessor {
 			activationDefinition = focusDefinition.findContainerDefinition(FocusType.F_ACTIVATION);
 		}
 		return activationDefinition;
+	}
+	
+	private PrismPropertyDefinition<Integer> getFailedLoginsDefinition() {
+		if (failedLoginsDefinition == null) {
+			PrismObjectDefinition<UserType> userDef = prismContext.getSchemaRegistry().findObjectDefinitionByCompileTimeClass(UserType.class);
+			failedLoginsDefinition = userDef.findPropertyDefinition(SchemaConstants.PATH_CREDENTIALS_PASSWORD_FAILED_LOGINS);
+		}
+		return failedLoginsDefinition;
 	}
 	
 	/**

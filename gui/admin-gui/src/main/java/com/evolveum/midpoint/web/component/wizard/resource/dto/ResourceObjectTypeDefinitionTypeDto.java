@@ -17,6 +17,7 @@
 package com.evolveum.midpoint.web.component.wizard.resource.dto;
 
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDefinitionType;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
 
@@ -25,32 +26,17 @@ import java.io.Serializable;
  * */
 public class ResourceObjectTypeDefinitionTypeDto implements Serializable{
 
-    public static final String F_SELECTED = "selected";
     public static final String F_OBJECT_TYPE = "objectType";
 
-    private boolean selected = false;
-    private ResourceObjectTypeDefinitionType objectType;
+    @NotNull private final ResourceObjectTypeDefinitionType objectType;
 
-    public ResourceObjectTypeDefinitionTypeDto(){}
-
-    public ResourceObjectTypeDefinitionTypeDto(ResourceObjectTypeDefinitionType objectType){
+    public ResourceObjectTypeDefinitionTypeDto(@NotNull ResourceObjectTypeDefinitionType objectType){
         this.objectType = objectType;
     }
 
-    public boolean isSelected() {
-        return selected;
-    }
-
-    public void setSelected(boolean selected) {
-        this.selected = selected;
-    }
-
+	@NotNull
     public ResourceObjectTypeDefinitionType getObjectType() {
         return objectType;
-    }
-
-    public void setObjectType(ResourceObjectTypeDefinitionType objectType) {
-        this.objectType = objectType;
     }
 
     @Override
@@ -60,16 +46,11 @@ public class ResourceObjectTypeDefinitionTypeDto implements Serializable{
 
         ResourceObjectTypeDefinitionTypeDto that = (ResourceObjectTypeDefinitionTypeDto) o;
 
-        if (selected != that.selected) return false;
-        if (objectType != null ? !objectType.equals(that.objectType) : that.objectType != null) return false;
-
-        return true;
-    }
+		return objectType.equals(that.objectType);
+	}
 
     @Override
     public int hashCode() {
-        int result = (selected ? 1 : 0);
-        result = 31 * result + (objectType != null ? objectType.hashCode() : 0);
-        return result;
+		return 31 + (objectType != null ? objectType.hashCode() : 0);
     }
 }

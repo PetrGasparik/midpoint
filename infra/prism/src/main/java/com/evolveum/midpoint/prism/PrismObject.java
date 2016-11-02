@@ -19,7 +19,6 @@ package com.evolveum.midpoint.prism;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 import javax.xml.namespace.QName;
 
@@ -31,6 +30,7 @@ import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Common supertype for all identity objects. Defines basic properties that each
@@ -83,6 +83,7 @@ public class PrismObject<O extends Objectable> extends PrismContainer<O> {
 	}
 
 	public void setOid(String oid) {
+		checkMutability();
 		this.oid = oid;
 	}
 
@@ -91,6 +92,7 @@ public class PrismObject<O extends Objectable> extends PrismContainer<O> {
 	}
 
 	public void setVersion(String version) {
+		checkMutability();
 		this.version = version;
 	}
 
@@ -99,6 +101,7 @@ public class PrismObject<O extends Objectable> extends PrismContainer<O> {
 		return (PrismObjectDefinition<O>) super.getDefinition();
 	}
 
+	@NotNull
 	public O asObjectable() {
 		if (objectable != null) {
 			return objectable;
@@ -206,8 +209,17 @@ public class PrismObject<O extends Objectable> extends PrismContainer<O> {
 
 	@Override
 	public PrismObject<O> clone() {
+		if (prismContext != null && prismContext.getMonitor() != null) {
+			prismContext.getMonitor().beforeObjectClone(this);
+		}
+		
 		PrismObject<O> clone = new PrismObject<O>(getElementName(), getDefinition(), prismContext);
 		copyValues(clone);
+		
+		if (prismContext != null && prismContext.getMonitor() != null) {
+			prismContext.getMonitor().afterObjectClone(this, clone);
+		}
+		
 		return clone;
 	}
 
@@ -221,10 +233,12 @@ public class PrismObject<O extends Objectable> extends PrismContainer<O> {
 		return (PrismObjectDefinition<O>) super.deepCloneDefinition(ultraDeep);
 	}
 
+	@NotNull
 	public ObjectDelta<O> diff(PrismObject<O> other) {
 		return diff(other, true, false);
 	}
 
+	@NotNull
 	public ObjectDelta<O> diff(PrismObject<O> other, boolean ignoreMetadata, boolean isLiteral) {
 		if (other == null) {
 			ObjectDelta<O> objectDelta = new ObjectDelta<O>(getCompileTimeClass(), ChangeType.DELETE, getPrismContext());

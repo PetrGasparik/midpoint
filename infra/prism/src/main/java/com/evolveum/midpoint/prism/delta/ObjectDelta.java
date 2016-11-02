@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ package com.evolveum.midpoint.prism.delta;
 import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.path.ItemPath.CompareResult;
-import com.evolveum.midpoint.prism.polystring.PolyString;
-import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismUtil;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.DebugDumpable;
@@ -27,6 +25,11 @@ import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 
 import javax.xml.namespace.QName;
+
+import com.evolveum.prism.xml.ns._public.types_3.ChangeTypeType;
+import com.evolveum.prism.xml.ns._public.types_3.ItemDeltaType;
+import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
+import com.evolveum.prism.xml.ns._public.types_3.ObjectReferenceType;
 
 import org.apache.commons.lang.Validate;
 
@@ -270,7 +273,7 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
             ItemDelta<IV,ID> itemDelta = item.createDelta();
             itemDelta.addValuesToAdd(item.getClonedValues());
             Collection<PartiallyResolvedDelta<IV,ID>> deltas = new ArrayList<>(1);
-            deltas.add(new PartiallyResolvedDelta<IV,ID>(itemDelta, partialValue.getResidualPath()));
+            deltas.add(new PartiallyResolvedDelta<IV, ID>(itemDelta, partialValue.getResidualPath()));
             return deltas;
         } else if (changeType == ChangeType.MODIFY) {
         	Collection<PartiallyResolvedDelta<IV,ID>> deltas = new ArrayList<>();
@@ -433,6 +436,24 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
         }
         return true;
     }
+
+	public static boolean isEmpty(ObjectDeltaType deltaType) {
+		if (deltaType == null) {
+			return true;
+		}
+		if (deltaType.getChangeType() == ChangeTypeType.DELETE) {
+			return false;
+		} else if (deltaType.getChangeType() == ChangeTypeType.ADD) {
+			return deltaType.getObjectToAdd() == null || deltaType.getObjectToAdd().asPrismObject().isEmpty();
+		} else {
+			for (ItemDeltaType itemDeltaType : deltaType.getItemDelta()) {
+				if (!ItemDelta.isEmpty(itemDeltaType)) {
+					return false;
+				}
+			}
+			return true;
+		}
+	}
     
     public void normalize() {
     	if (objectToAdd != null) {
@@ -784,6 +805,26 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
     	return objectDelta;
     }
     
+    /**
+     * Convenience method for quick creation of object deltas that replace a single object reference.
+     */
+    public static <O extends Objectable, X> ObjectDelta<O> createModificationReplaceReference(Class<O> type, String oid, QName referenceName,
+    		PrismContext prismContext, PrismReferenceValue... refValues) {
+    	ItemPath propertyPath = new ItemPath(referenceName);
+    	return createModificationReplaceReference(type, oid, propertyPath, prismContext, refValues);
+    }
+    
+    /**
+     * Convenience method for quick creation of object deltas that replace a single object reference.
+     */
+    public static <O extends Objectable, X> ObjectDelta<O> createModificationReplaceReference(Class<O> type, String oid, 
+    		ItemPath refPath, PrismContext prismContext, PrismReferenceValue... refValues) {
+    	ObjectDelta<O> objectDelta = new ObjectDelta<O>(type, ChangeType.MODIFY, prismContext);
+    	objectDelta.setOid(oid);
+    	fillInModificationReplaceReference(objectDelta, refPath, refValues);
+    	return objectDelta;
+    }
+    
     public <X> void addModificationReplaceProperty(QName propertyQName, X... propertyValues) {
     	addModificationReplaceProperty(new ItemPath(propertyQName), propertyValues);
     }
@@ -890,6 +931,18 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
     	}
     }
 
+    public void addModificationAddReference(QName propertyQName, PrismReferenceValue... refValues) {
+    	fillInModificationAddReference(this, new ItemPath(propertyQName), refValues);
+    }
+    
+    public void addModificationDeleteReference(QName propertyQName, PrismReferenceValue... refValues) {
+    	fillInModificationDeleteReference(this, new ItemPath(propertyQName), refValues);
+    }
+    
+    public void addModificationReplaceReference(QName propertyQName, PrismReferenceValue... refValues) {
+    	fillInModificationReplaceReference(this, new ItemPath(propertyQName), refValues);
+    }
+    
     protected static <O extends Objectable> void fillInModificationReplaceReference(ObjectDelta<O> objectDelta,
                                                                                        ItemPath refPath, PrismReferenceValue... refValues) {
         ReferenceDelta refDelta = objectDelta.createReferenceModification(refPath);
@@ -898,6 +951,24 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
             objectDelta.addModification(refDelta);
         }
     }
+    
+    protected static <O extends Objectable> void fillInModificationAddReference(ObjectDelta<O> objectDelta,
+            ItemPath refPath, PrismReferenceValue... refValues) {
+		ReferenceDelta refDelta = objectDelta.createReferenceModification(refPath);
+		if (refValues != null) {
+			refDelta.addValuesToAdd(refValues);
+			objectDelta.addModification(refDelta);
+		}
+	}
+
+    protected static <O extends Objectable> void fillInModificationDeleteReference(ObjectDelta<O> objectDelta,
+            ItemPath refPath, PrismReferenceValue... refValues) {
+		ReferenceDelta refDelta = objectDelta.createReferenceModification(refPath);
+		if (refValues != null) {
+			refDelta.addValuesToDelete(refValues);
+			objectDelta.addModification(refDelta);
+		}
+	}
 
     private ReferenceDelta createReferenceModification(ItemPath refPath) {
         PrismObjectDefinition<T> objDef = getPrismContext().getSchemaRegistry().findObjectDefinitionByCompileTimeClass(getObjectTypeClass());
@@ -1163,7 +1234,7 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
     	return objectDelta;
     }
     
-    public static <O extends Objectable> ObjectDelta<O> createEmptyAddDelta(Class<O> type, String oid, PrismContext prismContext) {
+    public static <O extends Objectable> ObjectDelta<O> createEmptyAddDelta(Class<O> type, String oid, PrismContext prismContext) throws SchemaException {
     	ObjectDelta<O> objectDelta = createEmptyDelta(type, oid, prismContext, ChangeType.ADD);
     	PrismObjectDefinition<O> objDef = prismContext.getSchemaRegistry().findObjectDefinitionByCompileTimeClass(type);
     	PrismObject<O> objectToAdd = objDef.instantiate();
@@ -1198,6 +1269,20 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
     	objectDelta.setOid(oid);
     	return objectDelta;
     }
+    
+	public ObjectDelta<T> createReverseDelta() throws SchemaException {
+		if (isAdd()) {
+			return createDeleteDelta(getObjectTypeClass(), getOid(), getPrismContext());
+		}
+		if (isDelete()) {
+			throw new SchemaException("Cannot reverse delete delta");
+		}
+		ObjectDelta<T> reverseDelta = createEmptyModifyDelta(getObjectTypeClass(), getOid(), getPrismContext());
+		for (ItemDelta<?,?> modification: getModifications()) {
+			reverseDelta.addModification(modification.createReverseDelta());
+		}
+		return reverseDelta;
+	}
         
     public void checkConsistence() {
     	checkConsistence(ConsistencyCheckScope.THOROUGH);
@@ -1332,6 +1417,22 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
 		return result;
 	}
 
+	public boolean equivalent(ObjectDelta other) {
+		if (changeType != other.changeType)
+			return false;
+		if (objectToAdd == null) {
+			if (other.objectToAdd != null)
+				return false;
+		} else if (!objectToAdd.equivalent(other.objectToAdd))
+			return false;
+		if (!MiscUtil.unorderedCollectionEquals(this.modifications, other.modifications, (o1, o2) ->
+				((ItemDelta) o1).equivalent((ItemDelta) o2) ? 0 : 1)) {
+			return false;
+		}
+		return Objects.equals(objectTypeClass, other.objectTypeClass)
+				&& Objects.equals(oid, other.oid);
+	}
+
 	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)
@@ -1450,6 +1551,10 @@ public class ObjectDelta<T extends Objectable> implements DebugDumpable, Visitab
 	        }
         }
         return sb.toString();
+    }
+
+    public static boolean isNullOrEmpty(ObjectDelta delta) {
+        return delta == null || delta.isEmpty();
     }
 
 }

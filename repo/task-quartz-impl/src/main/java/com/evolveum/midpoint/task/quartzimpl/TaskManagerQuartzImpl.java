@@ -21,11 +21,10 @@ import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.prism.query.AndFilter;
-import com.evolveum.midpoint.prism.query.EqualFilter;
-import com.evolveum.midpoint.prism.query.LessFilter;
-import com.evolveum.midpoint.prism.query.ObjectFilter;
+import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import com.evolveum.midpoint.prism.query.builder.S_AtomicFilterEntry;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.GetOperationOptions;
@@ -34,19 +33,7 @@ import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.security.api.SecurityEnforcer;
-import com.evolveum.midpoint.task.api.LightweightIdentifier;
-import com.evolveum.midpoint.task.api.LightweightIdentifierGenerator;
-import com.evolveum.midpoint.task.api.LightweightTaskHandler;
-import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.task.api.TaskExecutionStatus;
-import com.evolveum.midpoint.task.api.TaskHandler;
-import com.evolveum.midpoint.task.api.TaskListener;
-import com.evolveum.midpoint.task.api.TaskManager;
-import com.evolveum.midpoint.task.api.TaskManagerException;
-import com.evolveum.midpoint.task.api.TaskManagerInitializationException;
-import com.evolveum.midpoint.task.api.TaskPersistenceStatus;
-import com.evolveum.midpoint.task.api.TaskRunResult;
-import com.evolveum.midpoint.task.api.TaskWaitingReason;
+import com.evolveum.midpoint.task.api.*;
 import com.evolveum.midpoint.task.quartzimpl.cluster.ClusterManager;
 import com.evolveum.midpoint.task.quartzimpl.cluster.ClusterStatusInformation;
 import com.evolveum.midpoint.task.quartzimpl.execution.ExecutionManager;
@@ -58,16 +45,9 @@ import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.CleanupPolicyType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.NodeErrorStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.NodeExecutionStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.NodeType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationStatsType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskExecutionStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
-
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -84,20 +64,14 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.xml.datatype.Duration;
 import javax.xml.datatype.XMLGregorianCalendar;
-
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+
+import static com.evolveum.midpoint.schema.result.OperationResultStatus.SUCCESS;
 
 /**
  * Task Manager implementation using Quartz scheduler.
@@ -139,6 +113,8 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
     // task handlers (mapped from their URIs)
     private Map<String,TaskHandler> handlers = new HashMap<String, TaskHandler>();
 
+	private final Set<TaskDeletionListener> taskDeletionListeners = new HashSet<>();
+
     // cached task prism definition
 	private PrismObjectDefinition<TaskType> taskPrismDefinition;
 
@@ -146,7 +122,7 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
     private NodeErrorStatusType nodeErrorStatus = NodeErrorStatusType.OK;
 
     // task listeners
-    private Set<TaskListener> taskListeners = new HashSet<TaskListener>();
+    private Set<TaskListener> taskListeners = new HashSet<>();
 
     /**
      * Registered transient tasks. Here we put all transient tasks that are to be managed by the task manager.
@@ -161,7 +137,7 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
     // Use ONLY for those actions that need to work with these instances, e.g. when calling heartbeat() methods on them.
     // For any other business please use LocalNodeManager.getLocallyRunningTasks(...).
     // Maps task id -> task
-    private HashMap<String,TaskQuartzImpl> locallyRunningTaskInstancesMap = new HashMap<String,TaskQuartzImpl>();
+    private final HashMap<String,TaskQuartzImpl> locallyRunningTaskInstancesMap = new HashMap<>();
 
     private ExecutorService lightweightHandlersExecutor = Executors.newCachedThreadPool();
 
@@ -247,7 +223,7 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         }
 
         executionManager.startScheduler(getNodeId(), result);
-        if (result.getLastSubresultStatus() != OperationResultStatus.SUCCESS) {
+        if (result.getLastSubresultStatus() != SUCCESS) {
             throw new SystemException("Quartz task scheduler couldn't be started.");
         }
         
@@ -773,9 +749,12 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
             if (task.getNode() != null) {
                 result.recordWarning("Deleting a task that seems to be currently executing on node " + task.getNode());
             }
+			for (TaskDeletionListener listener : taskDeletionListeners) {
+				listener.onTaskDelete(task, result);
+			}
             repositoryService.deleteObject(TaskType.class, oid, result);
             executionManager.removeTaskFromQuartz(oid, result);
-            result.recordSuccessIfUnknown();
+            result.computeStatusIfUnknown();
         } catch (ObjectNotFoundException e) {
             result.recordFatalError("Cannot delete the task because it does not exist.", e);
             throw e;
@@ -985,30 +964,73 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         }
     }
 
-    private void fillInSubtasks(Task task, ClusterStatusInformation clusterStatusInformation, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult result) throws SchemaException {
+	// TODO deduplicate
+	private void fillInSubtasks(Task task, ClusterStatusInformation clusterStatusInformation, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult result) throws SchemaException {
+		boolean retrieveNextRunStartTime = SelectorOptions.hasToLoadPath(new ItemPath(TaskType.F_NEXT_RUN_START_TIMESTAMP), options);
+		boolean retrieveNodeAsObserved = SelectorOptions.hasToLoadPath(new ItemPath(TaskType.F_NODE_AS_OBSERVED), options);
+
+		List<Task> subtasks = task.listSubtasks(result);
+
+		for (Task subtask : subtasks) {
+
+			if (subtask.isPersistent()) {
+				addTransientTaskInformation(subtask.getTaskPrismObject(),
+						clusterStatusInformation,
+						retrieveNextRunStartTime,
+						retrieveNodeAsObserved,
+						result);
+
+				fillInSubtasks(subtask, clusterStatusInformation, options, result);
+			}
+			TaskType subTaskType = subtask.getTaskPrismObject().asObjectable();
+			task.getTaskPrismObject().asObjectable().getSubtask().add(subTaskType);
+		}
+	}
+
+	// retrieves only "heavyweight" subtasks
+    private void fillInSubtasks(TaskType task, ClusterStatusInformation clusterStatusInformation, Collection<SelectorOptions<GetOperationOptions>> options, OperationResult result) throws SchemaException {
 
         boolean retrieveNextRunStartTime = SelectorOptions.hasToLoadPath(new ItemPath(TaskType.F_NEXT_RUN_START_TIMESTAMP), options);
         boolean retrieveNodeAsObserved = SelectorOptions.hasToLoadPath(new ItemPath(TaskType.F_NODE_AS_OBSERVED), options);
 
-        List<Task> subtasks = task.listSubtasks(result);
+        List<PrismObject<TaskType>> subtasks = listSubtasksForTask(task.getTaskIdentifier(), result);
 
-        for (Task subtask : subtasks) {
+        for (PrismObject<TaskType> subtask : subtasks) {
 
-            if (subtask.isPersistent()) {
-                addTransientTaskInformation(subtask.getTaskPrismObject(),
+            if (subtask.getOid() != null) {
+                addTransientTaskInformation(subtask,
                         clusterStatusInformation,
                         retrieveNextRunStartTime,
                         retrieveNodeAsObserved,
                         result);
 
-                fillInSubtasks(subtask, clusterStatusInformation, options, result);
+                fillInSubtasks(subtask.asObjectable(), clusterStatusInformation, options, result);
             }
-            TaskType subTaskType = subtask.getTaskPrismObject().asObjectable();
-            task.getTaskPrismObject().asObjectable().getSubtask().add(subTaskType);
+            task.getSubtask().add(subtask.asObjectable());
         }
     }
 
-    @Override
+	public List<PrismObject<TaskType>> listSubtasksForTask(String taskIdentifier, OperationResult result) throws SchemaException {
+
+		if (StringUtils.isEmpty(taskIdentifier)) {
+			return new ArrayList<>();
+		}
+		ObjectQuery query = QueryBuilder.queryFor(TaskType.class, prismContext)
+				.item(TaskType.F_PARENT).eq(taskIdentifier)
+				.build();
+
+		List<PrismObject<TaskType>> list;
+		try {
+			list = repositoryService.searchObjects(TaskType.class, query, null, result);
+			result.recordSuccessIfUnknown();
+		} catch (SchemaException | RuntimeException e) {
+			result.recordFatalError(e);
+			throw e;
+		}
+		return list;
+	}
+
+	@Override
     public <T extends ObjectType> SearchResultList<PrismObject<T>> searchObjects(Class<T> type,
                                                                      ObjectQuery query,
                                                                      Collection<SelectorOptions<GetOperationOptions>> options,
@@ -1174,6 +1196,16 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
 //    }
     //endregion
 
+	//region Deletion listeners
+
+	@Override
+	public void registerTaskDeletionListener(TaskDeletionListener listener) {
+		Validate.notNull(listener, "Task deletion listener is null");
+		taskDeletionListeners.add(listener);
+	}
+
+	//endregion
+
     //region Managing handlers and task categories
     /*
     *  ********************* MANAGING HANDLERS AND TASK CATEGORIES *********************
@@ -1207,15 +1239,17 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
                 }
             }
         }
-        return new ArrayList<String>(categories);
+        return new ArrayList<>(categories);
     }
 
     @Override
     public String getHandlerUriForCategory(String category) {
         for (Map.Entry<String,TaskHandler> h : handlers.entrySet()) {
             List<String> cats = h.getValue().getCategoryNames();
-            if (cats != null && cats.contains(category)) {
-                return h.getKey();
+            if (cats != null) {
+				if (cats.contains(category)) {
+					return h.getKey();
+				}
             } else {
                 String cat = h.getValue().getCategoryName(null);
                 if (category.equals(cat)) {
@@ -1304,7 +1338,7 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
     }
 
     private void logListenerException(RuntimeException e) {
-        LoggingUtils.logException(LOGGER, "Task listener returned an unexpected exception", e);
+        LoggingUtils.logUnexpectedException(LOGGER, "Task listener returned an unexpected exception", e);
     }
 
     public void notifyTaskFinish(Task task, TaskRunResult runResult) {
@@ -1525,11 +1559,10 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
             clearTaskOperationResult(task, parentResult);
             scheduleRunnableTaskNow(task, parentResult);
         } else {
-            String message = "Task " + task + " cannot be run now, because it is not in RUNNABLE nor CLOSED state.";
+            String message = "Task " + task + " cannot be run now, because it is not in RUNNABLE nor CLOSED state. State is " + task.getExecutionStatus();
             parentResult.createSubresult(DOT_INTERFACE + "scheduleTaskNow").recordFatalError(message);
             LOGGER.error(message);
-            return;
-        }
+		}
     }
 
     private void clearTaskOperationResult(Task task, OperationResult parentResult) throws SchemaException, ObjectNotFoundException {
@@ -1606,24 +1639,21 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         result.addParam("identifier", identifier);
         result.addContext(OperationResult.CONTEXT_IMPLEMENTATION_CLASS, TaskManagerQuartzImpl.class);
 
-        PrismObject<TaskType> retval;
+		ObjectQuery query = QueryBuilder.queryFor(TaskType.class, prismContext)
+				.item(TaskType.F_TASK_IDENTIFIER).eq(identifier)
+				.build();
 
-//        TaskQuartzImpl transientTask = registeredTransientTasks.get(identifier);
-//        if (transientTask != null) {
-//            retval = transientTask.getTaskPrismObject();
-//        } else {
-            // search the repo
-            ObjectFilter filter = EqualFilter.createEqual(TaskType.F_TASK_IDENTIFIER, TaskType.class, prismContext, null, identifier);
-            ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-
-            List<PrismObject<TaskType>> list = repositoryService.searchObjects(TaskType.class, query, options, result);
-            if (list.isEmpty()) {
-                throw new ObjectNotFoundException("Task with identifier " + identifier + " could not be found");
-            } else if (list.size() > 1) {
-                throw new IllegalStateException("Found more than one task with identifier " + identifier + " (" + list.size() + " of them)");
-            }
-            retval = list.get(0);
-//        }
+		List<PrismObject<TaskType>> list = repositoryService.searchObjects(TaskType.class, query, options, result);
+		if (list.isEmpty()) {
+			throw new ObjectNotFoundException("Task with identifier " + identifier + " could not be found");
+		} else if (list.size() > 1) {
+			throw new IllegalStateException("Found more than one task with identifier " + identifier + " (" + list.size() + " of them)");
+		}
+		PrismObject<TaskType> retval = list.get(0);
+		if (SelectorOptions.hasToLoadPath(TaskType.F_SUBTASK, options)) {
+			ClusterStatusInformation clusterStatusInformation = getClusterStatusInformation(options, TaskType.class, true, result); // returns null if noFetch is set
+			fillInSubtasks(retval.asObjectable(), clusterStatusInformation, options, result);
+		}
         result.computeStatusIfUnknown();
         return retval;
     }
@@ -1660,14 +1690,23 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
 
         List<PrismObject<TaskType>> obsoleteTasks;
         try {
-            ObjectQuery obsoleteTasksQuery = ObjectQuery.createObjectQuery(AndFilter.createAnd(
-                    LessFilter.createLess(TaskType.F_COMPLETION_TIMESTAMP, TaskType.class, getPrismContext(), timeXml, true),
-                    EqualFilter.createEqual(TaskType.F_PARENT, TaskType.class, getPrismContext(), null)));
-
+            ObjectQuery obsoleteTasksQuery = QueryBuilder.queryFor(TaskType.class, prismContext)
+					.item(TaskType.F_COMPLETION_TIMESTAMP).le(timeXml)
+					.and().item(TaskType.F_PARENT).isNull()
+					.build();
             obsoleteTasks = repositoryService.searchObjects(TaskType.class, obsoleteTasksQuery, null, result);
         } catch (SchemaException e) {
             throw new SchemaException("Couldn't get the list of obsolete tasks: " + e.getMessage(), e);
         }
+
+        // enable when having enough time
+//        result.createSubresult(result.getOperation()+".count").recordStatus(SUCCESS, "Task tree(s) to be deleted: " + obsoleteTasks.size());
+//        // show the result immediately
+//        try {
+//            executionTask.setResultImmediate(executionTask.getResult(), new OperationResult("dummy"));
+//        } catch (ObjectNotFoundException e) {
+//            LoggingUtils.logUnexpectedException(LOGGER, "Task {} does not exist", e, executionTask);
+//        }
 
         LOGGER.debug("Found {} task tree(s) to be cleaned up", obsoleteTasks.size());
 
@@ -1678,42 +1717,43 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         for (PrismObject<TaskType> rootTaskPrism : obsoleteTasks) {
 
             if (!executionTask.canRun()) {
-                result.recordPartialError("Interrupted");
+                result.recordWarning("Interrupted");
                 LOGGER.warn("Task cleanup was interrupted.");
                 interrupted = true;
                 break;
             }
 
-            // get whole tree
-            Task rootTask = createTaskInstance(rootTaskPrism, result);
-            List<Task> taskTreeMembers = rootTask.listSubtasksDeeply(result);
-            taskTreeMembers.add(rootTask);
+            final String taskName = PolyString.getOrig(rootTaskPrism.getName());
+            final String taskOid = rootTaskPrism.getOid();
+            final long started = System.currentTimeMillis();
+            executionTask.recordIterativeOperationStart(taskName, null, TaskType.COMPLEX_TYPE, taskOid);
+            try {
+                // get whole tree
+                Task rootTask = createTaskInstance(rootTaskPrism, result);
+                List<Task> taskTreeMembers = rootTask.listSubtasksDeeply(result);
+                taskTreeMembers.add(rootTask);
 
-            LOGGER.trace("Removing task {} along with its {} children.", rootTask, taskTreeMembers.size()-1);
+                LOGGER.trace("Removing task {} along with its {} children.", rootTask, taskTreeMembers.size() - 1);
 
-            boolean problem = false;
-            for (Task task : taskTreeMembers) {
-                try {
-                    deleteTask(task.getOid(), result);
-                } catch (SchemaException e) {
-                    LoggingUtils.logException(LOGGER, "Couldn't delete obsolete task {} due to schema exception", e, task);
-                    problem = true;
-                } catch (ObjectNotFoundException e) {
-                    LoggingUtils.logException(LOGGER, "Couldn't delete obsolete task {} due to object not found exception", e, task);
-                    problem = true;
-                } catch (RuntimeException e) {
-                    LoggingUtils.logException(LOGGER, "Couldn't delete obsolete task {} due to a runtime exception", e, task);
-                    problem = true;
-                }
-
-                if (problem) {
-                    problems++;
-                    if (!task.getTaskIdentifier().equals(rootTask.getTaskIdentifier())) {
-                        bigProblems++;
+                Throwable lastProblem = null;
+                for (Task task : taskTreeMembers) {
+                    try {
+                        deleteTask(task.getOid(), result);
+                        deleted++;
+                    } catch (SchemaException|ObjectNotFoundException|RuntimeException e) {
+                        LoggingUtils.logException(LOGGER, "Couldn't delete obsolete task {}", e, task);
+                        lastProblem = e;
+                        problems++;
+                        if (!task.getTaskIdentifier().equals(rootTask.getTaskIdentifier())) {
+                            bigProblems++;
+                        }
                     }
-                } else {
-                    deleted++;
                 }
+                // approximate solution (as the problem might be connected to a subtask)
+                executionTask.recordIterativeOperationEnd(taskName, null, TaskType.COMPLEX_TYPE, taskOid, started, lastProblem);
+            } catch (Throwable t) {
+                executionTask.recordIterativeOperationEnd(taskName, null, TaskType.COMPLEX_TYPE, taskOid, started, t);
+                throw t;
             }
         }
         result.computeStatusIfUnknown();
@@ -1724,7 +1764,7 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         }
         String suffix = interrupted ? " Interrupted." : "";
         if (problems == 0) {
-            parentResult.createSubresult(CLEANUP_TASKS + ".statistics").recordStatus(OperationResultStatus.SUCCESS, "Successfully deleted " + deleted + " task(s)." + suffix);
+            parentResult.createSubresult(CLEANUP_TASKS + ".statistics").recordStatus(SUCCESS, "Successfully deleted " + deleted + " task(s)." + suffix);
         } else {
             parentResult.createSubresult(CLEANUP_TASKS + ".statistics").recordPartialError("Successfully deleted " + deleted + " task(s), "
                     + "there was problems with deleting " + problems + " tasks." + suffix
@@ -1777,29 +1817,20 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
             try {
                 ((TaskQuartzImpl) task).checkDependencies(result);
                 count++;
-            } catch (SchemaException e) {
-                LoggingUtils.logException(LOGGER, "Couldn't check dependencies for task {}", e, task);
-            } catch (ObjectNotFoundException e) {
+            } catch (SchemaException | ObjectNotFoundException e) {
                 LoggingUtils.logException(LOGGER, "Couldn't check dependencies for task {}", e, task);
             }
-        }
+		}
         LOGGER.trace("Check waiting tasks completed; {} tasks checked.", count);
     }
 
     private List<Task> listWaitingTasks(TaskWaitingReason reason, OperationResult result) throws SchemaException {
-
-        ObjectFilter filter, filter1 = null, filter2 = null;
-//        try {
-            filter1 = EqualFilter.createEqual(TaskType.F_EXECUTION_STATUS, TaskType.class, prismContext, null, TaskExecutionStatusType.WAITING);
-            if (reason != null) {
-                filter2 = EqualFilter.createEqual(TaskType.F_WAITING_REASON, TaskType.class, prismContext, null, reason.toTaskType());
-            }
-//        } catch (SchemaException e) {
-//            throw new SystemException("Cannot create filter for listing waiting tasks due to schema exception", e);
-//        }
-        filter = filter2 != null ? AndFilter.createAnd(filter1, filter2) : filter1;
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-//        query = new ObjectQuery();  // todo remove this hack when searching will work
+		S_AtomicFilterEntry q = QueryBuilder.queryFor(TaskType.class, prismContext);
+		q = q.item(TaskType.F_EXECUTION_STATUS).eq(TaskExecutionStatusType.WAITING).and();
+		if (reason != null) {
+			q = q.item(TaskType.F_WAITING_REASON).eq(reason.toTaskType()).and();
+		}
+        ObjectQuery query = q.all().build();
         List<PrismObject<TaskType>> prisms = repositoryService.searchObjects(TaskType.class, query, null, result);
         List<Task> tasks = resolveTasksFromTaskTypes(prisms, result);
 
@@ -1823,5 +1854,5 @@ public class TaskManagerQuartzImpl implements TaskManager, BeanFactoryAware {
         return retval;
     }
 
-    //endregion
+	//endregion
 }

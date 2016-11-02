@@ -25,17 +25,17 @@
         <div class="col-md-offset-2 col-md-8 col-lg-offset-4 col-lg-4">
             <div class="panel panel-default" style="margin-top: 120px;">
                 <div class="panel-body">
-                    <form wicket:id="loginForm" class="form-horizontal">
+                    <form method="post" class="form-horizontal" action="spring_security_login">
 
 
                         <!-- begin changes -->
                         <div class="form-group">
-                            <div class="col-md-4 col-lg-12 text-center">
+                            <div class="col-md-12 col-lg-12 text-center">
                                 <a href="https://wiki.evolveum.com/display/midPoint/Live+Demo" target="_blank">Live demo documentation</a>
                             </div>
                         </div>
                         <div class="form-group">
-                            <div class="col-md-4 col-lg-12 text-center">
+                            <div class="col-md-12 col-lg-12 text-center">
                                 Demo credentials: <strong>administrator</strong> / <strong>5ecr3t</strong>
                             </div>
                         </div>
@@ -48,8 +48,8 @@
                             </label>
 
                             <div class="col-md-8 col-lg-8">
-                                <input wicket:id="username" type="text" class="form-control input-sm focus-username"
-                                       wicket:message="placeholder:PageLogin.username">
+                                <input name="username" type="text" class="form-control input-sm focus-username"
+                                       wicket:message="placeholder:PageLogin.username" required="required">
                             </div>
                         </div>
                         <div class="form-group">
@@ -58,14 +58,19 @@
                             </label>
 
                             <div class="col-md-8 col-lg-8">
-                                <input wicket:id="password" type="password" class="form-control input-sm value-password"
-                                       wicket:message="placeholder:PageLogin.password">
+                                <input name="password" type="password" class="form-control input-sm"
+                                       wicket:message="placeholder:PageLogin.password" required="required">
                             </div>
                         </div>
-                        <wicket:link  ><a href="forgetpassword" wicket:id="forgetpassword"> <wicket:message key="PageLogin.forgetPassword"/></a></wicket:link>
 
                         <input type="submit" class="btn btn-primary pull-right" wicket:message="value:PageLogin.signIn"/>
                     </form>
+
+                    <wicket:link>
+                        <a href="forgetpassword" wicket:id="forgetpassword">
+                            <wicket:message key="PageLogin.forgetPassword"/>
+                        </a>
+                    </wicket:link>
                 </div>
             </div>
         </div>

@@ -1,8 +1,9 @@
 package com.evolveum.midpoint.testing.selenide.tests;
 
 import com.codeborne.selenide.SelenideElement;
-import org.apache.log4j.Logger;
 import org.openqa.selenium.By;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testng.ITestContext;
 import org.testng.annotations.BeforeClass;
 
@@ -27,31 +28,25 @@ public class AbstractSelenideTest{
     public static final String ADMIN_LOGIN = "administrator";
     public static final String ADMIN_PASSWORD = "5ecr3t";
     //User's attributes' fields' names
-    public static final String USER_NAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:0:property:values:0:value:valueContainer:input:input";
+    public static final String USER_NAME_FIELD_NAME = "Name";
 
-
-    public static final String DESCRIPTION_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:1:property:values:0:value:valueContainer:input:input";
-    public static final String FULL_NAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:2:property:values:0:value:valueContainer:input:input";
-    public static final String GIVEN_NAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:3:property:values:0:value:valueContainer:input:input";
-    public static final String FAMILY_NAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:4:property:values:0:value:valueContainer:input:input";
-    public static final String ADDITIONAL_NAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:5:property:values:0:value:valueContainer:input:input";
-    public static final String NICKNAME_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:6:property:values:0:value:valueContainer:input:input";
-    public static final String HONORIFIC_PREFIX_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:7:property:values:0:value:valueContainer:input:input";
-    public static final String HONORIFIC_SUFFIX_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:8:property:values:0:value:valueContainer:input:input";
-    public static final String TITLE_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:9:property:values:0:value:valueContainer:input:input";
-    public static final String PREFERRED_LANGUAGE_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:10:property:values:0:value:valueContainer:input:input";
-    public static final String LOCALE_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:11:property:values:0:value:valueContainer:input:input";
-    public static final String TIMEZONE_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:12:property:values:0:value:valueContainer:input:input";
-    public static final String EMAIL_ADDRESS_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:14:property:values:0:value:valueContainer:input:input";
-    public static final String TELEPHONE_NUMBER_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:15:property:values:0:value:valueContainer:input:input";
-    public static final String EMPLOYEE_NUMBER_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:16:property:values:0:value:valueContainer:input:input";
-    public static final String EMPLOYEE_TYPE_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:17:property:values:0:value:valueContainer:input:input";
-    public static final String COST_CENTER_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:18:property:values:0:value:valueContainer:input:input";
-    public static final String ORGANIZATION_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:19:property:values:0:value:valueContainer:input:input";
-    public static final String ORGANIZATIONAL_UNIT_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:20:property:values:0:value:valueContainer:input:input";
-    public static final String LOCALITY_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:0:container:properties:21:property:values:0:value:valueContainer:input:input";
-    public static final String PASSWORD1_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:7:container:properties:0:property:values:0:value:valueContainer:input:inputContainer:password1";
-    public static final String PASSWORD2_FIELD_NAME = "tabPanel:panel:focusForm:body:containers:7:container:properties:0:property:values:0:value:valueContainer:input:inputContainer:password2";
+    public static final String DESCRIPTION_FIELD_NAME = "Description";
+    public static final String FULL_NAME_FIELD_NAME = "Full name";
+    public static final String GIVEN_NAME_FIELD_NAME = "Given name";
+    public static final String FAMILY_NAME_FIELD_NAME = "Family name";
+    public static final String ADDITIONAL_NAME_FIELD_NAME = "Additional Name";
+    public static final String NICKNAME_FIELD_NAME = "Nickname";
+    public static final String HONORIFIC_PREFIX_FIELD_NAME = "Honorific Prefix";
+    public static final String HONORIFIC_SUFFIX_FIELD_NAME = "Honorific Suffix";
+    public static final String TITLE_FIELD_NAME = "Title";
+    public static final String EMAIL_ADDRESS_FIELD_NAME = "Email Address";
+    public static final String TELEPHONE_NUMBER_FIELD_NAME = "Telephone Number";
+    public static final String EMPLOYEE_NUMBER_FIELD_NAME = "Employee Number";
+    public static final String COST_CENTER_FIELD_NAME = "Cost Center";
+    public static final String ORGANIZATION_FIELD_NAME = "Organization";
+    public static final String ORGANIZATIONAL_UNIT_FIELD_NAME = "Organizational Unit";
+    public static final String PASSWORD1_FIELD_NAME = "password1";
+    public static final String PASSWORD2_FIELD_NAME = "password2";
 
     //User's attributes' fields' values
     public static final String DESCRIPTION_FIELD_VALUE = "test description";
@@ -78,9 +73,13 @@ public class AbstractSelenideTest{
     public static final String PASSWORD2_FIELD_VALUE = "password";
     public static final String UPDATED_VALUE = "_updated";
     //Assign role link text
-    public static final String ASSIGN_ROLE_LINKTEXT = "Assign Role";
+    public static final String ASSIGN_ROLE_LINKTEXT = "Assign";
+    public static final String ASSIGN_DEFAULT_OBJECT_TYPE = "RoleType";
 
-    Logger LOGGER = Logger.getLogger(AbstractSelenideTest.class);
+    public static final String ASSIGNMENT_TAB_NAME = "Assignments";
+    public static final String INDUCEMENT_TAB_NAME = "Inducements";
+
+    Logger LOGGER = LoggerFactory.getLogger(AbstractSelenideTest.class);
 
     private static final String PARAM_SITE_URL = "site.url";
     public String siteUrl;
@@ -127,17 +126,12 @@ public class AbstractSelenideTest{
         userAttributes.put(HONORIFIC_PREFIX_FIELD_NAME, HONORIFIC_PREFIX_FIELD_VALUE);
         userAttributes.put(HONORIFIC_SUFFIX_FIELD_NAME, HONORIFIC_SUFFIX_FIELD_VALUE);
         userAttributes.put(TITLE_FIELD_NAME, TITLE_FIELD_VALUE);
-        userAttributes.put(PREFERRED_LANGUAGE_FIELD_NAME, PREFERRED_LANGUAGE_FIELD_VALUE);
-        userAttributes.put(LOCALE_FIELD_NAME, LOCALE_FIELD_VALUE);
-        userAttributes.put(TIMEZONE_FIELD_NAME, TIMEZONE_FIELD_VALUE);
         userAttributes.put(EMAIL_ADDRESS_FIELD_NAME, EMAIL_ADDRESS_FIELD_VALUE);
         userAttributes.put(TELEPHONE_NUMBER_FIELD_NAME, TELEPHONE_NUMBER_FIELD_VALUE);
         userAttributes.put(EMPLOYEE_NUMBER_FIELD_NAME, EMPLOYEE_NUMBER_FIELD_VALUE);
-        userAttributes.put(EMPLOYEE_TYPE_FIELD_NAME, EMPLOYEE_TYPE_FIELD_VALUE);
         userAttributes.put(COST_CENTER_FIELD_NAME, COST_CENTER_FIELD_VALUE);
         userAttributes.put(ORGANIZATION_FIELD_NAME, ORGANIZATION_FIELD_VALUE);
         userAttributes.put(ORGANIZATIONAL_UNIT_FIELD_NAME, ORGANIZATIONAL_UNIT_FIELD_VALUE);
-        userAttributes.put(LOCALITY_FIELD_NAME, LOCALITY_FIELD_VALUE);
         userAttributes.put(PASSWORD1_FIELD_NAME, PASSWORD1_FIELD_VALUE);
         userAttributes.put(PASSWORD2_FIELD_NAME, PASSWORD2_FIELD_VALUE);
         //TODO: Activation, Photo, Parent Organization, Tenant
@@ -152,10 +146,12 @@ public class AbstractSelenideTest{
     protected void checkObjectAttributesValues(Map<String, String> objectAttributes){
         Set<String> attributeFieldNames = objectAttributes.keySet();
         for (String attributeFieldName : attributeFieldNames){
-            if ($(By.name(attributeFieldName)).getTagName().equals("input")) {
-                $(By.name(attributeFieldName)).shouldBe(visible).shouldHave(value(objectAttributes.get(attributeFieldName)));
+            if (attributeFieldName.equals(DESCRIPTION_FIELD_NAME)){
+                findAttributeValueFiledByDisplayName(attributeFieldName, "textarea")
+                        .shouldHave(text(objectAttributes.get(attributeFieldName)));
             } else {
-                $(By.name(attributeFieldName)).shouldBe(visible).shouldHave(text(objectAttributes.get(attributeFieldName)));
+                findAttributeValueFiledByDisplayName(attributeFieldName, "input")
+                        .shouldHave(value(objectAttributes.get(attributeFieldName)));
             }
         }
     }
@@ -165,7 +161,7 @@ public class AbstractSelenideTest{
      */
     protected void logout(){
         //click user's name in the upper right corner
-        $(By.className("dropdown-toggle")).shouldBe(visible).click();
+        $(byAttribute("class", "dropdown user user-menu")).shouldBe(visible).click();
         //click on Log out menu item
         $(By.partialLinkText("Log out")).shouldBe(visible).click();
     }
@@ -178,17 +174,23 @@ public class AbstractSelenideTest{
         if (fieldValues != null && fieldValues.size() > 0){
 
             if (fieldValues.containsKey(PASSWORD2_FIELD_NAME)){
-                $(By.name(PASSWORD2_FIELD_NAME)).shouldBe(visible).setValue(fieldValues.get(PASSWORD2_FIELD_NAME));
+                $(byAttribute("about", PASSWORD2_FIELD_NAME)).shouldBe(visible).setValue(fieldValues.get(PASSWORD2_FIELD_NAME));
                 fieldValues.remove(PASSWORD2_FIELD_NAME);
             }
             if (fieldValues.containsKey(PASSWORD1_FIELD_NAME)){
-                $(By.name(PASSWORD1_FIELD_NAME)).shouldBe(visible).setValue(fieldValues.get(PASSWORD1_FIELD_NAME));
+                $(byAttribute("about", PASSWORD1_FIELD_NAME)).shouldBe(visible).setValue(fieldValues.get(PASSWORD1_FIELD_NAME));
                 fieldValues.remove(PASSWORD1_FIELD_NAME);
             }
             if (fieldValues.size() > 0) {
                 Set<String> fieldNameSet = fieldValues.keySet();
                 for (String fieldName : fieldNameSet) {
-                    $(By.name(fieldName)).shouldBe(visible).setValue(fieldValues.get(fieldName));
+                    if (fieldName.equals(DESCRIPTION_FIELD_NAME)){
+                        findAttributeValueFiledByDisplayName(fieldName, "textarea")
+                                .shouldBe(visible).setValue(fieldValues.get(fieldName));
+                    } else {
+                        findAttributeValueFiledByDisplayName(fieldName, "input")
+                                .shouldBe(visible).setValue(fieldValues.get(fieldName));
+                    }
                 }
             }
         }
@@ -206,12 +208,35 @@ public class AbstractSelenideTest{
             $(By.partialLinkText("Users")).shouldBe(visible).click();
 
         //click New user menu item
-        $(By.partialLinkText("New user")).click();
+        $(By.partialLinkText("New user")).shouldBe(visible).click();
 
         //set value to Name field
-        $(By.name(USER_NAME_FIELD_NAME)).shouldBe(visible).setValue(userName);
+        findAttributeValueFiledByDisplayName(USER_NAME_FIELD_NAME, "input")
+                .shouldBe(visible).setValue(userName);
         //fill in user's attributes with values if userFields map is not empty
         setFieldValues(userFields);
+        //click Save button
+        $(By.linkText("Save")).shouldBe(visible).click();
+
+    }
+
+     public void createRole(Map<String, String> roleFields){
+        if (!$(By.partialLinkText("New role")).isDisplayed())
+            $(By.partialLinkText("Roles")).shouldBe(visible).click();
+
+        $(By.partialLinkText("New role")).shouldBe(visible).click();
+        setFieldValues(roleFields);
+        //click Save button
+        $(By.linkText("Save")).shouldBe(visible).click();
+
+    }
+
+     public void createService(Map<String, String> servviceFields){
+        if (!$(By.partialLinkText("New service")).isDisplayed())
+            $(By.partialLinkText("Services")).shouldBe(visible).click();
+
+        $(By.partialLinkText("New service")).shouldBe(visible).click();
+        setFieldValues(servviceFields);
         //click Save button
         $(By.linkText("Save")).shouldBe(visible).click();
 
@@ -229,38 +254,58 @@ public class AbstractSelenideTest{
         $(By.partialLinkText("List users")).shouldBe(visible).click();
     }
 
+    public void assignObjectToFocusObject(String linkText, String objectName) {
+        assignObjectToFocusObject(linkText, "", objectName);
+    }
+
+    public void assignObjectToFocusObject(String linkText, String objectType, String objectName) {
+        assignObjectToFocusObject(linkText, "", objectName, ASSIGNMENT_TAB_NAME);
+    }
     /**
      * Prerequirement: user's Edit page is to be opened
      * Assign the specified roleName role to user
      * @param linkText          the text of the menu item from the Assignments section menu
      * @param objectName        the name of the object to be assigned
      */
-    public void assignObjectToUser(String linkText, String objectName){
-        //click on the menu icon next to Assignments section
-        $(byAttribute("about", "assignmentsContainer")).find(byAttribute("about", "dropdownMenu")).click();
+    public void assignObjectToFocusObject(String linkText, String objectType, String objectName, String tabName){
+        if (tabName != null && tabName.equals(INDUCEMENT_TAB_NAME)){
+            openInducementsTab();
+        } else {
+            openAssignmentsTab();
+        }
+        $(byAttribute("about", "dropdownMenu")).click();
         //click Assign menu item with the specified linkText
         $(By.linkText(linkText)).shouldBe(visible).click();
 
-        //switch to the opened modal window
-        switchToInnerFrame();
-
+        if (objectType != null && !(objectType.trim().isEmpty())){
+            $(byAttribute("class", "form-inline search-form")).find(By.tagName("select")).shouldBe(visible).click();
+            $(byText(objectType)).shouldBe(visible).click();
+            $(byAttribute("class", "form-inline search-form")).find(By.tagName("select")).find(byAttribute("selected", "selected")).shouldHave(text(objectType));
+        }
         //search for object by objectName in the opened Select object(s) window
         searchForElement(objectName, "searchText");
         //select checkbox for the found object
-        $(byAttribute("about", "table")).find(By.tagName("tbody")).find(By.tagName("input")).shouldBe(visible).click();
+        SelenideElement element = $(byAttribute("class", "wicket-modal"));
+        element.find(byAttribute("about", "table")).find(By.tagName("tbody")).find(byAttribute("type", "checkbox")).shouldBe(visible).setSelected(true);
         //click Assign button
-        $(By.linkText("Assign")).shouldBe(visible).click();
-        $(By.linkText("Assign")).should(disappear);
+        $(By.linkText("Add")).shouldBe(visible).click();
+        $(By.linkText("Add")).should(disappear);
 
-        //switch to main window
-        switchTo().defaultContent();
         //click Save button
         $(By.linkText("Save")).click();
-
-        //check if Success message appears after user saving
-        $(byText("Success")).shouldBe(visible);
     }
 
+    protected void openAssignmentsTab(){
+        $(byAttribute("class", "tab2")).shouldBe(visible).click();
+    }
+
+    protected void openInducementsTab(){
+        $(byAttribute("class", "tab5")).shouldBe(visible).click();
+    }
+
+    protected void openProjectionsTab(){
+        $(byAttribute("class", "tab1")).shouldBe(visible).click();
+    }
     /**
      * opens Edit page for the specified user with userName
      * @param userName
@@ -294,8 +339,10 @@ public class AbstractSelenideTest{
      */
     public void searchForElement(String searchText, String aboutTagValue){
         //search for element in search form
-        $(byAttribute("about", aboutTagValue)).shouldBe(visible).setValue(searchText);
-        $(By.linkText("Search")).shouldBe(visible).click();
+        $(byAttribute("about", "searchItemButton")).shouldBe(visible).click();
+        $(byAttribute("class", "popover-content")).find(byAttribute("class", "form-control input-sm")).shouldBe(visible).setValue(searchText);
+        $(byAttribute("class", "popover-content")).find(byAttribute("class", "btn btn-sm btn-success")).shouldBe(visible).click();
+        $(byAttribute("class", "popover-content")).find(byAttribute("class", "btn btn-sm btn-success")).shouldBe(disappear);
     }
 
     public void importObjectFromFile(String filePath){
@@ -318,7 +365,7 @@ public class AbstractSelenideTest{
         $(byAttribute("about", "importFileButton")).shouldBe(visible).click();
 
         //check if Success message appears after resource importing
-        $(byText("Success")).shouldBe(visible);
+        $(byText("Import file (Gui)")).shouldBe(visible);
 
     }
 
@@ -331,21 +378,19 @@ public class AbstractSelenideTest{
      * @param propertyConstraintList
      */
     public void editObjectPolicy(String objectType, String objectTemplate, List<String> propertyConstraintList){
-        //click Configuration menu
-//        $(By.partialLinkText("Configuration")).shouldBe(visible).click(); // clicked in previous step
-        //click Basic menu item
-        $(By.partialLinkText("System")).click();
+        if (!$(By.partialLinkText("System")).isDisplayed()) {
+            $(By.partialLinkText("Configuration")).shouldBe(visible).click(); // clicked in previous step
+        }
+        $(By.partialLinkText("System")).shouldBe(visible).click();
         //click on the Edit button in the Object Policies row
         //Note: this Edit button click affects only modifying of the first row
         //of Object Policies
-        $(byAttribute("placeholder", "Insert object policy")).parent().find(By.tagName("button"))
+        $(byText("Object policies")).parent().find(By.tagName("button"))
                 .shouldBe(visible).click();
         //select Object Type value from drop-down list
-        $(By.name("tabPanel:panel:objectPolicyEditor:templateConfigModal:content:mainForm:type:selectWrapper:select"))
-                .shouldBe(visible).selectOption(objectType);
+        $(byText("Object type")).parent().parent().find(By.tagName("select")).shouldBe(visible).selectOption(objectType);
         //select Object Template value from drop-down list
-        $(By.name("tabPanel:panel:objectPolicyEditor:templateConfigModal:content:mainForm:objectTemplate:selectWrapper:select"))
-                .shouldBe(visible).selectOption(objectTemplate);
+        $(byText("Object template")).parent().parent().find(By.tagName("select")).shouldBe(visible).selectOption(objectTemplate);
         if (propertyConstraintList != null && propertyConstraintList.size() > 0){
             for (int i = 0; i < propertyConstraintList.size(); i++){
                 $(By.name("tabPanel:panel:mainForm:objectPolicyEditor:templateConfigModal:content:mainForm:repeater:" + i + ":textWrapper:oidBound"))
@@ -361,13 +406,32 @@ public class AbstractSelenideTest{
         //click Save button on the Configuration for midPoint page
         $(By.linkText("Save")).shouldBe(enabled).click();
         //check if Success message appears
-        $(byText("Success")).shouldBe(visible);
+        checkOperationStatusOk("Update system configuration (GUI)");
     }
 
 
     protected void switchToInnerFrame(){
-        SelenideElement element = $(byAttribute("class", "wicket_modal"));
+        SelenideElement element = $(byAttribute("class", "wicket-modal"));
         String modalWindowId = element.getAttribute("id");
         switchTo().innerFrame(modalWindowId);
     }
+
+    protected void checkOperationStatusOk(String message) {
+        $(byText(message)).shouldBe(visible);
+        $(byAttribute("class", "icon fa fa-check")).shouldBe(visible);
+    }
+
+    protected void checkLoginIsPerformed(){
+        $(By.partialLinkText("Home")).click();
+        $(byText("My work items")).shouldBe(visible);
+    }
+
+    protected SelenideElement findAttributeValueFiledByDisplayName(String displayName, String fieldTagName){
+        return $(byText(displayName)).parent().parent().find(By.tagName(fieldTagName));
+    }
+
+    protected SelenideElement getFeedbackPanel(){
+        return $(byAttribute("class", "feedbackContainer"));
+    }
+
 }

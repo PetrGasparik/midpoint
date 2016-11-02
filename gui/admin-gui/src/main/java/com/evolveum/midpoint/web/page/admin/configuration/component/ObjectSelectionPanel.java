@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,19 @@
 
 package com.evolveum.midpoint.web.page.admin.configuration.component;
 
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.match.PolyStringNormMatchingRule;
 import com.evolveum.midpoint.prism.polystring.PolyStringNormalizer;
 import com.evolveum.midpoint.prism.query.AndFilter;
+import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.SubstringFilter;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
@@ -30,18 +37,13 @@ import com.evolveum.midpoint.web.component.BasicSearchPanel;
 import com.evolveum.midpoint.web.component.data.ObjectDataProvider;
 import com.evolveum.midpoint.web.component.data.TablePanel;
 import com.evolveum.midpoint.web.component.data.column.LinkColumn;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
 import com.evolveum.midpoint.web.component.util.SelectableBean;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.page.PageDialog;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.ObjectSearchDto;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.Component;
-import org.apache.wicket.Page;
 import org.apache.wicket.PageReference;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
@@ -55,8 +57,10 @@ import org.apache.wicket.model.PropertyModel;
 import org.apache.wicket.model.StringResourceModel;
 
 import javax.xml.namespace.QName;
+
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -137,6 +141,10 @@ public class ObjectSelectionPanel extends Panel {
             container.setOutputMarkupPlaceholderTag(true);
             return container;
         }
+
+        public Collection<SelectorOptions<GetOperationOptions>> getDataProviderOptions(){
+            return null;
+        }
     }
 
     public ObjectSelectionPanel(String id, Class<? extends ObjectType> type, ModalWindow modalWindow, Context context) {
@@ -195,6 +203,7 @@ public class ObjectSelectionPanel extends Panel {
         List<IColumn<SelectableBean<ObjectType>, String>> columns = initColumns();
         ObjectDataProvider provider = new ObjectDataProvider(pageBase, this.objectType);
         provider.setQuery(context.getDataProviderQuery());
+        provider.setOptions(context.getDataProviderOptions());
         TablePanel table = new TablePanel<>(ID_TABLE, provider, columns);
         table.setOutputMarkupId(true);
         addOrReplace(table);
@@ -246,7 +255,7 @@ public class ObjectSelectionPanel extends Panel {
         ObjectDataProvider provider = (ObjectDataProvider)dataTable.getDataProvider();
         provider.setType(objectType);
 
-        target.add(this, WebMiscUtil.getPageBase(this).getFeedbackPanel(), table);
+        target.add(this, WebComponentUtil.getPageBase(this).getFeedbackPanel(), table);
     }
 
     public void updateTablePerformed(AjaxRequestTarget target, ObjectQuery query){
@@ -255,11 +264,12 @@ public class ObjectSelectionPanel extends Panel {
         ObjectDataProvider provider = (ObjectDataProvider)dataTable.getDataProvider();
         provider.setQuery(query);
 
-        target.add(this, WebMiscUtil.getPageBase(this).getFeedbackPanel(), table);
+        target.add(this, WebComponentUtil.getPageBase(this).getFeedbackPanel(), table);
     }
 
     public StringResourceModel createStringResource(String resourceKey, Object... objects) {
-        return new StringResourceModel(resourceKey, this, null, resourceKey, objects);
+    	return PageBase.createStringResourceStatic(this, resourceKey, objects);
+//        return new StringResourceModel(resourceKey, this, null, resourceKey, objects);
     }
 
     private void searchPerformed(AjaxRequestTarget target){
@@ -285,15 +295,16 @@ public class ObjectSelectionPanel extends Panel {
         }
 
         try {
-            PageBase pageBase = WebMiscUtil.getPageBase(this);
+            PageBase pageBase = WebComponentUtil.getPageBase(this);
             PrismContext prismContext = pageBase.getPrismContext();
             PolyStringNormalizer normalizer = prismContext.getDefaultPolyStringNormalizer();
             String normalized = normalizer.normalize(dto.getText());
 
-            SubstringFilter filter = SubstringFilter.createSubstring(context.getSearchProperty(), objectType, prismContext,
-                    PolyStringNormMatchingRule.NAME, normalized);
+            ObjectFilter filter = QueryBuilder.queryFor(objectType, prismContext)
+                    .item(context.getSearchProperty()).contains(normalized).matchingNorm()
+                    .buildFilter();
 
-            if(context.getDataProviderQuery() != null){
+            if (context.getDataProviderQuery() != null) {
                 AndFilter and = AndFilter.createAnd(context.getDataProviderQuery().getFilter(), filter);
                 query = ObjectQuery.createObjectQuery(and);
             } else {
@@ -302,7 +313,7 @@ public class ObjectSelectionPanel extends Panel {
 
         } catch (Exception e){
             error(getString("chooseTypeDialog.message.queryError") + " " + e.getMessage());
-            LoggingUtils.logException(LOGGER, "Couldn't create query filter.", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't create query filter.", e);
         }
 
         return query;

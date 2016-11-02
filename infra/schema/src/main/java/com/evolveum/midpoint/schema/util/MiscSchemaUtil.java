@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,16 +25,16 @@ import java.util.Random;
 
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
+import javax.xml.soap.Detail;
 
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.prism.marshaller.BeanMarshaller;
+import com.evolveum.midpoint.prism.xnode.RootXNode;
+import com.evolveum.midpoint.prism.xnode.XNode;
 import com.evolveum.midpoint.schema.RetrieveOption;
 
-import org.w3c.dom.Element;
-
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.parser.XPathHolder;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.schema.GetOperationOptions;
@@ -43,7 +43,9 @@ import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.ObjectSelector;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.util.MiscUtil;
+import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.GetOperationOptionsType;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ImportOptionsType;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectListType;
@@ -55,13 +57,14 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnfo
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CachingMetadataType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.LayerType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.MetadataType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ProjectionPolicyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PropertyLimitationsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
+import com.evolveum.midpoint.xml.ns._public.common.fault_3.FaultMessage;
 import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 
@@ -301,14 +304,11 @@ public class MiscSchemaUtil {
 		return assignmentPolicyEnforcement;
 	}
 
-	public static boolean compareRelation(QName a, QName b) {
-		if (a == null && b == null) {
+	public static boolean compareRelation(QName query, QName refRelation) {
+		if (PrismConstants.Q_ANY.equals(query)) {
 			return true;
 		}
-		if (a == null || b == null) {
-			return false;
-		}
-		return a.equals(b);
+		return QNameUtil.match(query, refRelation);
 	}
 
 	public static PrismReferenceValue objectReferenceTypeToReferenceValue(ObjectReferenceType refType) {
@@ -367,6 +367,36 @@ public class MiscSchemaUtil {
 				map.put(prismObject.getOid(), prismObject);
 			}
 		}
+	}
+
+	/**
+	 * Returns modification time or creation time (if there was no mo 
+	 */
+	public static XMLGregorianCalendar getChangeTimestamp(MetadataType metadata) {
+		if (metadata == null) {
+			return null;
+		}
+		XMLGregorianCalendar modifyTimestamp = metadata.getModifyTimestamp();
+		if (modifyTimestamp != null) {
+			return modifyTimestamp;
+		} else {
+			return metadata.getCreateTimestamp();
+		}
+	}
+
+	// TODO some better place
+	public static void serializeFaultMessage(Detail detail, FaultMessage faultMessage, PrismContext prismContext, Trace logger) {
+        try {
+			BeanMarshaller marshaller = ((PrismContextImpl) prismContext).getBeanMarshaller();
+			XNode faultMessageXnode = marshaller.marshall(faultMessage.getFaultInfo());			// TODO
+            RootXNode xroot = new RootXNode(SchemaConstants.FAULT_MESSAGE_ELEMENT_NAME, faultMessageXnode);
+            xroot.setExplicitTypeDeclaration(true);
+            QName faultType = prismContext.getSchemaRegistry().determineTypeForClass(faultMessage.getFaultInfo().getClass());
+            xroot.setTypeQName(faultType);
+			((PrismContextImpl) prismContext).getParserDom().serializeUnderElement(xroot, SchemaConstants.FAULT_MESSAGE_ELEMENT_NAME, detail);
+        } catch (SchemaException e) {
+            logger.error("Error serializing fault message (SOAP fault detail): {}", e.getMessage(), e);
+        }
 	}
 
 }

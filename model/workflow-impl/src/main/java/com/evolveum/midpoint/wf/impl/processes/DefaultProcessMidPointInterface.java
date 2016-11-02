@@ -17,10 +17,8 @@
 package com.evolveum.midpoint.wf.impl.processes;
 
 import com.evolveum.midpoint.wf.impl.messages.ProcessEvent;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.DecisionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns.model.workflow.process_instance_state_3.ProcessSpecificState;
-import com.sun.corba.se.spi.ior.iiop.ORBTypeComponent;
-
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -35,8 +33,7 @@ import java.util.Map;
 @Component
 public class DefaultProcessMidPointInterface extends BaseProcessMidPointInterface {
 
-    @Override
-    public ProcessSpecificState externalizeProcessInstanceState(Map<String, Object> variables) {
+    @Override public DecisionType extractDecision(Map<String, Object> variables) {
         return null;
     }
 

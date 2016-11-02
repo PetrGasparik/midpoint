@@ -17,11 +17,12 @@
 package com.evolveum.midpoint.wf.impl.processes.itemApproval;
 
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.xjc.PrismForJAXBUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -33,10 +34,11 @@ public class ApprovalSchemaImpl implements ApprovalSchema, Serializable {
 
     private String name;
     private String description;
-    private List<ApprovalLevelImpl> levels = new ArrayList<ApprovalLevelImpl>();
+    private final List<ApprovalLevelImpl> levels = new ArrayList<>();
 
     private transient PrismContext prismContext;
 
+	@SuppressWarnings("unused")	// TODO check if not called from dynamic code
     public ApprovalSchemaImpl(ApprovalSchemaType approvalSchemaType, PrismContext prismContext) {
         setPrismContext(prismContext);
         initFromApprovalSchemaType(approvalSchemaType);
@@ -82,11 +84,14 @@ public class ApprovalSchemaImpl implements ApprovalSchema, Serializable {
 
     @Override
     public List<? extends ApprovalLevel> getLevels() {
-        return levels;
-    }
-
-    public void setLevels(List<ApprovalLevelImpl> levels) {
-        this.levels = levels;
+		List<ApprovalLevelImpl> rv = new ArrayList<>(levels);
+		Collections.sort(rv, new Comparator<ApprovalLevelImpl>() {
+			@Override
+			public int compare(ApprovalLevelImpl o1, ApprovalLevelImpl o2) {
+				return Integer.compare(o1.getOrder(), o2.getOrder());
+			}
+		});
+        return Collections.unmodifiableList(rv);
     }
 
     @Override
@@ -111,12 +116,18 @@ public class ApprovalSchemaImpl implements ApprovalSchema, Serializable {
         }
     }
 
+    @Override public ApprovalSchemaType toApprovalSchemaType() {
+        ApprovalSchemaType ast = new ApprovalSchemaType();
+        toApprovalSchemaType(ast);
+        return ast;
+    }
+
     public void addLevel(ApprovalLevelImpl level) {
         levels.add(level);
     }
 
     public void addLevel(ApprovalLevelType levelType) {
-        levels.add(new ApprovalLevelImpl(levelType, prismContext));
+        addLevel(new ApprovalLevelImpl(levelType, prismContext));
     }
 
     @Override

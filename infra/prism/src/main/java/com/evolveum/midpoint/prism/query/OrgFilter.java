@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.util.DebugUtil;
@@ -27,19 +24,22 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 
 public class OrgFilter extends ObjectFilter {
 
-    public static enum Scope {ONE_LEVEL, SUBTREE}
+    public enum Scope {
+        ONE_LEVEL,
+        SUBTREE,
+        ANCESTORS       // EXPERIMENTAL; OID has to belong to an OrgType!
+    }
 
     private PrismReferenceValue baseOrgRef;
     private Scope scope;
     private boolean root;
 
-    public OrgFilter(PrismReferenceValue baseOrgRef, Scope scope) {
+    private OrgFilter(PrismReferenceValue baseOrgRef, Scope scope) {
         this.baseOrgRef = baseOrgRef;
         this.scope = scope != null ? scope : Scope.SUBTREE;
     }
 
-    public OrgFilter() {
-        // TODO Auto-generated constructor stub
+    private OrgFilter() {
     }
 
     public static OrgFilter createOrg(PrismReferenceValue baseOrgRef, Scope scope) {
@@ -48,10 +48,6 @@ public class OrgFilter extends ObjectFilter {
 
     public static OrgFilter createOrg(String baseOrgOid, Scope scope) {
         return new OrgFilter(new PrismReferenceValue(baseOrgOid), scope);
-    }
-
-    public static OrgFilter createOrg(String baseOrgRef) {
-        return new OrgFilter(new PrismReferenceValue(baseOrgRef), Scope.SUBTREE);
     }
 
     public static OrgFilter createRootOrg() {
@@ -64,16 +60,8 @@ public class OrgFilter extends ObjectFilter {
         return baseOrgRef;
     }
 
-    public void setOrgRef(PrismReferenceValue baseOrgRef) {
-        this.baseOrgRef = baseOrgRef;
-    }
-
     public Scope getScope() {
         return scope;
-    }
-
-    public void setScope(Scope scope) {
-        this.scope = scope;
     }
 
     private void setRoot(boolean root) {
@@ -96,7 +84,7 @@ public class OrgFilter extends ObjectFilter {
     
 
     @Override
-	public void checkConsistence() {
+	public void checkConsistence(boolean requireDefinitions) {
 		if (baseOrgRef == null) {
 			throw new IllegalArgumentException("Null baseOrgRef in "+this);
 		}
@@ -113,7 +101,7 @@ public class OrgFilter extends ObjectFilter {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(Object obj, boolean exact) {
         if (this == obj)
             return true;
         if (obj == null)
@@ -177,7 +165,6 @@ public class OrgFilter extends ObjectFilter {
 
     @Override
     public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
-        // TODO Auto-generated method stub
         return false;
     }
 }

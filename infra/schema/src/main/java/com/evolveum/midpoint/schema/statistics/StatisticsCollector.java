@@ -56,7 +56,7 @@ public interface StatisticsCollector {
 
     void recordNotificationOperation(String transportName, boolean success, long duration);
 
-    void recordMappingOperation(String objectOid, String objectName, String mappingName, long duration);
+    void recordMappingOperation(String objectOid, String objectName, String objectTypeName, String mappingName, long duration);
 
     /**
      * Records information about iterative processing of objects.
@@ -76,7 +76,8 @@ public interface StatisticsCollector {
 
     void recordSynchronizationOperationStart(String objectName, String objectDisplayName, QName objectType, String objectOid);
 
-    void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation.Record increment);
+    void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started,
+			Throwable exception, SynchronizationInformation.Record originalStateIncrement, SynchronizationInformation.Record newStateIncrement);
 
     /**
      * Records information about repository (focal) events.

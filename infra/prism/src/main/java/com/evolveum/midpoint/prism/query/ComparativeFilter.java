@@ -16,33 +16,31 @@
 
 package com.evolveum.midpoint.prism.query;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
+import com.evolveum.midpoint.prism.path.ItemPath;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.xml.namespace.QName;
 
-import org.w3c.dom.Element;
-
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.PrismValue;
-import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.util.exception.SchemaException;
-
-public abstract class ComparativeFilter<T extends Object> extends PropertyValueFilter<PrismPropertyValue<T>> {
+public abstract class ComparativeFilter<T extends Object> extends PropertyValueFilter<T> {
 
 	private boolean equals;
-	
-	public ComparativeFilter() {
-	}
-	
-	ComparativeFilter(ItemPath path, PrismPropertyDefinition definition, PrismPropertyValue<T> value, boolean equals) {
-		super(path, definition, value);
+
+	ComparativeFilter(@NotNull ItemPath path,
+			@Nullable PrismPropertyDefinition<T> definition,
+			@Nullable PrismPropertyValue<T> value,
+			@Nullable ExpressionWrapper expression, @Nullable ItemPath rightHandSidePath,
+			@Nullable ItemDefinition rightHandSideDefinition, boolean equals) {
+		super(path, definition, null,
+				value != null ? Collections.singletonList(value) : null,
+				expression, rightHandSidePath, rightHandSideDefinition);
 		this.equals = equals;
 	}
 
@@ -53,40 +51,38 @@ public abstract class ComparativeFilter<T extends Object> extends PropertyValueF
 	public void setEquals(boolean equals) {
 		this.equals = equals;
 	}
-	
-	static <T> PrismPropertyValue<T> createPropertyValue(PrismPropertyDefinition itemDefinition, T realValue){
-		List<PrismPropertyValue<T>> values = createPropertyList(itemDefinition, realValue);
-		if (values == null || values.isEmpty()){
+
+	@Nullable
+	static <T> PrismPropertyValue<T> anyValueToPropertyValue(@NotNull PrismContext prismContext, Object value) {
+		List<PrismPropertyValue<T>> values = anyValueToPropertyValueList(prismContext, value);
+		if (values.isEmpty()) {
 			return null;
+		} else if (values.size() > 1) {
+			throw new UnsupportedOperationException("Comparative filter with more than one value is not supported");
+		} else {
+			return values.iterator().next();
 		}
-		
-		if (values.size() > 1 ){
-			throw new UnsupportedOperationException("Greater filter with more than one value is not supported");
-		}
-		
-		return values.iterator().next();
-		
+	}
+
+	@Override
+	public boolean equals(Object o, boolean exact) {
+		if (this == o)
+			return true;
+		if (o == null || getClass() != o.getClass())
+			return false;
+		if (!super.equals(o, exact))
+			return false;
+		ComparativeFilter<?> that = (ComparativeFilter<?>) o;
+		return equals == that.equals;
+	}
+
+	@Override
+	public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
+		throw new UnsupportedOperationException("Matching object and greater/less filter is not supported yet");
 	}
 
 	@Override
 	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + (equals ? 1231 : 1237);
-		return result;
-	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		ComparativeFilter other = (ComparativeFilter) obj;
-		if (equals != other.equals)
-			return false;
-		return true;
+		return Objects.hash(super.hashCode(), equals);
 	}
 }

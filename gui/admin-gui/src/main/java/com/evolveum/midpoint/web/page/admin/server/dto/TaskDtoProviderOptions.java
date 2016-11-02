@@ -33,7 +33,10 @@ public class TaskDtoProviderOptions implements Serializable {
     private boolean resolveOwnerRef = true;            // currently unused
     private boolean getNextRunStartTime = true;
     private boolean retrieveModelContext = true;
+    private boolean retrieveWorkflowContext = true;
     private boolean getTaskParent = true;
+    private boolean retrieveSiblings = true;
+	private boolean createHandlerDto = true;
 
     public static TaskDtoProviderOptions minimalOptions() {
         TaskDtoProviderOptions options = new TaskDtoProviderOptions();
@@ -42,7 +45,10 @@ public class TaskDtoProviderOptions implements Serializable {
         options.setResolveOwnerRef(false);
         options.setGetNextRunStartTime(false);
         options.setRetrieveModelContext(false);
+        options.setRetrieveWorkflowContext(false);
         options.setGetTaskParent(false);
+		options.setRetrieveSiblings(false);
+		options.setCreateHandlerDto(false);
         return options;
     }
 
@@ -90,11 +96,35 @@ public class TaskDtoProviderOptions implements Serializable {
         this.retrieveModelContext = retrieveModelContext;
     }
 
-    public boolean isGetTaskParent() {
+	public boolean isRetrieveWorkflowContext() {
+		return retrieveWorkflowContext;
+	}
+
+	public void setRetrieveWorkflowContext(boolean retrieveWorkflowContext) {
+		this.retrieveWorkflowContext = retrieveWorkflowContext;
+	}
+
+	public boolean isGetTaskParent() {
         return getTaskParent;
     }
 
     public void setGetTaskParent(boolean getTaskParent) {
         this.getTaskParent = getTaskParent;
     }
+
+	public boolean isRetrieveSiblings() {
+		return retrieveSiblings;
+	}
+
+	public void setRetrieveSiblings(boolean retrieveSiblings) {
+		this.retrieveSiblings = retrieveSiblings;
+	}
+
+	public boolean isCreateHandlerDto() {
+		return createHandlerDto;
+	}
+
+	public void setCreateHandlerDto(boolean createHandlerDto) {
+		this.createHandlerDto = createHandlerDto;
+	}
 }

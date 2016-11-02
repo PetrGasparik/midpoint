@@ -16,13 +16,13 @@
 
 package com.evolveum.midpoint.web.page.admin.home.component;
 
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.util.FutureUpdateBehavior;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
+import com.evolveum.midpoint.web.component.DateLabelComponent;
 import com.evolveum.midpoint.web.component.util.SimplePanel;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import org.apache.wicket.ajax.AjaxRequestTarget;
+
 import org.apache.wicket.ajax.AjaxSelfUpdatingTimerBehavior;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
@@ -37,12 +37,10 @@ import javax.management.AttributeList;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
+
 import java.io.Serializable;
 import java.lang.management.ManagementFactory;
-import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.concurrent.Callable;
-import java.util.concurrent.FutureTask;
 
 /**
  * @author Viliam Repan (lazyman)
@@ -157,7 +155,7 @@ public class SystemInfoPanel extends SimplePanel<SystemInfoPanel.SystemInfoDto> 
         Label threads = new Label(ID_THREADS, createThreadModel());
         table.add(threads);
 
-        Label startTime = new Label(ID_START_TIME, createStartTimeModel());
+        DateLabelComponent startTime = new DateLabelComponent(ID_START_TIME, createStartTimeModel(), DateLabelComponent.MEDIUM_MEDIUM_STYLE);
         table.add(startTime);
 
         Label uptime = new Label(ID_UPTIME, createUptimeModel());
@@ -177,19 +175,13 @@ public class SystemInfoPanel extends SimplePanel<SystemInfoPanel.SystemInfoDto> 
         };
     }
 
-    private IModel<String> createStartTimeModel() {
-        return new AbstractReadOnlyModel<String>() {
+    private IModel<Date> createStartTimeModel() {
+        return new AbstractReadOnlyModel<Date>() {
 
             @Override
-            public String getObject() {
-                SystemInfoDto dto = getModelObject();
-
-                if (dto.starttime == 0) {
-                    return null;
-                }
-
-                SimpleDateFormat df = new SimpleDateFormat();
-                return df.format(new Date(dto.starttime));
+            public Date getObject() {
+                return getModelObject() == null ? null :
+                        (getModelObject().starttime == 0 ? null  : new Date(getModelObject().starttime));
             }
         };
     }
@@ -203,9 +195,9 @@ public class SystemInfoPanel extends SimplePanel<SystemInfoPanel.SystemInfoDto> 
                 Long[] memory = heap ? dto.heapMemory : dto.nonHeapMemory;
 
                 StringBuilder sb = new StringBuilder();
-                sb.append(WebMiscUtil.createHumanReadableByteCount(memory[0])).append(" / ");
-                sb.append(WebMiscUtil.createHumanReadableByteCount(memory[1])).append(" / ");
-                sb.append(WebMiscUtil.createHumanReadableByteCount(memory[2]));
+                sb.append(WebComponentUtil.createHumanReadableByteCount(memory[0])).append(" / ");
+                sb.append(WebComponentUtil.createHumanReadableByteCount(memory[1])).append(" / ");
+                sb.append(WebComponentUtil.createHumanReadableByteCount(memory[2]));
 
                 return sb.toString();
             }

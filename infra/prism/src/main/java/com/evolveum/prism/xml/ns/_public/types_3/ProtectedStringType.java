@@ -12,7 +12,6 @@ import java.io.UnsupportedEncodingException;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
-import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.XmlType;
 import javax.xml.namespace.QName;
 
@@ -67,7 +66,9 @@ public class ProtectedStringType extends ProtectedDataType<String> implements Cl
 
 	@Override
 	public void setClearBytes(byte[] bytes) {
-        setClearValue(bytesToString(bytes));
+        if (bytes != null) {
+            setClearValue(bytesToString(bytes));
+        }
 	}
 
 	@Override

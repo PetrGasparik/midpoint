@@ -16,16 +16,20 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource.component.schemahandling;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.CommonException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.input.ObjectReferenceChoiceRenderer;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.ajax.AjaxRequestTarget;
@@ -35,7 +39,6 @@ import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.form.DropDownChoice;
 import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
-import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.markup.html.form.TextField;
 import org.apache.wicket.markup.html.list.ListItem;
 import org.apache.wicket.markup.html.list.ListView;
@@ -51,7 +54,7 @@ import java.util.Map;
 /**
  *  @author shood
  * */
-public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTypeDependencyType>>{
+public class ResourceDependencyEditor extends BasePanel<List<ResourceObjectTypeDependencyType>> {
 
     private static enum ChangeState{
         SKIP, FIRST, LAST
@@ -83,8 +86,9 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
     private ChangeState changeState = ChangeState.FIRST;
     private Map<String, String> resourceMap = new HashMap<>();
 
-    public ResourceDependencyEditor(String id, IModel<List<ResourceObjectTypeDependencyType>> model){
+    public ResourceDependencyEditor(String id, IModel<List<ResourceObjectTypeDependencyType>> model, PageResourceWizard parentPage) {
         super(id, model);
+		initLayout(parentPage);
     }
 
     @Override
@@ -98,8 +102,7 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
         return model;
     }
 
-    @Override
-    protected void initLayout(){
+    protected void initLayout(final PageResourceWizard parentPage){
         WebMarkupContainer container = new WebMarkupContainer(ID_CONTAINER);
         container.setOutputMarkupId(true);
         add(container);
@@ -123,6 +126,7 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
                         deleteDependencyPerformed(target, item);
                     }
                 };
+				parentPage.addEditingVisibleBehavior(delete);
                 linkContainer.add(delete);
 
                 WebMarkupContainer dependencyBody = new WebMarkupContainer(ID_DEPENDENCY_BODY);
@@ -149,24 +153,28 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
 
                 TextField order = new TextField<>(ID_ORDER, new PropertyModel<Integer>(item.getModelObject(), "order"));
                 order.add(prepareAjaxOnComponentTagUpdateBehavior());
+				parentPage.addEditingEnabledBehavior(order);
                 dependencyBody.add(order);
 
                 DropDownChoice strictness = new DropDownChoice<>(ID_STRICTNESS,
                         new PropertyModel<ResourceObjectTypeDependencyStrictnessType>(item.getModelObject(), "strictness"),
-                        WebMiscUtil.createReadonlyModelFromEnum(ResourceObjectTypeDependencyStrictnessType.class),
+                        WebComponentUtil.createReadonlyModelFromEnum(ResourceObjectTypeDependencyStrictnessType.class),
                         new EnumChoiceRenderer<ResourceObjectTypeDependencyStrictnessType>(this));
                 strictness.add(prepareAjaxOnComponentTagUpdateBehavior());
+				parentPage.addEditingEnabledBehavior(strictness);
                 dependencyBody.add(strictness);
 
                 DropDownChoice kind = new DropDownChoice<>(ID_KIND,
                         new PropertyModel<ShadowKindType>(item.getModelObject(), "kind"),
-                        WebMiscUtil.createReadonlyModelFromEnum(ShadowKindType.class),
+                        WebComponentUtil.createReadonlyModelFromEnum(ShadowKindType.class),
                         new EnumChoiceRenderer<ShadowKindType>(this));
                 kind.add(prepareAjaxOnComponentTagUpdateBehavior());
+				parentPage.addEditingEnabledBehavior(kind);
                 dependencyBody.add(kind);
 
                 TextField intent = new TextField<>(ID_INTENT, new PropertyModel<String>(item.getModelObject(), "intent"));
                 intent.add(prepareAjaxOnComponentTagUpdateBehavior());
+				parentPage.addEditingEnabledBehavior(intent);
                 dependencyBody.add(intent);
 
                 DropDownChoice resource = new DropDownChoice<>(ID_REF,
@@ -175,21 +183,12 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
 
                             @Override
                             public List<ObjectReferenceType> getObject() {
-                                return createResourceList();
+                                return WebModelServiceUtils.createObjectReferenceList(ResourceType.class, getPageBase(), resourceMap);
                             }
-                        }, new IChoiceRenderer<ObjectReferenceType>() {
-
-                    @Override
-                    public Object getDisplayValue(ObjectReferenceType object) {
-                        return createResourceReadLabel(object);
-                    }
-
-                    @Override
-                    public String getIdValue(ObjectReferenceType object, int index) {
-                        return Integer.toString(index);
-                    }
-                });
+                        }, new ObjectReferenceChoiceRenderer(resourceMap));
+                        
                 resource.add(prepareAjaxOnComponentTagUpdateBehavior());
+				parentPage.addEditingEnabledBehavior(resource);
                 dependencyBody.add(resource);
 
                 Label orderTooltip = new Label(ID_T_ORDER);
@@ -223,6 +222,7 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
                 addDependencyPerformed(target);
             }
         };
+		parentPage.addEditingVisibleBehavior(add);
         add(add);
     }
 
@@ -258,7 +258,7 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
     }
 
     private AjaxFormComponentUpdatingBehavior prepareAjaxOnComponentTagUpdateBehavior(){
-        return new AjaxFormComponentUpdatingBehavior("onBlur") {
+        return new AjaxFormComponentUpdatingBehavior("blur") {
 
             @Override
             protected void onUpdate(AjaxRequestTarget target) {}
@@ -275,9 +275,9 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
         try {
             resources = getPageBase().getModelService().searchObjects(ResourceType.class, new ObjectQuery(), null, task, result);
             result.recomputeStatus();
-        } catch (Exception e){
+        } catch (CommonException|RuntimeException e){
             result.recordFatalError("Couldn't get resource list.", e);
-            LoggingUtils.logException(LOGGER, "Couldn't get resource list.", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get resource list.", e);
         }
 
         // TODO - show error somehow
@@ -288,7 +288,7 @@ public class ResourceDependencyEditor extends SimplePanel<List<ResourceObjectTyp
         if(resources != null){
             ObjectReferenceType ref;
             for(PrismObject<ResourceType> r: resources){
-                resourceMap.put(r.getOid(), WebMiscUtil.getName(r));
+                resourceMap.put(r.getOid(), WebComponentUtil.getName(r));
                 ref = new ObjectReferenceType();
                 ref.setType(ResourceType.COMPLEX_TYPE);
                 ref.setOid(r.getOid());

@@ -27,11 +27,19 @@ import javax.xml.bind.JAXBElement;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.model.common.SystemObjectCache;
+import com.evolveum.midpoint.model.common.expression.*;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.polystring.PrismDefaultPolyStringNormalizer;
+import com.evolveum.midpoint.schema.SchemaConstantsGenerated;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
+import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.util.exception.*;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.mutable.MutableBoolean;
 
@@ -39,21 +47,11 @@ import com.evolveum.midpoint.common.ActivationComputer;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.model.api.PolicyViolationException;
-import com.evolveum.midpoint.model.common.expression.Expression;
-import com.evolveum.midpoint.model.common.expression.ExpressionEvaluationContext;
-import com.evolveum.midpoint.model.common.expression.ExpressionFactory;
-import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
-import com.evolveum.midpoint.model.common.expression.ItemDeltaItem;
-import com.evolveum.midpoint.model.common.expression.ObjectDeltaObject;
-import com.evolveum.midpoint.model.common.expression.Source;
-import com.evolveum.midpoint.model.common.expression.StringPolicyResolver;
-import com.evolveum.midpoint.model.common.expression.script.ScriptExpression;
 import com.evolveum.midpoint.model.common.mapping.Mapping;
 import com.evolveum.midpoint.model.common.mapping.MappingFactory;
 import com.evolveum.midpoint.model.common.mapping.PrismValueDeltaSetTripleProducer;
 import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.model.impl.lens.projector.ValueMatcher;
-import com.evolveum.midpoint.model.impl.util.Utils;
 import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.DeltaSetTriple;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
@@ -62,10 +60,10 @@ import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.delta.ReferenceDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.prism.util.PrismUtil;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
-import com.evolveum.midpoint.repo.api.RepositoryService;
+import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
+import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.ExpressionConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -74,42 +72,10 @@ import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.MiscUtil;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AbstractRoleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ExpressionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.GenerateExpressionEvaluatorType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.IterationSpecificationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.LayerType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingStrengthType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MetadataType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectPolicyConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PropertyConstraintType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDependencyType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ScriptExpressionReturnTypeType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.StringPolicyType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ValuePolicyType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * @author semancik
@@ -129,21 +95,22 @@ public class LensUtil {
         }
     }
 
-	public static <F extends ObjectType> ResourceType getResource(LensContext<F> context,
+	public static <F extends ObjectType> ResourceType getResourceReadOnly(LensContext<F> context,
 																  String resourceOid, ProvisioningService provisioningService, Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
 		ResourceType resourceType = context.getResource(resourceOid);
 		if (resourceType == null) {
 			// Fetching from provisioning to take advantage of caching and
 			// pre-parsed schema
-			resourceType = provisioningService.getObject(ResourceType.class, resourceOid, null, task, result)
+			Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createReadOnly());
+			resourceType = provisioningService.getObject(ResourceType.class, resourceOid, options, task, result)
 					.asObjectable();
 			context.rememberResource(resourceType);
 		}
 		return resourceType;
 	}
 
-	public static <F extends ObjectType> ResourceType getResource(LensContext<F> context, String resourceOid, ObjectResolver objectResolver,
+	public static <F extends ObjectType> ResourceType getResourceReadOnly(LensContext<F> context, String resourceOid, ObjectResolver objectResolver,
 																  Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
 		ResourceType resourceType = context.getResource(resourceOid);
@@ -151,14 +118,15 @@ public class LensUtil {
 			ObjectReferenceType ref = new ObjectReferenceType();
 			ref.setType(ResourceType.COMPLEX_TYPE);
 			ref.setOid(resourceOid);
-			resourceType = objectResolver.resolve(ref, ResourceType.class, null, "resource fetch in lens", task, result);
+			Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createReadOnly());
+			resourceType = objectResolver.resolve(ref, ResourceType.class, options, "resource fetch in lens", task, result);
 			context.rememberResource(resourceType);
 		}
 		return resourceType;
 	}
 	
 	public static String refineProjectionIntent(ShadowKindType kind, String intent, ResourceType resource, PrismContext prismContext) throws SchemaException {
-		RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resource, LayerType.MODEL, prismContext);
+		RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resource, LayerType.MODEL, prismContext);
 		RefinedObjectClassDefinition rObjClassDef = refinedSchema.getRefinedDefinition(kind, intent);
 		if (rObjClassDef == null) {
 			throw new SchemaException("No projection definition for kind="+kind+" intent="+intent+" in "+resource);
@@ -182,7 +150,7 @@ public class LensUtil {
 																				   ProvisioningService provisioningService, PrismContext prismContext,
 																				   Task task, OperationResult result) throws ObjectNotFoundException,
 			CommunicationException, SchemaException, ConfigurationException, SecurityViolationException {
-		ResourceType resource = getResource(context, resourceOid, provisioningService, task, result);
+		ResourceType resource = getResourceReadOnly(context, resourceOid, provisioningService, task, result);
 		String refinedIntent = refineProjectionIntent(kind, intent, resource, prismContext);
 		ResourceShadowDiscriminator rsd = new ResourceShadowDiscriminator(resourceOid, kind, refinedIntent);
 		return context.findProjectionContext(rsd);
@@ -196,6 +164,7 @@ public class LensUtil {
 			ResourceType resource = context.getResource(rsd.getResourceOid());
 			accountSyncContext.setResource(resource);
 		}
+		accountSyncContext.setDoReconciliation(context.isDoReconciliationForAllProjections());
 		return accountSyncContext;
 	}
 	
@@ -225,15 +194,13 @@ public class LensUtil {
 		}
 		
 		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("Consolidating {} triple:\n{}\nApriori Delta:\n{}\nExisting item:\n{}", 
-					new Object[]{
-						itemPath, triple.debugDump(), 
-						aprioriItemDelta==null?"null":aprioriItemDelta.debugDump(),
-						itemExisting==null?"null":itemExisting.debugDump(),
-					});
+			LOGGER.trace("Consolidating {} triple:\n{}\nApriori Delta:\n{}\nExisting item:\n{}",
+					itemPath, triple.debugDump(1),
+					DebugUtil.debugDump(aprioriItemDelta, 1),
+					DebugUtil.debugDump(itemExisting, 1));
 		}
 		
-        Collection<V> allValues = collectAllValues(triple);
+        Collection<V> allValues = collectAllValues(triple, valueMatcher);
         
         final MutableBoolean itemHasStrongMutable = new MutableBoolean(false);
         SimpleVisitor<I> visitor = new SimpleVisitor<I>() {
@@ -251,21 +218,20 @@ public class LensUtil {
         // a single item (e.g. attribute). But this loop iterates over every potential value of that item.
         for (V value : allValues) {
         	
-        	LOGGER.trace("item existing: {}, consolidating value: {}", itemExisting, value);
+        	LOGGER.trace("  consolidating value: {}", value);
         	// Check what to do with the value using the usual "triple routine". It means that if a value is
         	// in zero set than we need no delta, plus set means add delta and minus set means delete delta.
         	// The first set that the value is present determines the result.
-			// TODO shouldn't we use valueMatcher here? [med]
             Collection<ItemValueWithOrigin<V,D>> zeroPvwos =
-                    collectPvwosFromSet(value, triple.getZeroSet());
+                    collectPvwosFromSet(value, triple.getZeroSet(), valueMatcher);
             Collection<ItemValueWithOrigin<V,D>> plusPvwos =
-                    collectPvwosFromSet(value, triple.getPlusSet());
+                    collectPvwosFromSet(value, triple.getPlusSet(), valueMatcher);
             Collection<ItemValueWithOrigin<V,D>> minusPvwos =
-                    collectPvwosFromSet(value, triple.getMinusSet());
+                    collectPvwosFromSet(value, triple.getMinusSet(), valueMatcher);
             
             if (LOGGER.isTraceEnabled()) {
             	LOGGER.trace("PVWOs for value {}:\nzero = {}\nplus = {}\nminus = {}",
-            			new Object[]{value, zeroPvwos, plusPvwos, minusPvwos});
+						value, zeroPvwos, plusPvwos, minusPvwos);
             }
             
             boolean zeroHasStrong = false;
@@ -323,12 +289,12 @@ public class LensUtil {
                 if (weakOnly) {
                     // Postpone processing of weak values until we process all other values
                     LOGGER.trace("Value {} mapping is weak in item {}, postponing processing in {}",
-                    		new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                     continue;
                 }
                 if (!hasStrong && ignoreNormalMappings) {
                 	LOGGER.trace("Value {} mapping is normal in item {} and we have exclusiveStrong, skipping processing in {}",
-                    		new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                     continue;
                 }
                 if (hasStrong && aprioriItemDelta != null && aprioriItemDelta.isValueToDelete(value, true)) {
@@ -338,15 +304,15 @@ public class LensUtil {
                 if (!hasStrong && (aprioriItemDelta != null && !aprioriItemDelta.isEmpty())) {
                     // There is already a delta, skip this
                     LOGGER.trace("Value {} mapping is not strong and the item {} already has a delta that is more concrete, " +
-                    		"skipping adding in {}", new Object[]{value, itemPath, contextDescription});
+                    		"skipping adding in {}", value, itemPath, contextDescription);
                     continue;
                 }
                 if (filterExistingValues && hasValue(itemExisting, value, valueMatcher, comparator)) {
                 	LOGGER.trace("Value {} NOT added to delta for item {} because the item already has that value in {}",
-                			new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                 	continue;
                 }
-                LOGGER.trace("Value {} added to delta for item {} in {}", new Object[]{value, itemPath, contextDescription});
+                LOGGER.trace("Value {} added to delta as ADD for item {} in {}", value, itemPath, contextDescription);
                 itemDelta.addValueToAdd((V)value.clone());
                 continue;
             }
@@ -373,35 +339,35 @@ public class LensUtil {
                 }
                 if (!hasAuthoritative) {
                 	LOGGER.trace("Value {} has no authoritative mapping for item {}, skipping deletion in {}",
-                			new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                 	continue;
                 }
                 if (!hasStrong && (aprioriItemDelta != null && !aprioriItemDelta.isEmpty())) {
                     // There is already a delta, skip this
                     LOGGER.trace("Value {} mapping is not strong and the item {} already has a delta that is more concrete, skipping deletion in {}",
-                    		new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                     continue;
                 }
                 if (weakOnly && (itemExisting != null && !itemExisting.isEmpty())) {
                     // There is already a value, skip this
                     LOGGER.trace("Value {} mapping is weak and the item {} already has a value, skipping deletion in {}",
-                    		new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                     continue;
                 }
                 
                 if (weakOnly && !applyWeak && (itemExisting == null || itemExisting.isEmpty())){
                 	 // There is a weak mapping on a property, but we do not have full account available, so skipping deletion of the value is better way
                     LOGGER.trace("Value {} mapping is weak and the full account could not be fetched, skipping deletion in {}",
-                    		new Object[]{value, itemPath, contextDescription});
+							value, itemPath, contextDescription);
                     continue;
                 }
                 if (filterExistingValues && !hasValue(itemExisting, value, valueMatcher, comparator)) {
-                	LOGGER.trace("Value {} NOT deleted from delta for item {} the item does not have that value in {} (matcher: {})",
-                			new Object[]{value, itemPath, contextDescription, valueMatcher});
+                	LOGGER.trace("Value {} NOT add to delta as DELETE because item {} the item does not have that value in {} (matcher: {})",
+							value, itemPath, contextDescription, valueMatcher);
                 	continue;
                 }
-                LOGGER.trace("Value {} deleted to delta for item {} in {}",
-                		new Object[]{ value, itemPath, contextDescription});
+                LOGGER.trace("Value {} added to delta as DELETE for item {} in {}",
+						value, itemPath, contextDescription);
                 itemDelta.addValueToDelete((V)value.clone());
             }
             
@@ -427,7 +393,8 @@ public class LensUtil {
 	            if (aprioriItemDelta != null && aprioriItemDelta.isReplace()) {
 	            	// Any strong mappings in the zero set needs to be re-applied as otherwise the replace will destroy it
 	                if (hasStrong) {
-	                	LOGGER.trace("Value {} added to delta for item {} in {} because there is strong mapping in the zero set", new Object[]{value, itemPath, contextDescription});
+	                	LOGGER.trace("Value {} added to delta for item {} in {} because there is strong mapping in the zero set",
+								value, itemPath, contextDescription);
 	                    itemDelta.addValueToAdd((V)value.clone());
 	                    continue;
 	                }
@@ -450,7 +417,7 @@ public class LensUtil {
 				valuesToAdd = addWeakValues(nonNegativePvwos, null, applyWeak);
 			}
 			LOGGER.trace("No value for item {} in {}, weak mapping processing yielded values: {}",
-					new Object[]{itemPath, contextDescription, valuesToAdd});
+					itemPath, contextDescription, valuesToAdd);
 			itemDelta.addValuesToAdd(valuesToAdd);
 		} else {
 			LOGGER.trace("Existing values for item {} in {}, weak mapping processing skipped",
@@ -460,14 +427,6 @@ public class LensUtil {
         return itemDelta;
         
     }
-	
-	public static boolean isSyncChannel(String channel){
-		if (channel == null){
-			return false;
-		}
-		
-		return (channel.equals(SchemaConstants.CHANGE_CHANNEL_LIVE_SYNC_URI) || channel.equals(SchemaConstants.CHANGE_CHANNEL_RECON_URI));
-	}
 	
 	private static <V extends PrismValue, D extends ItemDefinition> boolean hasValue(Item<V,D> item, ItemDelta<V,D> itemDelta) throws SchemaException {
 		if (item == null || item.isEmpty()) {
@@ -491,8 +450,8 @@ public class LensUtil {
 		Collection<V> values = new ArrayList<V>();
 		for (ItemValueWithOrigin<V,D> pvwo: pvwos) {
 			if (pvwo.getMapping().getStrength() == MappingStrengthType.WEAK && applyWeak) {
-				if (origin == null || origin == pvwo.getPropertyValue().getOriginType()) {
-					values.add((V)pvwo.getPropertyValue().clone());
+				if (origin == null || origin == pvwo.getItemValue().getOriginType()) {
+					values.add((V)pvwo.getItemValue().clone());
 				}
 			}
 		}
@@ -510,32 +469,47 @@ public class LensUtil {
 		}
 	}
 	
-	private static <V extends PrismValue, D extends ItemDefinition> Collection<V> collectAllValues(DeltaSetTriple<? extends ItemValueWithOrigin<V,D>> triple) {
+	private static <V extends PrismValue, D extends ItemDefinition> Collection<V> collectAllValues
+			(DeltaSetTriple<? extends ItemValueWithOrigin<V,D>> triple, ValueMatcher<?> valueMatcher) throws SchemaException {
         Collection<V> allValues = new HashSet<>();
-        collectAllValuesFromSet(allValues, triple.getZeroSet());
-        collectAllValuesFromSet(allValues, triple.getPlusSet());
-        collectAllValuesFromSet(allValues, triple.getMinusSet());
+        collectAllValuesFromSet(allValues, triple.getZeroSet(), valueMatcher);
+        collectAllValuesFromSet(allValues, triple.getPlusSet(), valueMatcher);
+        collectAllValuesFromSet(allValues, triple.getMinusSet(), valueMatcher);
         return allValues;
     }
 
-    private static <V extends PrismValue, D extends ItemDefinition> void collectAllValuesFromSet(Collection<V> allValues,
-            Collection<? extends ItemValueWithOrigin<V,D>> collection) {
+    private static <V extends PrismValue, D extends ItemDefinition, T> void collectAllValuesFromSet(Collection<V> allValues,
+            Collection<? extends ItemValueWithOrigin<V,D>> collection, ValueMatcher<T> valueMatcher) throws SchemaException {
         if (collection == null) {
             return;
         }
         for (ItemValueWithOrigin<V,D> pvwo : collection) {
-        	V pval = pvwo.getPropertyValue();
-        	if (!PrismValue.containsRealValue(allValues, pval)) {
-        		allValues.add(pval);
+        	V pval = pvwo.getItemValue();
+        	if (valueMatcher == null) {
+	        	if (!PrismValue.containsRealValue(allValues, pval)) {
+	        		allValues.add(pval);
+	        	}
+        	} else {
+        		boolean found = false;
+        		for (V valueFromAllvalues: allValues) {
+        			if (valueMatcher.match(((PrismPropertyValue<T>)valueFromAllvalues).getValue(), 
+        					((PrismPropertyValue<T>)pval).getValue())) {
+        				found = true;
+        				break;
+        			}
+        		}
+        		if (!found) {
+        			allValues.add(pval);
+        		}
         	}
         }
     }
     
     private static <V extends PrismValue, D extends ItemDefinition> Collection<ItemValueWithOrigin<V,D>> collectPvwosFromSet(V pvalue,
-            Collection<? extends ItemValueWithOrigin<V,D>> deltaSet) {
+            Collection<? extends ItemValueWithOrigin<V,D>> deltaSet, ValueMatcher<?> valueMatcher) throws SchemaException {
     	Collection<ItemValueWithOrigin<V,D>> pvwos = new ArrayList<>();
         for (ItemValueWithOrigin<V,D> setPvwo : deltaSet) {
-        	if (setPvwo.equalsRealValue(pvalue)) {
+        	if (setPvwo.equalsRealValue(pvalue, valueMatcher)) {
         		pvwos.add(setPvwo);
         	}
         }
@@ -545,7 +519,7 @@ public class LensUtil {
     public static PropertyDelta<XMLGregorianCalendar> createActivationTimestampDelta(ActivationStatusType status, XMLGregorianCalendar now,
     		PrismContainerDefinition<ActivationType> activationDefinition, OriginType origin) {
     	QName timestampPropertyName;
-		if (status == ActivationStatusType.ENABLED) {
+		if (status == null || status == ActivationStatusType.ENABLED) {
 			timestampPropertyName = ActivationType.F_ENABLE_TIMESTAMP;
 		} else if (status == ActivationStatusType.DISABLED) {
 			timestampPropertyName = ActivationType.F_DISABLE_TIMESTAMP;
@@ -579,23 +553,6 @@ public class LensUtil {
 		}
 	}
 
-    public static <V extends PrismValue, F extends ObjectType> void evaluateScript(
-            ScriptExpression scriptExpression, LensContext<F> lensContext, ExpressionVariables variables, String shortDesc, Task task, OperationResult parentResult) throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException {
-        ModelExpressionThreadLocalHolder.pushLensContext(lensContext);
-        ModelExpressionThreadLocalHolder.pushCurrentResult(parentResult);
-        ModelExpressionThreadLocalHolder.pushCurrentTask(task);
-        try {
-            scriptExpression.evaluate(variables, ScriptExpressionReturnTypeType.SCALAR, false, shortDesc, task, parentResult);
-        } finally {
-            ModelExpressionThreadLocalHolder.popLensContext();
-            ModelExpressionThreadLocalHolder.popCurrentResult();
-            ModelExpressionThreadLocalHolder.popCurrentTask();
-//			if (lensContext.getDebugListener() != null) {
-//				lensContext.getDebugListener().afterScriptEvaluation(lensContext, scriptExpression);
-//			}
-        }
-    }
-
 	public static Object getIterationVariableValue(LensProjectionContext accCtx) {
 		Integer iterationOld = null;
 		PrismObject<ShadowType> shadowCurrent = accCtx.getObjectCurrent();
@@ -605,7 +562,7 @@ public class LensUtil {
 		if (iterationOld == null) {
 			return accCtx.getIteration();
 		}
-		PrismPropertyDefinition<Integer> propDef = new PrismPropertyDefinition<Integer>(ExpressionConstants.VAR_ITERATION,
+		PrismPropertyDefinition<Integer> propDef = new PrismPropertyDefinitionImpl<>(ExpressionConstants.VAR_ITERATION,
 				DOMUtil.XSD_INT, accCtx.getPrismContext());
 		PrismProperty<Integer> propOld = propDef.instantiate();
 		propOld.setRealValue(iterationOld);
@@ -626,7 +583,7 @@ public class LensUtil {
 		if (iterationTokenOld == null) {
 			return accCtx.getIterationToken();
 		}
-		PrismPropertyDefinition<String> propDef = new PrismPropertyDefinition<String>(
+		PrismPropertyDefinition<String> propDef = new PrismPropertyDefinitionImpl<>(
 				ExpressionConstants.VAR_ITERATION_TOKEN, DOMUtil.XSD_STRING, accCtx.getPrismContext());
 		PrismProperty<String> propOld = propDef.instantiate();
 		propOld.setRealValue(iterationTokenOld);
@@ -777,15 +734,6 @@ public class LensUtil {
 		}
 	}
 
-	public static PrismObject<SystemConfigurationType> getSystemConfiguration(LensContext context, RepositoryService repositoryService, OperationResult result) throws ObjectNotFoundException, SchemaException {
-		PrismObject<SystemConfigurationType> systemConfiguration = context.getSystemConfiguration();
-		if (systemConfiguration == null) {
-			systemConfiguration = Utils.getSystemConfiguration(repositoryService, result);
-			context.setSystemConfiguration(systemConfiguration);
-		}
-		return systemConfiguration;
-	}
-
     public static <F extends FocusType> PrismObjectDefinition<F> getFocusDefinition(LensContext<F> context) {
         LensFocusContext<F> focusContext = context.getFocusContext();
         if (focusContext == null) {
@@ -815,12 +763,12 @@ public class LensUtil {
 		if (tokenExpressionType == null) {
 			return formatIterationTokenDefault(iteration);
 		}
-		PrismPropertyDefinition<String> outputDefinition = new PrismPropertyDefinition<String>(ExpressionConstants.VAR_ITERATION_TOKEN,
+		PrismPropertyDefinition<String> outputDefinition = new PrismPropertyDefinitionImpl<>(ExpressionConstants.VAR_ITERATION_TOKEN,
 				DOMUtil.XSD_STRING, context.getPrismContext());
 		Expression<PrismPropertyValue<String>,PrismPropertyDefinition<String>> expression = expressionFactory.makeExpression(tokenExpressionType, outputDefinition , "iteration token expression in "+accountContext.getHumanReadableName(), task, result);
 		
 		Collection<Source<?,?>> sources = new ArrayList<>();
-		PrismPropertyDefinition<Integer> inputDefinition = new PrismPropertyDefinition<Integer>(ExpressionConstants.VAR_ITERATION,
+		PrismPropertyDefinitionImpl<Integer> inputDefinition = new PrismPropertyDefinitionImpl<>(ExpressionConstants.VAR_ITERATION,
 				DOMUtil.XSD_INT, context.getPrismContext());
 		inputDefinition.setMaxOccurs(1);
 		PrismProperty<Integer> input = inputDefinition.instantiate();
@@ -831,7 +779,7 @@ public class LensUtil {
 		
 		ExpressionEvaluationContext expressionContext = new ExpressionEvaluationContext(sources , variables, 
 				"iteration token expression in "+accountContext.getHumanReadableName(), task, result);
-		PrismValueDeltaSetTriple<PrismPropertyValue<String>> outputTriple = expression.evaluate(expressionContext);
+		PrismValueDeltaSetTriple<PrismPropertyValue<String>> outputTriple = ModelExpressionThreadLocalHolder.evaluateExpressionInContext(expression, expressionContext, task, result);
 		Collection<PrismPropertyValue<String>> outputValues = outputTriple.getNonNegativeValues();
 		if (outputValues.isEmpty()) {
 			return "";
@@ -873,7 +821,8 @@ public class LensUtil {
 		if (expressionType == null) {
 			return true;
 		}
-		PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinition<Boolean>(ExpressionConstants.OUTPUT_ELMENT_NAME,
+		PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinitionImpl<>(
+				ExpressionConstants.OUTPUT_ELMENT_NAME,
 				DOMUtil.XSD_BOOLEAN, context.getPrismContext());
 		Expression<PrismPropertyValue<Boolean>,PrismPropertyDefinition<Boolean>> expression = expressionFactory.makeExpression(expressionType, outputDefinition , desc, task, result);
 		
@@ -881,7 +830,7 @@ public class LensUtil {
 		variables.addVariableDefinition(ExpressionConstants.VAR_ITERATION_TOKEN, iterationToken);
 		
 		ExpressionEvaluationContext expressionContext = new ExpressionEvaluationContext(null , variables, desc, task, result);
-		PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> outputTriple = expression.evaluate(expressionContext);
+		PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> outputTriple = ModelExpressionThreadLocalHolder.evaluateExpressionInContext(expression, expressionContext, task, result);
 		Collection<PrismPropertyValue<Boolean>> outputValues = outputTriple.getNonNegativeValues();
 		if (outputValues.isEmpty()) {
 			return false;
@@ -897,16 +846,26 @@ public class LensUtil {
 
 	}
     
+    /**
+     * Used for assignments and similar objects that do not have separate lifecycle.
+     */
     public static boolean isValid(AssignmentType assignmentType, XMLGregorianCalendar now, ActivationComputer activationComputer) {
-		ActivationType activationType = assignmentType.getActivation();
+		return isValid(null, assignmentType.getActivation(), now, activationComputer);
+	}
+
+	public static boolean isValid(FocusType focus, XMLGregorianCalendar now, ActivationComputer activationComputer) {
+		return isValid(focus.getLifecycleState(), focus.getActivation(), now, activationComputer);
+	}
+
+	private static boolean isValid(String lifecycleState, ActivationType activationType, XMLGregorianCalendar now, ActivationComputer activationComputer) {
 		if (activationType == null) {
 			return true;
 		}
 		TimeIntervalStatusType validityStatus = activationComputer.getValidityStatus(activationType, now);
-		ActivationStatusType effectiveStatus = activationComputer.getEffectiveStatus(activationType, validityStatus, ActivationStatusType.ENABLED);
+		ActivationStatusType effectiveStatus = activationComputer.getEffectiveStatus(lifecycleState, activationType, validityStatus);
 		return effectiveStatus == ActivationStatusType.ENABLED;
 	}
-    
+
     public static <V extends PrismValue, D extends ItemDefinition , F extends FocusType> Mapping<V, D> createFocusMapping(final MappingFactory mappingFactory,
     		final LensContext<F> context, final MappingType mappingType, ObjectType originObject, 
 			ObjectDeltaObject<F> focusOdo, AssignmentPathVariables assignmentPathVariables, PrismObject<SystemConfigurationType> configuration,
@@ -931,24 +890,83 @@ public class LensUtil {
 			ObjectDeltaObject<F> focusOdo, AssignmentPathVariables assignmentPathVariables, 
 			Integer iteration, String iterationToken, PrismObject<SystemConfigurationType> configuration,
 			XMLGregorianCalendar now, String contextDesc, final Task task, OperationResult result) throws SchemaException, ExpressionEvaluationException, ObjectNotFoundException {
-		Mapping<V,D> mapping = mappingFactory.createMapping(mappingType, contextDesc);
-		
-		if (!mapping.isApplicableToChannel(context.getChannel())) {
+
+		if (!Mapping.isApplicableToChannel(mappingType, context.getChannel())) {
+			LOGGER.trace("Mapping {} not applicable to channel {}, skipping.", mappingType, context.getChannel());
 			return null;
 		}
-		
-		mapping.setSourceContext(focusOdo);
-		mapping.setTargetContext(context.getFocusContext().getObjectDefinition());
-		mapping.setRootNode(focusOdo);
-		mapping.addVariableDefinition(ExpressionConstants.VAR_USER, focusOdo);
-		mapping.addVariableDefinition(ExpressionConstants.VAR_FOCUS, focusOdo);
-		mapping.addVariableDefinition(ExpressionConstants.VAR_ITERATION, iteration);
-		mapping.addVariableDefinition(ExpressionConstants.VAR_ITERATION_TOKEN, iterationToken);
-		mapping.addVariableDefinition(ExpressionConstants.VAR_CONFIGURATION, configuration);
-		addAssignmentPathVariables(mapping, assignmentPathVariables);
-		mapping.setOriginType(OriginType.USER_POLICY);
-		mapping.setOriginObject(originObject);
-		mapping.setNow(now);
+
+		StringPolicyResolver stringPolicyResolver = new StringPolicyResolver() {
+			private ItemPath outputPath;
+			private ItemDefinition outputDefinition;
+			@Override
+			public void setOutputPath(ItemPath outputPath) {
+				this.outputPath = outputPath;
+			}
+
+			@Override
+			public void setOutputDefinition(ItemDefinition outputDefinition) {
+				this.outputDefinition = outputDefinition;
+			}
+
+			@Override
+			public StringPolicyType resolve() {
+				if (outputDefinition.getName().equals(PasswordType.F_VALUE)) {
+					ValuePolicyType passwordPolicy = context.getEffectivePasswordPolicy();
+					if (passwordPolicy == null) {
+						return null;
+					}
+					return passwordPolicy.getStringPolicy();
+				}
+				if (mappingType.getExpression() != null){
+					List<JAXBElement<?>> evaluators = mappingType.getExpression().getExpressionEvaluator();
+					if (evaluators != null) {
+						for (JAXBElement jaxbEvaluator : evaluators) {
+							Object object = jaxbEvaluator.getValue();
+							if (object instanceof GenerateExpressionEvaluatorType && ((GenerateExpressionEvaluatorType) object).getValuePolicyRef() != null) {
+								ObjectReferenceType ref = ((GenerateExpressionEvaluatorType) object).getValuePolicyRef();
+								try {
+									ValuePolicyType valuePolicyType = mappingFactory.getObjectResolver().resolve(ref, ValuePolicyType.class,
+											null, "resolving value policy for generate attribute "+ outputDefinition.getName()+" value", task, new OperationResult("Resolving value policy"));
+									if (valuePolicyType != null) {
+										return valuePolicyType.getStringPolicy();
+									}
+								} catch (CommonException ex) {
+									throw new SystemException(ex.getMessage(), ex);
+								}
+							}
+						}
+
+					}
+				}
+				return null;
+
+			}
+		};
+
+		ExpressionVariables variables = new ExpressionVariables();
+		variables.addVariableDefinition(ExpressionConstants.VAR_USER, focusOdo);
+		variables.addVariableDefinition(ExpressionConstants.VAR_FOCUS, focusOdo);
+		variables.addVariableDefinition(ExpressionConstants.VAR_ITERATION, iteration);
+		variables.addVariableDefinition(ExpressionConstants.VAR_ITERATION_TOKEN, iterationToken);
+		variables.addVariableDefinition(ExpressionConstants.VAR_CONFIGURATION, configuration);
+
+		Collection<V> targetValues = computeTargetValues(mappingType.getTarget(), focusOdo, variables, mappingFactory.getObjectResolver(), contextDesc, task, result);
+
+		Mapping.Builder<V,D> mappingBuilder = mappingFactory.<V,D>createMappingBuilder(mappingType, contextDesc)
+				.sourceContext(focusOdo)
+				.targetContext(context.getFocusContext().getObjectDefinition())
+				.variables(variables)
+				.originalTargetValues(targetValues)
+				.originType(OriginType.USER_POLICY)
+				.originObject(originObject)
+				.stringPolicyResolver(stringPolicyResolver)
+				.rootNode(focusOdo)
+				.now(now);
+
+		mappingBuilder = addAssignmentPathVariables(mappingBuilder, assignmentPathVariables);
+
+		Mapping<V,D> mapping = mappingBuilder.build();
 
 		ItemPath itemPath = mapping.getOutputPath();
         if (itemPath == null) {
@@ -963,63 +981,44 @@ public class LensUtil {
 					&& mapping.getStrength() == MappingStrengthType.WEAK) {
 				// This valueConstruction only applies if the property does not have a value yet.
 				// ... but it does
+				LOGGER.trace("Mapping {} is weak and focus already has a value {}, skipping.", mapping, existingUserItem);
 				return null;
 			}
 		}
 
-		StringPolicyResolver stringPolicyResolver = new StringPolicyResolver() {
-			private ItemPath outputPath;
-			private ItemDefinition outputDefinition;
-			@Override
-			public void setOutputPath(ItemPath outputPath) {
-				this.outputPath = outputPath;
-			}
-			
-			@Override
-			public void setOutputDefinition(ItemDefinition outputDefinition) {
-				this.outputDefinition = outputDefinition;
-			}
-			
-			@Override
-			public StringPolicyType resolve() {
-				if (outputDefinition.getName().equals(PasswordType.F_VALUE)) {
-					ValuePolicyType passwordPolicy = context.getEffectivePasswordPolicy();
-					if (passwordPolicy == null) {
-						return null;
-					}
-					return passwordPolicy.getStringPolicy();
-				}
-				if (mappingType.getExpression() != null){
-					List<JAXBElement<?>> evaluators = mappingType.getExpression().getExpressionEvaluator();
-					if (evaluators != null){
-						for (JAXBElement jaxbEvaluator : evaluators){
-							Object object = jaxbEvaluator.getValue();
-							if (object != null && object instanceof GenerateExpressionEvaluatorType && ((GenerateExpressionEvaluatorType) object).getValuePolicyRef() != null){
-								ObjectReferenceType ref = ((GenerateExpressionEvaluatorType) object).getValuePolicyRef();
-								try{
-								ValuePolicyType valuePolicyType = mappingFactory.getObjectResolver().resolve(ref, ValuePolicyType.class, 
-										null, "resolving value policy for generate attribute "+ outputDefinition.getName()+" value", task, new OperationResult("Resolving value policy"));
-								if (valuePolicyType != null){
-									return valuePolicyType.getStringPolicy();
-								}
-								} catch (Exception ex){
-									throw new SystemException(ex.getMessage(), ex);
-								}
-							}
-						}
-						
-					}
-				}
-				return null;
-				
-			}
-		};
-		mapping.setStringPolicyResolver(stringPolicyResolver);
-
 		return mapping;
 	}
-    
-    public static AssignmentPathVariables computeAssignmentPathVariables(AssignmentPath assignmentPath) throws SchemaException {
+
+	private static <V extends PrismValue, F extends FocusType> Collection<V> computeTargetValues(MappingTargetDeclarationType target,
+			ObjectDeltaObject<F> defaultSource, ExpressionVariables variables, ObjectResolver objectResolver, String contextDesc,
+			Task task, OperationResult result) throws SchemaException, ObjectNotFoundException {
+		if (target == null) {
+			return null;
+		}
+
+		ItemPathType itemPathType = target.getPath();
+		if (itemPathType == null) {
+			throw new SchemaException("No path in target definition in "+contextDesc);
+		}
+		ItemPath path = itemPathType.getItemPath();
+
+		Object object = ExpressionUtil.resolvePath(path, variables, defaultSource, objectResolver, contextDesc, task, result);
+		if (object == null) {
+			return new ArrayList<>();
+		} else if (object instanceof Item) {
+			return ((Item) object).getValues();
+		} else if (object instanceof PrismValue) {
+			return (List<V>) Collections.singletonList((PrismValue) object);
+		} else if (object instanceof ItemDeltaItem) {
+			ItemDeltaItem<V, ?> idi = (ItemDeltaItem<V, ?>) object;
+			PrismValueDeltaSetTriple<V> triple = idi.toDeltaSetTriple();
+			return triple != null ? triple.getNonNegativeValues() : new ArrayList<V>();
+		} else {
+			throw new IllegalStateException("Unsupported target value(s): " + object.getClass() + " (" + object + ")");
+		}
+	}
+
+	public static AssignmentPathVariables computeAssignmentPathVariables(AssignmentPath assignmentPath) throws SchemaException {
     	if (assignmentPath == null || assignmentPath.isEmpty()) {
     		return null;
     	}
@@ -1122,13 +1121,16 @@ public class LensUtil {
 		}
 	}
     
-    public static <V extends PrismValue,D extends ItemDefinition> void addAssignmentPathVariables(Mapping<V,D> mapping, AssignmentPathVariables assignmentPathVariables) {
+    public static <V extends PrismValue,D extends ItemDefinition> Mapping.Builder<V,D> addAssignmentPathVariables(Mapping.Builder<V,D> builder, AssignmentPathVariables assignmentPathVariables) {
     	if (assignmentPathVariables != null ) {
-			mapping.addVariableDefinition(ExpressionConstants.VAR_ASSIGNMENT, assignmentPathVariables.getMagicAssignment());
-			mapping.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ASSIGNMENT, assignmentPathVariables.getImmediateAssignment());
-			mapping.addVariableDefinition(ExpressionConstants.VAR_THIS_ASSIGNMENT, assignmentPathVariables.getThisAssignment());
-			mapping.addVariableDefinition(ExpressionConstants.VAR_FOCUS_ASSIGNMENT, assignmentPathVariables.getFocusAssignment());
-			mapping.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ROLE, assignmentPathVariables.getImmediateRole());
+			return builder
+					.addVariableDefinition(ExpressionConstants.VAR_ASSIGNMENT, assignmentPathVariables.getMagicAssignment())
+					.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ASSIGNMENT, assignmentPathVariables.getImmediateAssignment())
+					.addVariableDefinition(ExpressionConstants.VAR_THIS_ASSIGNMENT, assignmentPathVariables.getThisAssignment())
+					.addVariableDefinition(ExpressionConstants.VAR_FOCUS_ASSIGNMENT, assignmentPathVariables.getFocusAssignment())
+					.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ROLE, assignmentPathVariables.getImmediateRole());
+		} else {
+			return builder;
 		}
     }
     
@@ -1212,21 +1214,16 @@ public class LensUtil {
 		}
 	}
 
-	public static PrismContainer<AssignmentType> createAssignmentSingleValueContainerClone(AssignmentType assignmentType) throws SchemaException {
-		PrismContainerValue<AssignmentType> assignmentCVal = assignmentType.asPrismContainerValue();
-		PrismContainerDefinition<AssignmentType> def = assignmentCVal.getParent().getDefinition().clone();
+	public static PrismContainer<AssignmentType> createAssignmentSingleValueContainerClone(@NotNull AssignmentType assignmentType) throws SchemaException {
 		// Make it appear to be single-value. Therefore paths without segment IDs will work.
-		def.setMaxOccurs(1);
-		PrismContainer<AssignmentType> assignmentCont = def.instantiate();
-		assignmentCont.add(assignmentCVal.clone());
-		return assignmentCont;
+		return assignmentType.asPrismContainerValue().asSingleValuedContainer(SchemaConstantsGenerated.C_ASSIGNMENT);
 	}
 	
 	public static AssignmentType getAssignmentType(ItemDeltaItem<PrismContainerValue<AssignmentType>,PrismContainerDefinition<AssignmentType>> assignmentIdi, boolean old) {
 		if (old) {
-			return ((PrismContainer<AssignmentType>)assignmentIdi.getItemOld()).getValue(0).asContainerable();
+			return assignmentIdi.getItemOld().getValue(0).asContainerable();
 		} else {
-			return ((PrismContainer<AssignmentType>)assignmentIdi.getItemNew()).getValue(0).asContainerable();
+			return assignmentIdi.getItemNew().getValue(0).asContainerable();
 		}
 	}
 	

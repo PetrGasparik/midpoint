@@ -22,8 +22,12 @@ import com.evolveum.midpoint.repo.sql.data.common.embedded.REmbeddedReference;
 import com.evolveum.midpoint.repo.sql.data.common.enums.RExclusionPolicy;
 import com.evolveum.midpoint.repo.sql.data.common.id.RContainerId;
 import com.evolveum.midpoint.repo.sql.query.definition.JaxbType;
+import com.evolveum.midpoint.repo.sql.query.definition.OwnerIdGetter;
+import com.evolveum.midpoint.repo.sql.query2.definition.IdQueryProperty;
+import com.evolveum.midpoint.repo.sql.query2.definition.NotQueryable;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointSingleTablePersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ExclusionPolicyConstraintType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -31,6 +35,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import org.apache.commons.lang.Validate;
 import org.hibernate.annotations.ForeignKey;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.Persister;
 
 import javax.persistence.*;
 
@@ -45,6 +50,7 @@ import javax.persistence.*;
 @IdClass(RContainerId.class)
 @ForeignKey(name = "fk_exclusion")
 @Deprecated
+@Persister(impl = MidPointSingleTablePersister.class)
 public class RExclusion implements Container {
 
     public static final String F_OWNER = "owner";
@@ -72,11 +78,13 @@ public class RExclusion implements Container {
     @ForeignKey(name = "fk_exclusion_owner")
     @MapsId("owner")
     @ManyToOne(fetch = FetchType.LAZY)
+    @NotQueryable
     public RObject getOwner() {
         return owner;
     }
 
     @Column(name = "owner_oid", length = RUtil.COLUMN_LENGTH_OID, nullable = false)
+    @OwnerIdGetter()
     public String getOwnerOid() {
         if (owner != null && ownerOid == null) {
             ownerOid = owner.getOid();
@@ -88,6 +96,7 @@ public class RExclusion implements Container {
     @GeneratedValue(generator = "ContainerIdGenerator")
     @GenericGenerator(name = "ContainerIdGenerator", strategy = "com.evolveum.midpoint.repo.sql.util.ContainerIdGenerator")
     @Column(name = "id")
+    @IdQueryProperty
     public Integer getId() {
         return id;
     }

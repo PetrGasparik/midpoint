@@ -25,20 +25,20 @@ import java.util.List;
 
 import javax.xml.datatype.XMLGregorianCalendar;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.evolveum.midpoint.schema.constants.ObjectTypes;
+import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
 import org.testng.annotations.Test;
 
-import com.evolveum.icf.dummy.resource.DummyAccount;
 import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.impl.trigger.RecomputeTriggerHandler;
 import com.evolveum.midpoint.model.intest.AbstractInitializedModelIntegrationTest;
 import com.evolveum.midpoint.model.intest.TestActivation;
 import com.evolveum.midpoint.model.intest.TestMapping;
 import com.evolveum.midpoint.model.intest.TestTriggerTask;
-import com.evolveum.midpoint.prism.PrismContainerValue;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.path.IdItemPathSegment;
@@ -50,11 +50,8 @@ import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
 import com.evolveum.midpoint.security.api.MidPointPrincipal;
-import com.evolveum.midpoint.security.api.SecurityEnforcer;
-import com.evolveum.midpoint.security.api.UserProfileService;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.test.DummyResourceContoller;
-import com.evolveum.midpoint.test.IntegrationTestTools;
 import com.evolveum.midpoint.test.util.TestUtil;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.CommunicationException;
@@ -64,18 +61,6 @@ import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 /**
  * @author Radovan Semancik
@@ -91,10 +76,7 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 
 	protected static final File ROLE_RED_JUDGE_FILE = new File(TEST_DIR, "role-red-judge.xml");
 	protected static final String ROLE_RED_JUDGE_OID = "12345111-1111-2222-1111-121212111222";
-	
-	protected static final File ROLE_RED_SAILOR_FILE = new File(TEST_DIR, "role-red-sailor.xml");
-	protected static final String ROLE_RED_SAILOR_OID = "12345111-1111-2222-1111-121212111223";
-	
+		
 	protected static final File ROLE_BIG_JUDGE_FILE = new File(TEST_DIR, "role-big-judge.xml");
 	protected static final String ROLE_BIG_JUDGE_OID = "12345111-1111-2222-1111-121212111224";
 	
@@ -102,13 +84,12 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 
 	private XMLGregorianCalendar drakeValidFrom;
 	private XMLGregorianCalendar drakeValidTo;
-	
+
 	@Override
 	public void initSystem(Task initTask, OperationResult initResult) throws Exception {
 		super.initSystem(initTask, initResult);
 
 		repoAddObjectFromFile(ROLE_RED_JUDGE_FILE, RoleType.class, initResult);
-		repoAddObjectFromFile(ROLE_RED_SAILOR_FILE, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_BIG_JUDGE_FILE, RoleType.class, initResult);
 
 		DebugUtil.setDetailedDebugDump(true);
@@ -137,20 +118,20 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 		/// WHEN
         TestUtil.displayWhen(TEST_NAME);
         importObjectFromFile(TASK_VALIDITY_SCANNER_FILENAME);
-		
+
         waitForTaskStart(TASK_VALIDITY_SCANNER_OID, false);
         waitForTaskFinish(TASK_VALIDITY_SCANNER_OID, true);
         
         // THEN
         TestUtil.displayThen(TEST_NAME);
-        XMLGregorianCalendar endCal = clock.currentTimeXMLGregorianCalendar();
+		XMLGregorianCalendar endCal = clock.currentTimeXMLGregorianCalendar();
         assertLastRecomputeTimestamp(TASK_VALIDITY_SCANNER_OID, startCal, endCal);
         
         PrismObject<UserType> userHermanAfter = getUser(USER_HERMAN_OID);
         assertEffectiveActivation(userHermanAfter, ActivationStatusType.ENABLED);
         assertValidityStatus(userHermanAfter, TimeIntervalStatusType.IN);
 	}
-	
+
 	@Test
     public void test110JackAssignJudgeDisabled() throws Exception {
 		final String TEST_NAME = "test110JackAssignJudgeDisabled";
@@ -236,7 +217,7 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 	}
 		
 	private void testJackAssignRoleJudgeValid(final String TEST_NAME, ActivationType activationType, Task task, OperationResult result) throws Exception {
-	    
+
         // WHEN
         TestUtil.displayWhen(TEST_NAME);
         assignRole(USER_JACK_OID, ROLE_BIG_JUDGE_OID, activationType, task, result);
@@ -268,7 +249,7 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 	}
 	
 	private void testJackAssignRoleJudgeInvalid(final String TEST_NAME, ActivationType activationType, Task task, OperationResult result) throws Exception {
-	    
+
         // WHEN
         TestUtil.displayWhen(TEST_NAME);
         assignRole(USER_JACK_OID, ROLE_BIG_JUDGE_OID, activationType, task, result);
@@ -1679,7 +1660,20 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 		ObjectReferenceType resourceRedRef = new ObjectReferenceType();
 		resourceRedRef.setOid(RESOURCE_DUMMY_RED_OID);
 		constructionType.setResourceRef(resourceRedRef);
-		
+
+		// the following assignments are used only to generate superfluous searches
+		// in validity scanner task
+		AssignmentType dummyAssignmentType1 = new AssignmentType();
+		userDrakeType.getAssignment().add(dummyAssignmentType1);
+		dummyAssignmentType1.setTargetRef(ObjectTypeUtil.createObjectRef(ROLE_SUPERUSER_OID, ObjectTypes.ROLE));
+		dummyAssignmentType1.setActivation(activationType.clone());
+
+		AssignmentType dummyAssignmentType2 = new AssignmentType();
+		userDrakeType.getAssignment().add(dummyAssignmentType2);
+		dummyAssignmentType2.setTargetRef(ObjectTypeUtil.createObjectRef(ROLE_SUPERUSER_OID, ObjectTypes.ROLE));
+		dummyAssignmentType2.setActivation(activationType.clone());
+		dummyAssignmentType2.setDescription("just to differentiate");
+
 		display("Drake before", userDrake);
 		
 		// WHEN
@@ -1762,7 +1756,7 @@ public class TestValidityRecomputeTask extends AbstractInitializedModelIntegrati
 		final String TEST_NAME = "test226Drake1DayBeforeValidTo";
         TestUtil.displayTestTile(this, TEST_NAME);
 
-        XMLGregorianCalendar start = (XMLGregorianCalendar) drakeValidTo.clone();
+		XMLGregorianCalendar start = (XMLGregorianCalendar) drakeValidTo.clone();
         start.add(XmlTypeConverter.createDuration(false, 0, 0, 1, 0, 0, 0));
         clock.override(start);
         display("Start", start);

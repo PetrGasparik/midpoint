@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,125 +16,66 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import javax.xml.namespace.QName;
-
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismContainerValue;
+import com.evolveum.midpoint.prism.ItemDefinition;
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.PrismPropertyDefinition;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.util.DebugUtil;
-import com.evolveum.midpoint.util.exception.SchemaException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class LessFilter<T> extends ComparativeFilter<T> {
 
-	LessFilter(ItemPath parentPath, PrismPropertyDefinition definition, PrismPropertyValue<T> value, boolean equals) {
-		super(parentPath, definition, value, equals);
-	}
-	
-	public LessFilter() {
-	}
-	
-	public static <T, O extends Objectable> LessFilter createLess(QName parentPath, PrismPropertyDefinition definition, PrismPropertyValue<T> value, boolean equals){
-		return new LessFilter(new ItemPath(parentPath), definition, value, equals);
-	}
-	
-	
-	public static <T, O extends Objectable> LessFilter createLess(ItemPath parentPath, PrismPropertyDefinition definition, PrismPropertyValue<T> value, boolean equals){
-		return new LessFilter(parentPath, definition, value, equals);
-	}
-	
-	public static <T, O extends Objectable> LessFilter createLess(ItemPath parentPath, PrismObjectDefinition<O> containerDef,
-			PrismPropertyValue<T> value, boolean equals) throws SchemaException {
-		PrismPropertyDefinition def = (PrismPropertyDefinition) findItemDefinition(parentPath, containerDef);
-		return createLess(parentPath, def, value, equals);
+	public LessFilter(@NotNull ItemPath path, @Nullable PrismPropertyDefinition<T> definition,
+			@Nullable PrismPropertyValue<T> value, @Nullable ExpressionWrapper expression,
+			@Nullable ItemPath rightHandSidePath, @Nullable ItemDefinition rightHandSideDefinition, boolean equals) {
+		super(path, definition, value, expression, rightHandSidePath, rightHandSideDefinition, equals);
 	}
 
-	public static <T> LessFilter createLess(QName parentPath, PrismPropertyDefinition itemDefinition, T realValue, boolean equals) throws SchemaException{
-		return createLess(new ItemPath(parentPath), itemDefinition, realValue, equals);
-	}
-	
-	public static <T> LessFilter createLess(ItemPath parentPath, PrismPropertyDefinition itemDefinition, T realValue, boolean equals) throws SchemaException{
-		PrismPropertyValue<T> value = createPropertyValue(itemDefinition, realValue);
-		
-		if (value == null){
-			// create null filter
-		}
-		
-		return createLess(parentPath, itemDefinition, value, equals);
+	// factory methods
+
+	// empty (can be filled-in later)
+	@NotNull
+	public static <T> LessFilter<T> createLess(@NotNull ItemPath itemPath, PrismPropertyDefinition<T> definition, boolean equals) {
+		return new LessFilter<T>(itemPath, definition, null, null, null, null, equals);
 	}
 
-	public static <T, O extends Objectable> LessFilter createLess(ItemPath parentPath, PrismObjectDefinition<O> containerDef,
-			T realValue, boolean equals) throws SchemaException {
-		PrismPropertyDefinition def = (PrismPropertyDefinition) findItemDefinition(parentPath, containerDef);
-		return createLess(parentPath, def, realValue, equals);
+	// value
+	@NotNull
+	public static <T> LessFilter<T> createLess(@NotNull ItemPath itemPath, PrismPropertyDefinition<T> definition,
+			@NotNull PrismContext prismContext, Object anyValue, boolean equals) {
+		PrismPropertyValue<T> propertyValue = anyValueToPropertyValue(prismContext, anyValue);
+		return new LessFilter<T>(itemPath, definition, propertyValue, null, null, null, equals);
 	}
 
-	public static <T, O extends Objectable> LessFilter createLess(QName propertyName, Class<O> type, PrismContext prismContext, T realValue, boolean equals)
-			throws SchemaException {
-		return createLess(new ItemPath(propertyName), type, prismContext, realValue, equals);
+	// expression-related
+	@NotNull
+	public static <T> LessFilter<T> createLess(@NotNull ItemPath itemPath, PrismPropertyDefinition<T> itemDefinition,
+			@NotNull ExpressionWrapper wrapper, boolean equals) {
+		return new LessFilter<>(itemPath, itemDefinition, null, wrapper, null, null, equals);
 	}
-	
-	public static <T, O extends Objectable> LessFilter createLess(ItemPath path, Class<O> type, PrismContext prismContext, T realValue, boolean equals)
-			throws SchemaException {
-	
-		PrismPropertyDefinition def = (PrismPropertyDefinition) findItemDefinition(path, type, prismContext);
-		
-		return createLess(path, def, realValue, equals);
-	}	
+
+	// right-side-related
+	@NotNull
+	public static <T> LessFilter<T> createLess(@NotNull ItemPath propertyPath, PrismPropertyDefinition<T> definition,
+			@NotNull ItemPath rightSidePath, ItemDefinition rightSideDefinition, boolean equals) {
+		return new LessFilter<>(propertyPath, definition, null, null, rightSidePath, rightSideDefinition, equals);
+	}
+
+	@SuppressWarnings("CloneDoesntCallSuperClone")
 	@Override
-	public LessFilter clone() {
-		return new LessFilter(getFullPath(), getDefinition(), (PrismPropertyValue<T>) getValues().get(0), isEquals());
+	public LessFilter<T> clone() {
+		return new LessFilter<T>(getFullPath(), getDefinition(), getClonedValue(), getExpression(),
+				getRightHandSidePath(), getRightHandSideDefinition(), isEquals());
 	}
 
 	@Override
-	public String debugDump() {
-		return debugDump(0);
+	protected String getFilterName() {
+		return "LESS";
 	}
 
 	@Override
-	public String debugDump(int indent) {
-		StringBuilder sb = new StringBuilder();
-		DebugUtil.indentDebugDump(sb, indent);
-		sb.append("LESS:");
-		return debugDump(indent, sb);
+	public boolean equals(Object obj, boolean exact) {
+		return obj instanceof LessFilter && super.equals(obj, exact);
 	}
-	
-	@Override
-	public String toString() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("LESS: ");
-		return toString(sb);
-	}
-
-	@Override
-	public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
-		throw new UnsupportedOperationException("Matching object and less filter not supported yet");
-	}
-	
-	@Override
-	public PrismPropertyDefinition getDefinition() {
-		return (PrismPropertyDefinition) super.getDefinition();
-	}
-
-	@Override
-	public QName getElementName() {
-		return getDefinition().getName();
-	}
-
-	@Override
-	public PrismContext getPrismContext() {
-		return getDefinition().getPrismContext();
-	}
-
-	@Override
-	public ItemPath getPath() {
-		return getFullPath();
-	}
-
 }

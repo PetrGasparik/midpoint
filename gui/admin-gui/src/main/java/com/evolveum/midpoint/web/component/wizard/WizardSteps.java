@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
 
 package com.evolveum.midpoint.web.component.wizard;
 
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.component.wizard.resource.component.WizardHelpDialog;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
@@ -31,14 +33,13 @@ import org.apache.wicket.markup.html.list.ListItem;
 import org.apache.wicket.markup.html.list.ListView;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.StringResourceModel;
 
 import java.util.List;
 
 /**
  * @author lazyman
  */
-public class WizardSteps extends SimplePanel<List<WizardStepDto>> {
+public class WizardSteps extends BasePanel<List<WizardStepDto>> {
 
     private static final String ID_LINK_REPEATER = "linkRepeater";
     private static final String ID_LINK = "link";
@@ -48,9 +49,9 @@ public class WizardSteps extends SimplePanel<List<WizardStepDto>> {
 
     public WizardSteps(String id, IModel<List<WizardStepDto>> model) {
         super(id, model);
+		initLayout();
     }
 
-    @Override
     protected void initLayout() {
         ListView<WizardStepDto> linkContainer = new ListView<WizardStepDto>(ID_LINK_REPEATER, getModel()) {
 
@@ -65,14 +66,21 @@ public class WizardSteps extends SimplePanel<List<WizardStepDto>> {
                     protected void onSubmit(AjaxRequestTarget target, Form<?> form) {
                         changeStepPerformed(target, dto);
                     }
-                };
+
+					@Override
+					protected void onError(AjaxRequestTarget target, Form<?> form) {
+						target.add(getPageBase().getFeedbackPanel());
+					}
+				};
                 item.add(button);
 
                 button.add(new VisibleEnableBehaviour() {
 
                     @Override
                     public boolean isEnabled() {
-                        return true;
+						final boolean enabled = ((PageResourceWizard) getPageBase()).isCurrentStepComplete();
+//						System.out.println(dto.getName() + " enabled = " + enabled);
+						return enabled;
                     }
 
                     @Override
@@ -82,12 +90,20 @@ public class WizardSteps extends SimplePanel<List<WizardStepDto>> {
                 });
 
                 button.add(AttributeModifier.replace("class", new AbstractReadOnlyModel<String>() {
-
                     @Override
                     public String getObject() {
-                        return dto.isActive() ? "current" : null;
+						return dto.getWizardStep() == getActiveStep() ? "current" : null;
                     }
                 }));
+
+				button.add(AttributeModifier.replace("style", new AbstractReadOnlyModel<String>() {
+					@Override
+					public String getObject() {
+						final boolean enabled = ((PageResourceWizard) getPageBase()).isCurrentStepComplete();
+//						System.out.println(dto.getName() + " enabled2 = " + enabled);
+						return enabled ? null : "color: #FFF;";		// TODO respect color scheme (and find a better style for disabled anyway...)
+					}
+				}));
 
                 Label label = new Label(ID_LABEL, createLabelModel(dto.getName()));
                 button.add(label);
@@ -126,7 +142,8 @@ public class WizardSteps extends SimplePanel<List<WizardStepDto>> {
 
             @Override
             public String getObject() {
-                return new StringResourceModel(key, getPage(), null, key).getString();
+            	return PageBase.createStringResourceStatic(getPage(), key).getString();
+//                return new StringResourceModel(key, getPage(), null, key).getString();
             }
         };
     }

@@ -17,20 +17,27 @@
 package com.evolveum.midpoint.web.util;
 
 import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.xnode.RootXNode;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingType;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ExpressionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
+import com.evolveum.prism.xml.ns._public.types_3.RawType;
+import org.apache.commons.lang.StringUtils;
 
 import javax.xml.bind.JAXBElement;
+import java.util.List;
 
 /**
  *  @author shood
  * */
 public class ExpressionUtil {
 
-    public static enum ExpressionEvaluatorType{
+	private static final Trace LOGGER = TraceManager.getTrace(ExpressionUtil.class);
+
+	public static enum ExpressionEvaluatorType{
         LITERAL,
         AS_IS,
         PATH,
@@ -75,7 +82,7 @@ public class ExpressionUtil {
     public static final String EXPRESSION_PATH = "<path>Insert path here</path>";
     public static final String EXPRESSION_GENERATE =
                     "<generate>\n" +
-                    "    <valuePolicyRef oid=\"Insert value policy oid\"/>\n" +
+                    //"    <valuePolicyRef oid=\"Insert value policy oid\"/>\n" +
                     "</generate>";
 
     public static final String ELEMENT_SCRIPT = "</script>";
@@ -190,32 +197,56 @@ public class ExpressionUtil {
         return newExpression;
     }
 
-    public static String loadExpression(MappingType mapping, PrismContext prismContext,
-                                        Trace LOGGER){
-        String expression = "";
+    public static String loadExpression(ExpressionType expression, PrismContext prismContext, Trace LOGGER) {
+		if (expression == null || expression.getExpressionEvaluator().isEmpty()) {
+			return "";
+		}
+		List<JAXBElement<?>> evaluators = expression.getExpressionEvaluator();
+		try {
+			return serializeEvaluators(evaluators, prismContext);
+		} catch (SchemaException e) {
+			//TODO - how can we show this error to user?
+			LoggingUtils.logUnexpectedException(LOGGER, "Could not load expressions from mapping.", e, e.getStackTrace());
+			return e.getMessage();
+		}
+	}
 
-        if(mapping.getExpression() != null && mapping.getExpression().getExpressionEvaluator() != null
-                && !mapping.getExpression().getExpressionEvaluator().isEmpty()){
+	private static String serializeEvaluators(List<JAXBElement<?>> evaluators, PrismContext prismContext) throws SchemaException {
+		if (evaluators.size() == 1) {
+			return serialize(evaluators.get(0), prismContext);
+		} else {
+			StringBuilder sb = new StringBuilder();
+			for (JAXBElement<?> element : evaluators) {
+				String subElement = serialize(element, prismContext);
+				sb.append(subElement).append("\n");
+			}
+			return sb.toString();
+		}
+	}
 
+	private static String serialize(JAXBElement<?> element, PrismContext prismContext) throws SchemaException {
+		String xml;
+		if (element.getValue() instanceof RawType) {
+			RawType raw = (RawType) element.getValue();
+			RootXNode rootNode = new RootXNode(element.getName(), raw.serializeToXNode());
+			xml = prismContext.xmlSerializer().serialize(rootNode);
+		} else {
+			xml = prismContext.xmlSerializer().serialize(element);
+		}
+		return WebXmlUtil.stripNamespaceDeclarations(xml);
+	}
 
-            try {
-                if(mapping.getExpression().getExpressionEvaluator().size() == 1){
-                    expression = prismContext.serializeAtomicValue(mapping.getExpression().getExpressionEvaluator().get(0), PrismContext.LANG_XML);
-                } else{
-                    StringBuilder sb = new StringBuilder();
-                    for(JAXBElement<?> element: mapping.getExpression().getExpressionEvaluator()){
-                        String subElement = prismContext.serializeAtomicValue(element, PrismContext.LANG_XML);
-                        sb.append(subElement).append("\n");
-                    }
-                    expression = sb.toString();
-                }
-            } catch (SchemaException e) {
-                //TODO - how can we show this error to user?
-                LoggingUtils.logException(LOGGER, "Could not load expressions from mapping.", e, e.getStackTrace());
-                expression = e.getMessage();
-            }
-        }
+	public static boolean isEmpty(ExpressionType expression) {
+		return expression == null || expression.getExpressionEvaluator().isEmpty();
+	}
 
-        return expression;
-    }
+	public static void parseExpressionEvaluators(String xml, ExpressionType expressionObject, PrismContext context) throws SchemaException {
+		expressionObject.getExpressionEvaluator().clear();
+		if (xml != null && StringUtils.isNotBlank(xml)) {
+			xml = WebXmlUtil.wrapInElement("expression", xml);
+			LOGGER.info("Expression to serialize: {}", xml);
+			JAXBElement<?> newElement = context.parserFor(xml).xml().parseRealValueToJaxbElement();
+			expressionObject.getExpressionEvaluator().addAll(((ExpressionType) (newElement.getValue())).getExpressionEvaluator());
+		}
+	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,31 +16,24 @@
 
 package com.evolveum.midpoint.provisioning.util;
 
+import com.evolveum.midpoint.common.ResourceObjectPattern;
 import com.evolveum.midpoint.common.StaticExpressionUtil;
-import com.evolveum.midpoint.common.refinery.RefinedAttributeDefinition;
-import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
-import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
+import com.evolveum.midpoint.common.refinery.*;
 import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.match.MatchingRule;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
-import com.evolveum.midpoint.prism.polystring.PolyString;
-import com.evolveum.midpoint.prism.query.AndFilter;
-import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.provisioning.impl.ProvisioningContext;
 import com.evolveum.midpoint.provisioning.ucf.api.AttributesToReturn;
 import com.evolveum.midpoint.provisioning.ucf.api.ExecuteProvisioningScriptOperation;
 import com.evolveum.midpoint.provisioning.ucf.api.ExecuteScriptArgument;
-import com.evolveum.midpoint.provisioning.ucf.impl.ConnectorFactoryIcfImpl;
 import com.evolveum.midpoint.schema.CapabilityUtil;
-import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
+import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
-import com.evolveum.midpoint.schema.processor.ObjectClassComplexTypeDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttribute;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeContainer;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
@@ -54,13 +47,15 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AttributeFetchStrategyType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.CachingPolicyType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.CachingStategyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ExpressionReturnMultiplicityType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FailedOperationTypeType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ProvisioningScriptArgumentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ProvisioningScriptHostType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ProvisioningScriptType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectAssociationDirectionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.CredentialsCapabilityType;
@@ -69,7 +64,6 @@ import javax.xml.namespace.QName;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 public class ProvisioningUtil {
 
@@ -104,7 +98,7 @@ public class ProvisioningUtil {
 		ResourceAttributeContainer oldContainer = normalizedContainer.clone();
 
 		normalizedContainer.clear();
-		Collection<ResourceAttribute<?>> identifiers = oldContainer.getIdentifiers();
+		Collection<ResourceAttribute<?>> identifiers = oldContainer.getPrimaryIdentifiers();
 		for (PrismProperty<?> p : identifiers) {
 			normalizedContainer.getValue().add(p.clone());
 		}
@@ -126,7 +120,7 @@ public class ProvisioningUtil {
 			ProvisioningScriptType scriptType, String desc, PrismContext prismContext) throws SchemaException {
 		ExecuteProvisioningScriptOperation scriptOperation = new ExecuteProvisioningScriptOperation();
 
-		PrismPropertyDefinition scriptArgumentDefinition = new PrismPropertyDefinition(
+		PrismPropertyDefinition scriptArgumentDefinition = new PrismPropertyDefinitionImpl(
 				FAKE_SCRIPT_ARGUMENT_NAME, DOMUtil.XSD_STRING, prismContext);
 
 		for (ProvisioningScriptArgumentType argument : scriptType.getArgument()) {
@@ -139,11 +133,11 @@ public class ProvisioningUtil {
 		scriptOperation.setLanguage(scriptType.getLanguage());
 		scriptOperation.setTextCode(scriptType.getCode());
 
-		if (scriptType.getHost().equals(ProvisioningScriptHostType.CONNECTOR)) {
+		if (scriptType.getHost() != null && scriptType.getHost().equals(ProvisioningScriptHostType.CONNECTOR)) {
 			scriptOperation.setConnectorHost(true);
 			scriptOperation.setResourceHost(false);
 		}
-		if (scriptType.getHost().equals(ProvisioningScriptHostType.RESOURCE)) {
+		if (scriptType.getHost() == null || scriptType.getHost().equals(ProvisioningScriptHostType.RESOURCE)) {
 			scriptOperation.setConnectorHost(false);
 			scriptOperation.setResourceHost(true);
 		}
@@ -243,10 +237,10 @@ public class ProvisioningUtil {
 			matchingRuleQName = ((RefinedAttributeDefinition)propertyDef).getMatchingRuleQName();
 		}
 		MatchingRule<T> matchingRule = null;
-		if (matchingRuleQName != null) {
+		if (matchingRuleQName != null && propertyDef != null) {
 			matchingRule = matchingRuleRegistry.getMatchingRule(matchingRuleQName, propertyDef.getTypeName());
 		}
-		LOGGER.trace("Narrowing attr def={}, matchingRule={}", propertyDef, matchingRule);
+		LOGGER.trace("Narrowing attr def={}, matchingRule={} ({})", propertyDef, matchingRule, matchingRuleQName);
 		PropertyDelta<T> filteredDelta = propertyDelta.narrow(currentShadow, matchingRule);
 		if (LOGGER.isTraceEnabled() && !filteredDelta.equals(propertyDelta)) {
 			LOGGER.trace("Narrowed delta: {}", filteredDelta.debugDump());
@@ -255,15 +249,38 @@ public class ProvisioningUtil {
 	}
 	
 	public static RefinedResourceSchema getRefinedSchema(ResourceType resourceType) throws SchemaException, ConfigurationException {
-		RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resourceType);
+		RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resourceType);
 		if (refinedSchema == null) {
 			throw new ConfigurationException("No schema for "+resourceType);
 		}
 		return refinedSchema;
 	}
 	
+	public static boolean isProtectedShadow(RefinedObjectClassDefinition objectClassDefinition, PrismObject<ShadowType> shadow, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
+		boolean isProtected = false;
+		if (objectClassDefinition == null) {
+			isProtected = false;
+		} else {
+			Collection<ResourceObjectPattern> protectedAccountPatterns = objectClassDefinition.getProtectedObjectPatterns();
+			if (protectedAccountPatterns == null) {
+				isProtected = false;
+			} else {
+				isProtected = ResourceObjectPattern.matches(shadow, protectedAccountPatterns, matchingRuleRegistry);
+			}
+		}
+		LOGGER.trace("isProtectedShadow: {}: {} = {}", new Object[] { objectClassDefinition,
+				shadow, isProtected });
+		return isProtected;
+	}
+	
+	public static void setProtectedFlag(ProvisioningContext ctx, PrismObject<ShadowType> resourceObject, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException, ConfigurationException, ObjectNotFoundException, CommunicationException {
+		if (isProtectedShadow(ctx.getObjectClassDefinition(), resourceObject, matchingRuleRegistry)) {
+			resourceObject.asObjectable().setProtectedObject(true);
+		}
+	}
+	
 	public static RefinedResourceSchema getRefinedSchema(PrismObject<ResourceType> resource) throws SchemaException, ConfigurationException {
-		RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resource);
+		RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resource);
 		if (refinedSchema == null) {
 			throw new ConfigurationException("No schema for "+resource);
 		}
@@ -284,8 +301,29 @@ public class ProvisioningUtil {
 		opResult.recordWarning(message, ex);
 	}
 
-	public static boolean shouldStoreAtributeInShadow(ObjectClassComplexTypeDefinition objectClassDefinition, QName attributeName) {
-		return (objectClassDefinition.isIdentifier(attributeName) || objectClassDefinition.isSecondaryIdentifier(attributeName));
+	public static boolean shouldStoreAtributeInShadow(RefinedObjectClassDefinition objectClassDefinition, QName attributeName,
+			CachingStategyType cachingStrategy) throws ConfigurationException {
+		if (cachingStrategy == CachingStategyType.NONE) {
+			if (objectClassDefinition.isPrimaryIdentifier(attributeName) || objectClassDefinition.isSecondaryIdentifier(attributeName)) {
+				return true;
+			}
+			for (RefinedAssociationDefinition associationDef: objectClassDefinition.getAssociationDefinitions()) {
+				if (associationDef.getResourceObjectAssociationType().getDirection() == ResourceObjectAssociationDirectionType.OBJECT_TO_SUBJECT) {
+					QName valueAttributeName = associationDef.getResourceObjectAssociationType().getValueAttribute();
+					if (QNameUtil.match(attributeName, valueAttributeName)) {
+						return true;
+					}
+				}
+			}
+			return false;
+
+		} else if (cachingStrategy == CachingStategyType.PASSIVE) {
+			RefinedAttributeDefinition<Object> attrDef = objectClassDefinition.findAttributeDefinition(attributeName);
+			return attrDef != null;
+
+		} else {
+			throw new ConfigurationException("Unknown caching strategy "+cachingStrategy);
+		}
 	}
 
 	public static boolean shouldStoreActivationItemInShadow(QName elementName) {	// MID-2585
@@ -338,5 +376,21 @@ public class ProvisioningUtil {
 			LOGGER.warn("{}", m);
 			//throw new IllegalStateException(m);		// use only for testing
 		}
+	}
+
+	public static CachingStategyType getCachingStrategy(ProvisioningContext ctx)
+			throws ObjectNotFoundException, SchemaException, CommunicationException, ConfigurationException {
+		CachingPolicyType caching = ctx.getResource().getCaching();
+		if (caching == null) {
+			return CachingStategyType.NONE;
+		}
+		if (caching.getCachingStategy() == null) {
+			return CachingStategyType.NONE;
+		}
+		return caching.getCachingStategy();
+	}
+
+	public static boolean shouldDoRepoSearch(GetOperationOptions rootOptions) {
+		return GetOperationOptions.isNoFetch(rootOptions) || GetOperationOptions.isMaxStaleness(rootOptions);
 	}
 }

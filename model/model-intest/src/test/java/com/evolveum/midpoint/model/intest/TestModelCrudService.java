@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,12 @@
  */
 package com.evolveum.midpoint.model.intest;
 
-import static org.testng.AssertJUnit.assertEquals;
-import static org.testng.AssertJUnit.assertFalse;
-import static org.testng.AssertJUnit.assertNull;
-
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 
-import javax.xml.bind.JAXBException;
-
+import com.evolveum.midpoint.test.IntegrationTestTools;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
@@ -36,7 +29,6 @@ import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 
-import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.impl.ModelCrudService;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
@@ -46,19 +38,9 @@ import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.test.util.TestUtil;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ConsistencyViolationException;
-import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
-import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+
+import static org.testng.AssertJUnit.*;
 
 /**
  * This is testing the DEPRECATED functions of model API. It should be removed once the functions are phased out.
@@ -158,9 +140,7 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
 	}
 		
 	@Test
-    public void test119ModifyUserDeleteAccount() throws SchemaException, ObjectNotFoundException, ExpressionEvaluationException,
-            IOException, JAXBException, CommunicationException, ConfigurationException, ObjectAlreadyExistsException,
-            PolicyViolationException, SecurityViolationException {
+    public void test119ModifyUserDeleteAccount() throws Exception {
         TestUtil.displayTestTile(this, "test119ModifyUserDeleteAccount");
 
         // GIVEN
@@ -200,9 +180,7 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
 	}
 	
 	@Test
-    public void test120AddAccount() throws SchemaException, ObjectNotFoundException, ExpressionEvaluationException,
-            IOException, JAXBException, CommunicationException, ConfigurationException, ObjectAlreadyExistsException,
-            PolicyViolationException, SecurityViolationException {
+    public void test120AddAccount() throws Exception {
         TestUtil.displayTestTile(this, "test120AddAccount");
 
         // GIVEN
@@ -235,9 +213,7 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
 	}
 	
 	@Test
-    public void test121ModifyUserAddAccountRef() throws SchemaException, ObjectNotFoundException, ExpressionEvaluationException, 
-    		FileNotFoundException, JAXBException, CommunicationException, ConfigurationException, ObjectAlreadyExistsException, 
-    		PolicyViolationException, SecurityViolationException {
+    public void test121ModifyUserAddAccountRef() throws Exception {
         TestUtil.displayTestTile(this, "test121ModifyUserAddAccountRef");
 
         // GIVEN
@@ -273,9 +249,7 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
 
 	
 	@Test
-    public void test128ModifyUserDeleteAccountRef() throws SchemaException, ObjectNotFoundException, ExpressionEvaluationException,
-            IOException, JAXBException, CommunicationException, ConfigurationException, ObjectAlreadyExistsException,
-            PolicyViolationException, SecurityViolationException {
+    public void test128ModifyUserDeleteAccountRef() throws Exception {
         TestUtil.displayTestTile(this, "test128ModifyUserDeleteAccountRef");
 
         // GIVEN
@@ -313,9 +287,7 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
 	}
 	
 	@Test
-    public void test129DeleteAccount() throws SchemaException, ObjectNotFoundException, ExpressionEvaluationException, 
-    		FileNotFoundException, JAXBException, CommunicationException, ConfigurationException, ObjectAlreadyExistsException, 
-    		PolicyViolationException, SecurityViolationException, ConsistencyViolationException {
+    public void test129DeleteAccount() throws Exception {
         TestUtil.displayTestTile(this, "test129DeleteAccount");
 
         // GIVEN
@@ -410,4 +382,32 @@ public class TestModelCrudService extends AbstractInitializedModelIntegrationTes
         assertDefaultDummyAccount("morgan", "Sir Henry Morgan", true);
 	}
 
+	@Test
+	public void test220DeleteUserMorgan() throws Exception {
+		TestUtil.displayTestTile(this, "test220DeleteUserMorgan");
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestModelCrudService.class.getName() + ".test220DeleteUserMorgan");
+		OperationResult result = task.getResult();
+		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+
+		assertDummyAccount(null, "morgan");
+
+		// WHEN
+		modelCrudService.deleteObject(FocusType.class, USER_MORGAN_OID, null, task, result);
+
+		// THEN
+		try {
+			getUser(USER_MORGAN_OID);
+			fail("User morgan exists even if he should not");
+		} catch (ObjectNotFoundException e) {
+			// ok
+		}
+
+		assertNoDummyAccount(null, "morgan");
+
+		result.computeStatus();
+		IntegrationTestTools.display(result);
+		TestUtil.assertSuccess(result);
+	}
 }

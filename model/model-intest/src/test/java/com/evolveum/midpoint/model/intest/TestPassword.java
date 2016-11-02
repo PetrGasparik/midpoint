@@ -16,48 +16,38 @@
 package com.evolveum.midpoint.model.intest;
 
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
-import static org.testng.AssertJUnit.assertEquals;
-import static org.testng.AssertJUnit.assertNotNull;
-import static org.testng.AssertJUnit.assertTrue;
-import static org.testng.AssertJUnit.assertFalse;
+import static org.testng.AssertJUnit.*;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Collection;
 
-import javax.xml.bind.JAXBException;
 import javax.xml.datatype.XMLGregorianCalendar;
 
+import com.evolveum.icf.dummy.resource.DummyResource;
+import com.evolveum.midpoint.prism.delta.builder.DeltaBuilder;
+import com.evolveum.midpoint.test.DummyResourceContoller;
+import com.evolveum.midpoint.test.util.MidPointTestConstants;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
+import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 
-import com.evolveum.icf.dummy.resource.DummyAccount;
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.PrismContainer;
+import com.evolveum.icf.dummy.resource.ConflictException;
+import com.evolveum.icf.dummy.resource.SchemaViolationException;
+import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.crypto.EncryptionException;
+import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.test.IntegrationTestTools;
 import com.evolveum.midpoint.test.util.TestUtil;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MetadataType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ValuePolicyType;
 
 /**
  * @author semancik
@@ -72,18 +62,38 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 	private static final String USER_PASSWORD_3_CLEAR = "wh3r3sTheRum?";
 	private static final String USER_PASSWORD_4_CLEAR = "sh1v3rM3T1mb3rs";
 	private static final String USER_PASSWORD_5_CLEAR = "s3tSa1al";
-	
-	private static final ItemPath PASSWORD_VALUE_PATH = new ItemPath(UserType.F_CREDENTIALS,  CredentialsType.F_PASSWORD, PasswordType.F_VALUE); 
-	
+	private static final String USER_PASSWORD_A_CLEAR = "A"; // too short
+	private static final String USER_PASSWORD_VALID = "abcd123";
+
+	private static final File TEST_DIR = new File(MidPointTestConstants.TEST_RESOURCES_DIR, "password");
+
+	protected static final String RESOURCE_DUMMY_UGLY_FILENAME = TEST_DIR + "/resource-dummy-ugly.xml";
+	protected static final String RESOURCE_DUMMY_UGLY_OID = "10000000-0000-0000-0000-000000344104";
+	protected static final String RESOURCE_DUMMY_UGLY_NAME = "ugly";
+
+	protected DummyResource dummyResourceUgly;
+	protected DummyResourceContoller dummyResourceCtlUgly;
+	protected ResourceType resourceDummyUglyType;
+	protected PrismObject<ResourceType> resourceDummyUgly;
+
 	private String accountOid;
 	private String accountRedOid;
+	private String accountUglyOid;
+	private String accountYellowOid;
 	private XMLGregorianCalendar lastPasswordChangeStart;
 	private XMLGregorianCalendar lastPasswordChangeEnd;
-
+	
 	@Override
 	public void initSystem(Task initTask, OperationResult initResult) throws Exception {
 		super.initSystem(initTask, initResult);
-		
+
+		dummyResourceCtlUgly = DummyResourceContoller.create(RESOURCE_DUMMY_UGLY_NAME, resourceDummyUgly);
+		dummyResourceCtlUgly.extendSchemaPirate();
+		dummyResourceUgly = dummyResourceCtlUgly.getDummyResource();
+		resourceDummyUgly = importAndGetObjectFromFile(ResourceType.class, RESOURCE_DUMMY_UGLY_FILENAME, RESOURCE_DUMMY_UGLY_OID, initTask, initResult);
+		resourceDummyUglyType = resourceDummyUgly.asObjectable();
+		dummyResourceCtlUgly.setResource(resourceDummyUgly);
+
 		login(USER_ADMINISTRATOR_USERNAME);
 	}
 
@@ -97,18 +107,14 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.NONE);
         
-        PrismObject<ValuePolicyType> passwordPolicy = PrismTestUtil.parseObject(new File(PASSWORD_POLICY_GLOBAL_FILENAME));
-        ObjectDelta<ValuePolicyType> passwordPolicyDelta = ObjectDelta.createAddDelta(passwordPolicy);
-        Collection<ObjectDelta<? extends ObjectType>> deltas = MiscSchemaUtil.createCollection(passwordPolicyDelta);
-        
 		// WHEN
-        modelService.executeChanges(deltas, null, task, result);
+        PrismObject<ObjectType> passwordPolicy = addObject(PASSWORD_POLICY_GLOBAL_FILE, task, result);
 		
 		// THEN
         result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
-        assertEquals("Wrong OID after add", PASSWORD_POLICY_GLOBAL_OID, passwordPolicyDelta.getOid());
+        assertEquals("Wrong OID after add", PASSWORD_POLICY_GLOBAL_OID, passwordPolicy.getOid());
 
 		// Check object
         PrismObject<ValuePolicyType> accountShadow = repositoryService.getObject(ValuePolicyType.class, PASSWORD_POLICY_GLOBAL_OID, null, result);
@@ -132,7 +138,7 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		display("User after change execution", userJack);
 		assertUserJack(userJack, "Jack Sparrow");
         
-		assertEncryptedPassword(userJack, "deadmentellnotales");
+		assertEncryptedUserPassword(userJack, USER_JACK_PASSWORD);
 	}
 	
 
@@ -146,18 +152,11 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
-        ProtectedStringType userPasswordPs = new ProtectedStringType();
-        userPasswordPs.setClearValue(USER_PASSWORD_1_CLEAR);
-        
         XMLGregorianCalendar startCal = clock.currentTimeXMLGregorianCalendar();
         
 		// WHEN
         TestUtil.displayWhen(TEST_NAME);
-        modifyUserReplace(USER_JACK_OID, 
-        		PASSWORD_VALUE_PATH,
-        		task, 
-        		result, 
-        		userPasswordPs);
+        modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_1_CLEAR, task, result);
 		
 		// THEN
         TestUtil.displayThen(TEST_NAME);
@@ -170,7 +169,7 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		display("User after change execution", userJack);
 		assertUserJack(userJack, "Jack Sparrow");
         
-		assertEncryptedPassword(userJack, USER_PASSWORD_1_CLEAR);
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_1_CLEAR);
 		assertPasswordMetadata(userJack, false, startCal, endCal);
 	}
 	
@@ -208,23 +207,20 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 
 	@Test
     public void test100ModifyUserJackAssignAccount() throws Exception {
-        TestUtil.displayTestTile(this, "test100ModifyUserJackAssignAccount");
+		final String TEST_NAME = "test100ModifyUserJackAssignAccount";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test100ModifyUserJackAssignAccount");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
-        Collection<ObjectDelta<? extends ObjectType>> deltas = new ArrayList<ObjectDelta<? extends ObjectType>>();
-        ObjectDelta<UserType> accountAssignmentUserDelta = createAccountAssignmentUserDelta(USER_JACK_OID, RESOURCE_DUMMY_OID, null, true);
-        deltas.add(accountAssignmentUserDelta);
-                
 		// WHEN
-		modelService.executeChanges(deltas, null, task, result);
+        assignAccount(USER_JACK_OID, RESOURCE_DUMMY_OID, null, task, result);
 		
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
 		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
@@ -240,9 +236,9 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
         assertDummyAccountShadowModel(accountModel, accountOid, "jack", "Jack Sparrow");
         
         // Check account in dummy resource
-        assertDefaultDummyAccount("jack", "Jack Sparrow", true);
+        assertDefaultDummyAccount(ACCOUNT_JACK_DUMMY_USERNAME, "Jack Sparrow", true);
         
-        assertDummyPassword("jack", USER_PASSWORD_1_CLEAR);
+        assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
 	}
 	
 	/**
@@ -250,28 +246,22 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 	 */
 	@Test
     public void test110ModifyUserJackPassword() throws Exception {
-        TestUtil.displayTestTile(this, "test110ModifyUserJackPassword");
+		final String TEST_NAME = "test110ModifyUserJackPassword";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test110ModifyUserJackPassword");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
-        
-        ProtectedStringType userPasswordPs = new ProtectedStringType();
-        userPasswordPs.setClearValue(USER_PASSWORD_2_CLEAR);
         
         lastPasswordChangeStart = clock.currentTimeXMLGregorianCalendar();
                         
 		// WHEN
-        modifyUserReplace(USER_JACK_OID, 
-        		PASSWORD_VALUE_PATH,
-        		task, 
-        		result, 
-        		userPasswordPs);
+        modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_2_CLEAR, task, result);
 		
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         lastPasswordChangeEnd = clock.currentTimeXMLGregorianCalendar();
         
@@ -279,8 +269,8 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		display("User after change execution", userJack);
 		assertUserJack(userJack, "Jack Sparrow");
         
-		assertEncryptedPassword(userJack, USER_PASSWORD_2_CLEAR);
-		assertDummyPassword("jack", USER_PASSWORD_2_CLEAR);
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_2_CLEAR);
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_2_CLEAR);
 		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
 	}
 	
@@ -289,36 +279,29 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 	 */
 	@Test
     public void test111ModifyAccountJackPassword() throws Exception {
-        TestUtil.displayTestTile(this, "test111ModifyAccountJackPassword");
+		final String TEST_NAME = "test111ModifyAccountJackPassword";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test111ModifyAccountJackPassword");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
-        ProtectedStringType userPasswordPs = new ProtectedStringType();
-        userPasswordPs.setClearValue(USER_PASSWORD_3_CLEAR);
-                        
 		// WHEN
-        modifyAccountShadowReplace(
-        		accountOid,
-        		PASSWORD_VALUE_PATH,
-        		task, 
-        		result, 
-        		userPasswordPs);
+        modifyAccountChangePassword(accountOid, USER_PASSWORD_3_CLEAR, task, result);
 		
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
 		assertUserJack(userJack, "Jack Sparrow");
         
 		// User should still have old password
-		assertEncryptedPassword(userJack, USER_PASSWORD_2_CLEAR);
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_2_CLEAR);
 		// Account has new password
-		assertDummyPassword("jack", USER_PASSWORD_3_CLEAR);
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_3_CLEAR);
 		
 		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
 	}
@@ -329,10 +312,11 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 	 */
 	@Test
     public void test112ModifyJackPasswordUserAndAccount() throws Exception {
-        TestUtil.displayTestTile(this, "test112ModifyJackPasswordUserAndAccount");
+		final String TEST_NAME = "test112ModifyJackPasswordUserAndAccount";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test112ModifyJackPasswordUserAndAccount");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -354,7 +338,7 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         lastPasswordChangeEnd = clock.currentTimeXMLGregorianCalendar();
         
@@ -363,49 +347,50 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		assertUserJack(userJack, "Jack Sparrow");
         
 		// User should still have old password
-		assertEncryptedPassword(userJack, USER_PASSWORD_4_CLEAR);
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_4_CLEAR);
 		// Account has new password
-		assertDummyPassword("jack", USER_PASSWORD_5_CLEAR);
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_5_CLEAR);
 		
 		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
 	}
 		
 	/**
-	 * Add red dummy resource to the mix. This would be fun.
+	 * Add red and ugly dummy resource to the mix. This would be fun.
 	 */
 	@Test
-    public void test120ModifyUserJackAssignAccountDummyRed() throws Exception {
-        TestUtil.displayTestTile(this, "test120ModifyUserJackAssignAccountDummyRed");
+    public void test120ModifyUserJackAssignAccountDummyRedAndUgly() throws Exception {
+		final String TEST_NAME = "test120ModifyUserJackAssignAccountDummyRedAndUgly";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test120ModifyUserJackAssignAccountDummyRed");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
-        Collection<ObjectDelta<? extends ObjectType>> deltas = new ArrayList<ObjectDelta<? extends ObjectType>>();
-        ObjectDelta<UserType> accountAssignmentUserDelta = createAccountAssignmentUserDelta(USER_JACK_OID, RESOURCE_DUMMY_RED_OID, null, true);
-        deltas.add(accountAssignmentUserDelta);
-                
 		// WHEN
-		modelService.executeChanges(deltas, null, task, result);
-		
+        assignAccount(USER_JACK_OID, RESOURCE_DUMMY_RED_OID, null, task, result);
+        assignAccount(USER_JACK_OID, RESOURCE_DUMMY_UGLY_OID, null, task, result);
+
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
 		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
 		assertUserJack(userJack);
-		assertAccounts(USER_JACK_OID, 2);
+		assertLinks(userJack, 3);
         accountRedOid = getLinkRefOid(userJack, RESOURCE_DUMMY_RED_OID);
-                
+        accountUglyOid = getLinkRefOid(userJack, RESOURCE_DUMMY_UGLY_OID);
+
         // Check account in dummy resource
-        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, "jack", "Jack Sparrow", true);
-        
-        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, "jack", USER_PASSWORD_4_CLEAR);
-        
-        // User and default dummy account should have unchanged passwords
-        assertEncryptedPassword(userJack, USER_PASSWORD_4_CLEAR);
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "Jack Sparrow", true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_4_CLEAR);
+
+		assertDummyAccount(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, null, true);
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+
+		// User and default dummy account should have unchanged passwords
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_4_CLEAR);
      	assertDummyPassword("jack", USER_PASSWORD_5_CLEAR);
      	
      	assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
@@ -417,10 +402,11 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 	 */
 	@Test
     public void test121ModifyJackPasswordUserAndAccountRed() throws Exception {
-        TestUtil.displayTestTile(this, "test121ModifyJackPasswordUserAndAccountRed");
+		final String TEST_NAME = "test121ModifyJackPasswordUserAndAccountRed";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + ".test121ModifyJackPasswordUserAndAccountRed");
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -442,33 +428,467 @@ public class TestPassword extends AbstractInitializedModelIntegrationTest {
 		
 		// THEN
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         lastPasswordChangeEnd = clock.currentTimeXMLGregorianCalendar();
         
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
-		assertUserJack(userJack, "Jack Sparrow");
+		assertUserJack(userJack, USER_JACK_FULL_NAME);
         
 		// User should still have old password
-		assertEncryptedPassword(userJack, USER_PASSWORD_1_CLEAR);
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_1_CLEAR);
 		// Red account has the same account as user
-		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, "jack", USER_PASSWORD_1_CLEAR);
+		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
 		// ... and default account has also the same password as user now. There was no other change on default dummy instance 
 		// so even the weak mapping took place.
-		assertDummyPassword("jack", USER_PASSWORD_1_CLEAR);
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+
+		assertLinks(userJack, 3);
 		
 		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
 	}
+	
+	/**
+	 * Yellow resource has minimum password length constraint. But this time the password is OK.
+	 */
+	@Test
+    public void test130ModifyUserJackAssignAccountDummyYellow() throws Exception {
+		final String TEST_NAME = "test130ModifyUserJackAssignAccountDummyYellow";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
-	private void assertDummyPassword(String userId, String expectedClearPassword) {
-		assertDummyPassword(null, userId, expectedClearPassword);
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+		// WHEN
+        assignAccount(USER_JACK_OID, RESOURCE_DUMMY_YELLOW_OID, null, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+        accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+        // Check account in dummy resource (yellow)
+        assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
+        
+        // Check account in dummy resource (red)
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
+        
+        // User and default dummy account should have unchanged passwords
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_1_CLEAR);
+     	assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+
+		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
 	}
 	
-	private void assertDummyPassword(String instance, String userId, String expectedClearPassword) {
-		DummyAccount account = getDummyAccount(instance, userId);
-		assertNotNull("No dummy account "+userId, account);
-		assertEquals("Wrong password in dummy '"+instance+"' account "+userId, expectedClearPassword, account.getPassword());
+	/**
+	 * Yellow resource has minimum password length constraint. Change password to something shorter.
+	 * MID-3033, MID-2134
+	 */
+	@Test
+    public void test132ModifyUserJackPasswordA() throws Exception {
+		final String TEST_NAME = "test132ModifyUserJackPasswordA";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+		// WHEN
+        modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_A_CLEAR, task, result);
+		
+		// THEN
+		result.computeStatus();
+		TestUtil.assertPartialError(result);
+        
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+        accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+        // Check account in dummy resource (yellow): password is too short for this, original password should remain there
+        assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_1_CLEAR);
+        
+        // Check account in dummy resource (red)
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_A_CLEAR);
+        
+        // User and default dummy account should have unchanged passwords
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_A_CLEAR);
+     	assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_A_CLEAR);
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+	
+	@Test
+    public void test200ApplyPasswordPolicy() throws Exception {
+		final String TEST_NAME = "test200ApplyPasswordPolicy";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+		PrismReferenceValue passPolicyRef = new PrismReferenceValue(PASSWORD_POLICY_GLOBAL_OID, ValuePolicyType.COMPLEX_TYPE);
+		// WHEN
+        modifyObjectReplaceReference(SystemConfigurationType.class, SystemObjectsType.SYSTEM_CONFIGURATION.value(),
+        		SystemConfigurationType.F_GLOBAL_PASSWORD_POLICY_REF, task, result, passPolicyRef);
+		
+		// THEN
+		result.computeStatus();
+		TestUtil.assertSuccess(result);
+	}
+	
+	/**
+	 * Change to password that complies with password policy.
+	 */
+	@Test
+    public void test210ModifyUserJackPasswordGood() throws Exception {
+		final String TEST_NAME = "test210ModifyUserJackPasswordGood";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        lastPasswordChangeStart = clock.currentTimeXMLGregorianCalendar();
+                        
+		// WHEN
+        modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_VALID, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        lastPasswordChangeEnd = clock.currentTimeXMLGregorianCalendar();
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+        accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_VALID);
+        assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
+        
+        assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+	
+	/**
+	 * Change to password that violates the password policy (but is still OK for yellow resource).
+	 */
+	@Test
+    public void test220ModifyUserJackPasswordBad() throws Exception {
+		final String TEST_NAME = "test220ModifyUserJackPasswordBad";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+                       
+        try {
+			// WHEN
+	        modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_1_CLEAR, task, result);
+	        
+	        AssertJUnit.fail("Unexpected success");
+	        
+        } catch (PolicyViolationException e) {
+        	// This is expected
+        	display("Exected exception", e);
+        }
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertFailure(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+        accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+        // Make sure that the password is unchanged
+        
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_VALID);
+        assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
+        
+        assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+	
+	/**
+	 * Change to password that violates the password policy (but is still OK for yellow resource).
+	 * Use a different delta (container delta instead of property delta).
+	 * MID-2857
+	 */
+	@Test
+    public void test222ModifyUserJackPasswordBadContainer() throws Exception {
+		final String TEST_NAME = "test222ModifyUserJackPasswordBadContainer";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        ProtectedStringType userPasswordPs = new ProtectedStringType();
+		userPasswordPs.setClearValue(USER_PASSWORD_1_CLEAR);
+		PasswordType passwordType = new PasswordType();
+		passwordType.setValue(userPasswordPs);
+		
+		ObjectDelta<UserType> objectDelta = ObjectDelta.createModificationReplaceContainer(UserType.class, USER_JACK_OID, 
+				new ItemPath(UserType.F_CREDENTIALS,  CredentialsType.F_PASSWORD),
+						prismContext, passwordType);
+		Collection<ObjectDelta<? extends ObjectType>> deltas = MiscSchemaUtil.createCollection(objectDelta);
+        
+        try {
+			// WHEN
+    		modelService.executeChanges(deltas, null, task, result);
+	        
+	        AssertJUnit.fail("Unexpected success");
+	        
+        } catch (PolicyViolationException e) {
+        	// This is expected
+        	display("Exected exception", e);
+        }
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertFailure(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+        accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+        // Make sure that the password is unchanged
+        
+        assertEncryptedUserPassword(userJack, USER_PASSWORD_VALID);
+        assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
+        
+        assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+        
+        assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+        assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+	
+	// TODO: add user with password that violates the policy
+
+	/**
+	 * Create an org, and create two parentOrgRefs for jack (MID-3099).
+	 * Change to password that violates the password policy.
+	 */
+	@Test
+	public void test300TwoParentOrgRefs() throws Exception {
+		final String TEST_NAME = "test300TwoParentOrgRefs";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+
+		assignOrg(USER_JACK_OID, ORG_GOVERNOR_OFFICE_OID, null);
+		assignOrg(USER_JACK_OID, ORG_GOVERNOR_OFFICE_OID, SchemaConstants.ORG_MANAGER);
+
+		UserType jack = getUser(USER_JACK_OID).asObjectable();
+		display("jack", jack);
+		assertEquals("Wrong # of parentOrgRefs", 2, jack.getParentOrgRef().size());
+
+		ObjectDelta<OrgType> orgDelta = (ObjectDelta<OrgType>) DeltaBuilder.deltaFor(OrgType.class, prismContext)
+				.item(OrgType.F_PASSWORD_POLICY_REF).replace(new PrismReferenceValue(PASSWORD_POLICY_GLOBAL_OID))
+				.asObjectDelta(ORG_GOVERNOR_OFFICE_OID);
+		executeChanges(orgDelta, null, task, result);
+
+		OrgType govOffice = getObject(OrgType.class, ORG_GOVERNOR_OFFICE_OID).asObjectable();
+		display("governor's office", govOffice);
+		assertEquals("Wrong OID of password policy ref", PASSWORD_POLICY_GLOBAL_OID, govOffice.getPasswordPolicyRef().getOid());
+
+		try {
+			// WHEN
+			modifyUserChangePassword(USER_JACK_OID, USER_PASSWORD_1_CLEAR, task, result);
+
+			AssertJUnit.fail("Unexpected success");
+		} catch (PolicyViolationException e) {
+			// This is expected
+			display("Exected exception", e);
+		}
+
+		// THEN
+		result.computeStatus();
+		TestUtil.assertFailure(result);
+
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack);
+		assertLinks(userJack, 4);
+		accountYellowOid = getLinkRefOid(userJack, RESOURCE_DUMMY_YELLOW_OID);
+
+		// Make sure that the password is unchanged
+
+		assertEncryptedUserPassword(userJack, USER_PASSWORD_VALID);
+		assertPasswordMetadata(userJack, false, lastPasswordChangeStart, lastPasswordChangeEnd);
+
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		assertDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+		assertDummyPassword(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);
+
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+
+	/*
+	 *  Remove password. It should be removed from red resource as well. (MID-3111)
+	 *  Also unassign yellow resource (requires non-empty password), all orgs, and remove default password policy.
+	 */
+	@Test
+	public void test310RemovePassword() throws Exception {
+		final String TEST_NAME = "test310RemovePassword";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+
+		unassignAccount(USER_JACK_OID, RESOURCE_DUMMY_YELLOW_OID, null, task, result);
+		unassignOrg(USER_JACK_OID, ORG_GOVERNOR_OFFICE_OID, null, task, result);
+		unassignOrg(USER_JACK_OID, ORG_GOVERNOR_OFFICE_OID, SchemaConstants.ORG_MANAGER, task, result);
+		modifyObjectReplaceReference(SystemConfigurationType.class, SystemObjectsType.SYSTEM_CONFIGURATION.value(),
+				SystemConfigurationType.F_GLOBAL_PASSWORD_POLICY_REF, task, result);
+
+		// WHEN
+		modifyUserReplace(USER_JACK_OID, PASSWORD_VALUE_PATH, task, result);
+
+		// THEN
+		result.computeStatus();
+		TestUtil.assertSuccess(result);
+
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+
+		assertNull("User password is not null", userJack.asObjectable().getCredentials().getPassword().getValue());
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);			// password mapping is weak here - so no change is expected
+
+		assertNoDummyAccount(RESOURCE_DUMMY_YELLOW_NAME, ACCOUNT_JACK_DUMMY_USERNAME);
+
+		assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, null);	// password mapping is strong here
+
+		// this one is not changed
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp1234");
+	}
+
+	@Test
+	public void test320ChangeEmployeeNumber() throws Exception {
+		final String TEST_NAME = "test320ChangeEmployeeNumber";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+
+		// WHEN
+		modifyUserReplace(USER_JACK_OID, UserType.F_EMPLOYEE_NUMBER, task, result, "emp0000");
+
+		// THEN
+		result.computeStatus();
+		TestUtil.assertSuccess(result);
+
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		//assertUserJack(userJack, "Jack Sparrow");			// we changed employeeNumber, so this would fail
+
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);			// password mapping is weak here - so no change is expected
+
+		assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, null);
+
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, "emp0000");
+	}
+
+	@Test
+	public void test330RemoveEmployeeNumber() throws Exception {
+		final String TEST_NAME = "test330RemoveEmployeeNumber";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestPassword.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+
+		// WHEN
+		modifyUserReplace(USER_JACK_OID, UserType.F_EMPLOYEE_NUMBER, task, result);
+
+		// THEN
+		result.computeStatus();
+		TestUtil.assertSuccess(result);
+
+		PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		//assertUserJack(userJack, "Jack Sparrow");					// we changed employeeNumber, so this would fail
+
+		assertDummyPassword(ACCOUNT_JACK_DUMMY_USERNAME, USER_PASSWORD_VALID);			// password mapping is weak here - so no change is expected
+
+		assertDummyAccount(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, ACCOUNT_JACK_DUMMY_FULLNAME, true);
+		assertDummyPassword(RESOURCE_DUMMY_RED_NAME, ACCOUNT_JACK_DUMMY_USERNAME, null);
+
+		assertDummyPassword(RESOURCE_DUMMY_UGLY_NAME, ACCOUNT_JACK_DUMMY_USERNAME, null);
+	}
+
+
+	private void assertDummyPassword(String userId, String expectedClearPassword) throws SchemaViolationException, ConflictException {
+		assertDummyPassword(null, userId, expectedClearPassword);
 	}
 	
 }

@@ -16,7 +16,7 @@
 
 package com.evolveum.midpoint.notifications.impl.formatters;
 
-import com.evolveum.midpoint.notifications.impl.NotificationsUtil;
+import com.evolveum.midpoint.notifications.impl.NotificationFuctionsImpl;
 import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
@@ -26,8 +26,12 @@ import com.evolveum.midpoint.prism.path.ItemPathSegment;
 import com.evolveum.midpoint.prism.path.NameItemPathSegment;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.repo.api.RepositoryService;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ValueDisplayUtil;
+import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -57,6 +61,9 @@ public class TextFormatter {
     @Autowired(required = true)
     @Qualifier("cacheRepositoryService")
     private transient RepositoryService cacheRepositoryService;
+
+	private static final ResourceBundle RESOURCE_BUNDLE = ResourceBundle.getBundle(
+			SchemaConstants.SCHEMA_LOCALIZATION_PROPERTIES_RESOURCE_BASE_PATH);
 
     private static final Trace LOGGER = TraceManager.getTrace(TextFormatter.class);
 
@@ -185,7 +192,10 @@ public class TextFormatter {
         if (shadowType.getAssociation() != null) {
             boolean first = true;
             for (ShadowAssociationType shadowAssociationType : shadowType.getAssociation()) {
-                if (first) retval.append("\n"); else first = false;
+                if (first) {
+					first = false;
+					retval.append("\n");
+				}
                 retval.append("Association:\n");
                 formatContainerValue(retval, "  ", shadowAssociationType.asPrismContainerValue(), false, hiddenAttributes, showOperationalAttributes);
                 retval.append("\n");
@@ -331,7 +341,8 @@ public class TextFormatter {
 
     private PrismObject<? extends ObjectType> getPrismObject(String oid, boolean mightBeRemoved, OperationResult result) {
         try {
-            return cacheRepositoryService.getObject(ObjectType.class, oid, null, result);
+            Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createReadOnly());
+			return cacheRepositoryService.getObject(ObjectType.class, oid, options, result);
         } catch (ObjectNotFoundException e) {
             if (!mightBeRemoved) {
                 LoggingUtils.logException(LOGGER, "Couldn't resolve reference when displaying object name within a notification (it might be already removed)", e);
@@ -382,7 +393,7 @@ public class TextFormatter {
                     itemDefinition = objectDefinition.findItemDefinition(path.allUpToIncluding(segment));
                 }
                 if (itemDefinition != null && itemDefinition.getDisplayName() != null) {
-                    sb.append(itemDefinition.getDisplayName());
+                    sb.append(resolve(itemDefinition.getDisplayName()));
                 } else {
                     sb.append(((NameItemPathSegment) segment).getName().getLocalPart());
                 }
@@ -393,7 +404,15 @@ public class TextFormatter {
         return sb.toString();
     }
 
-    // we call this on filtered list of item deltas - all of they have definition set
+	private String resolve(String key) {
+		if (key != null && RESOURCE_BUNDLE.containsKey(key)) {
+			return RESOURCE_BUNDLE.getString(key);
+		} else {
+			return key;
+		}
+	}
+
+	// we call this on filtered list of item deltas - all of they have definition set
     private ItemPath getPathToExplain(ItemDelta itemDelta) {
         ItemPath path = itemDelta.getPath();
 
@@ -416,15 +435,21 @@ public class TextFormatter {
 
     private List<ItemDelta> filterAndOrderItemDeltas(ObjectDelta<? extends Objectable> objectDelta, List<ItemPath> hiddenPaths, boolean showOperationalAttributes) {
         List<ItemDelta> toBeDisplayed = new ArrayList<ItemDelta>(objectDelta.getModifications().size());
+        List<QName> noDefinition = new ArrayList<>();
         for (ItemDelta itemDelta: objectDelta.getModifications()) {
             if (itemDelta.getDefinition() != null) {
-                if ((showOperationalAttributes || !itemDelta.getDefinition().isOperational()) && !NotificationsUtil.isAmongHiddenPaths(itemDelta.getPath(), hiddenPaths)) {
+                if ((showOperationalAttributes || !itemDelta.getDefinition().isOperational()) && !NotificationFuctionsImpl
+						.isAmongHiddenPaths(itemDelta.getPath(), hiddenPaths)) {
                     toBeDisplayed.add(itemDelta);
                 }
             } else {
-                LOGGER.error("ItemDelta " + itemDelta.getElementName() + " without definition - WILL NOT BE INCLUDED IN NOTIFICATION. In " + objectDelta);
+                noDefinition.add(itemDelta.getElementName());
             }
         }
+		if (!noDefinition.isEmpty()) {
+			LOGGER.error("ItemDeltas for {} without definition - WILL NOT BE INCLUDED IN NOTIFICATION. Containing object delta:\n{}",
+					noDefinition, objectDelta.debugDump());
+		}
         Collections.sort(toBeDisplayed, new Comparator<ItemDelta>() {
             @Override
             public int compare(ItemDelta delta1, ItemDelta delta2) {
@@ -447,21 +472,29 @@ public class TextFormatter {
     // we call this on filtered list of items - all of them have definition set
     private String getItemLabel(Item item) {
         return item.getDefinition().getDisplayName() != null ?
-                item.getDefinition().getDisplayName() : item.getElementName().getLocalPart();
+                resolve(item.getDefinition().getDisplayName()) : item.getElementName().getLocalPart();
     }
 
     private List<Item> filterAndOrderItems(List<Item> items, List<ItemPath> hiddenPaths, boolean showOperationalAttributes) {
+        if (items == null) {
+            return new ArrayList<>();
+        }
         List<Item> toBeDisplayed = new ArrayList<Item>(items.size());
+        List<QName> noDefinition = new ArrayList<>();
         for (Item item : items) {
             if (item.getDefinition() != null) {
-                boolean isHidden = NotificationsUtil.isAmongHiddenPaths(item.getPath(), hiddenPaths);
+                boolean isHidden = NotificationFuctionsImpl.isAmongHiddenPaths(item.getPath(), hiddenPaths);
                 if (!isHidden && (showOperationalAttributes || !item.getDefinition().isOperational())) {
                     toBeDisplayed.add(item);
                 }
             } else {
-                LOGGER.error("Item " + item.getElementName() + " without definition - WILL NOT BE INCLUDED IN NOTIFICATION.");
+				noDefinition.add(item.getElementName());
             }
         }
+		if (!noDefinition.isEmpty()) {
+			LOGGER.error("Items {} without definition - THEY WILL NOT BE INCLUDED IN NOTIFICATION.\nAll items:\n{}",
+					noDefinition, DebugUtil.debugDump(items));
+		}
         Collections.sort(toBeDisplayed, new Comparator<Item>() {
             @Override
             public int compare(Item item1, Item item2) {

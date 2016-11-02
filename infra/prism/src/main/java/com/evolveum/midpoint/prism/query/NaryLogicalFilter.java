@@ -16,7 +16,6 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public abstract class NaryLogicalFilter extends LogicalFilter {
@@ -42,4 +41,12 @@ public abstract class NaryLogicalFilter extends LogicalFilter {
 		return null;
 	}
 
+	public ObjectFilter getLastCondition() {
+		List<ObjectFilter> conditions = getConditions();
+		if (conditions.isEmpty()) {
+			return null;
+		} else {
+			return conditions.get(conditions.size()-1);
+		}
+	}
 }

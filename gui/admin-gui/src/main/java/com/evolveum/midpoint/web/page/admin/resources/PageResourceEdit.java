@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,9 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.evolveum.midpoint.web.page.admin.resources;
 
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
@@ -23,10 +25,9 @@ import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.PrismReference;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.parser.QueryConvertor;
+import com.evolveum.midpoint.prism.marshaller.QueryConvertor;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
-import com.evolveum.midpoint.prism.query.QueryJaxbConvertor;
 import com.evolveum.midpoint.prism.schema.SchemaRegistry;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.security.api.AuthorizationConstants;
@@ -38,11 +39,9 @@ import com.evolveum.midpoint.web.application.AuthorizationAction;
 import com.evolveum.midpoint.web.application.PageDescriptor;
 import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.AjaxSubmitButton;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
 import com.evolveum.midpoint.web.component.AceEditor;
 import com.evolveum.midpoint.web.page.admin.dto.ObjectViewDto;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 
@@ -53,7 +52,6 @@ import org.apache.wicket.ajax.markup.html.form.AjaxCheckBox;
 import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.PropertyModel;
-import org.apache.wicket.model.StringResourceModel;
 import org.apache.wicket.util.string.StringValue;
 
 import java.util.List;
@@ -106,7 +104,8 @@ public class PageResourceEdit extends PageAdminResources {
                 }
 
                 String name = model.getObject().getName();
-                return new StringResourceModel("page.title.editResource", PageResourceEdit.this, null, null, name).getString();
+                return PageBase.createStringResourceStatic(PageResourceEdit.this, "page.title.editResource", name).getString();
+//                return new StringResourceModel("page.title.editResource", PageResourceEdit.this, null, null, name).getString();
             }
         };
     }
@@ -121,9 +120,9 @@ public class PageResourceEdit extends PageAdminResources {
             PrismObject<ResourceType> resource = loadResource(null);
             String xml = getPrismContext().serializeObjectToString(resource, PrismContext.LANG_XML);
 
-            dto = new ObjectViewDto(resource.getOid(), WebMiscUtil.getName(resource), resource, xml);
+            dto = new ObjectViewDto(resource.getOid(), WebComponentUtil.getName(resource), resource, xml);
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't load resource", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load resource", ex);
             throw new RestartResponseException(PageResources.class);
         }
 
@@ -215,7 +214,7 @@ public class PageResourceEdit extends PageAdminResources {
         OperationResult result = task.getResult();
         try {
             Holder<PrismObject<ResourceType>> objectHolder = new Holder<PrismObject<ResourceType>>(null);
-            validateObject(dto.getXml(), objectHolder, false, result);
+            validateObject(dto.getXml(), objectHolder, PrismContext.LANG_XML, false, result);
 
             if (result.isAcceptable()) {
                 PrismObject<ResourceType> newResource = objectHolder.getValue();
@@ -224,25 +223,25 @@ public class PageResourceEdit extends PageAdminResources {
                 if (!isEditing()) {
                     //we're adding new resource
                     ObjectDelta delta = ObjectDelta.createAddDelta(newResource);
-                    getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), null, task, result);
+                    getModelService().executeChanges(WebComponentUtil.createDeltaCollection(delta), null, task, result);
                 } else {
                     //we're editing existing resource
                     PrismObject<ResourceType> oldResource = dto.getObject();
                     ObjectDelta<ResourceType> delta = oldResource.diff(newResource);
 
-                    getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta),
+                    getModelService().executeChanges(WebComponentUtil.createDeltaCollection(delta),
                             ModelExecuteOptions.createRaw(), task, result);
                 }
 
                 result.computeStatus();
             }
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't save resource", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't save resource", ex);
             result.recordFatalError("Couldn't save resource.", ex);
         }
 
-        if (WebMiscUtil.isSuccessOrHandledError(result)) {
-            showResultInSession(result);
+        if (WebComponentUtil.isSuccessOrHandledError(result)) {
+            showResult(result);
             setResponsePage(new PageResources(false));
         } else {
             showResult(result);

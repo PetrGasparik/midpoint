@@ -32,7 +32,7 @@ public class AuthorizationConstants {
 	public static final String NS_AUTHORIZATION_WS = NS_SECURITY_PREFIX + "authorization-ws-3";
 	public static final String NS_AUTHORIZATION_REST = NS_SECURITY_PREFIX + "authorization-rest-3";
 	public static final String NS_AUTHORIZATION_MODEL = NS_SECURITY_PREFIX + "authorization-model-3";
-	
+
 	public static final QName AUTZ_ALL_QNAME = new QName(NS_AUTHORIZATION, "all");
 	public static final String AUTZ_ALL_URL = QNameUtil.qNameToUri(AUTZ_ALL_QNAME);
 	
@@ -54,8 +54,10 @@ public class AuthorizationConstants {
     public static final String AUTZ_GUI_ALL_URL = QNameUtil.qNameToUri(AUTZ_GUI_ALL_QNAME);
     public static final String AUTZ_GUI_ALL_LABEL = "Authorization.constants.guiAll.label";
     public static final String AUTZ_GUI_ALL_DESCRIPTION = "Authorization.constants.guiAll.description";
-    
+
+	@Deprecated
     public static final QName AUTZ_GUI_ALL_DEPRECATED_QNAME = new QName(NS_AUTHORIZATION, "guiAll");
+	@Deprecated
     public static final String AUTZ_GUI_ALL_DEPRECATED_URL = QNameUtil.qNameToUri(AUTZ_GUI_ALL_DEPRECATED_QNAME);
     
     
@@ -80,6 +82,9 @@ public class AuthorizationConstants {
 	public static final QName AUTZ_UI_USER_DETAILS_QNAME = new QName(NS_AUTHORIZATION_UI, "userDetails");
 	public static final String AUTZ_UI_USER_DETAILS_URL = NS_AUTHORIZATION_UI + "#userDetails";
 	
+	public static final QName AUTZ_UI_MERGE_OBJECTS_QNAME = new QName(NS_AUTHORIZATION_UI, "mergeObjects");
+	public static final String AUTZ_UI_MERGE_OBJECTS_URL = NS_AUTHORIZATION_UI + "#mergeObjects";
+
 	public static final QName AUTZ_UI_ORG_STRUCT_QNAME = new QName(NS_AUTHORIZATION_UI, "orgStruct");
 	public static final String AUTZ_UI_ORG_STRUCT_URL = NS_AUTHORIZATION_UI + "#orgStruct";
 
@@ -91,6 +96,17 @@ public class AuthorizationConstants {
 
 	public static final QName AUTZ_UI_ORG_UNIT_QNAME = new QName(NS_AUTHORIZATION_UI, "orgUnit");
 	public static final String AUTZ_UI_ORG_UNIT_URL = NS_AUTHORIZATION_UI + "#orgUnit";
+	
+	public static final QName AUTZ_UI_SERVICES_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "servicesAll");
+	public static final String AUTZ_UI_SERVICES_ALL_URL = NS_AUTHORIZATION_UI + "#servicesAll";
+	
+	public static final QName AUTZ_UI_SERVICES_QNAME = new QName(NS_AUTHORIZATION_UI, "services");
+	public static final String AUTZ_UI_SERVICES_URL = NS_AUTHORIZATION_UI + "#services";
+	
+	public static final QName AUTZ_UI_SERVICE_QNAME = new QName(NS_AUTHORIZATION_UI, "service");
+	public static final String AUTZ_UI_SERVICE_URL = NS_AUTHORIZATION_UI + "#service";
+
+
 
 	
 	//resources
@@ -99,6 +115,10 @@ public class AuthorizationConstants {
 	
 	public static final QName AUTZ_UI_RESOURCES_QNAME = new QName(NS_AUTHORIZATION_UI, "resources");
 	public static final String AUTZ_UI_RESOURCES_URL = NS_AUTHORIZATION_UI + "#resources";
+	
+	public static final QName AUTZ_UI_CONNECTOR_HOSTS_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "connectorHostsAll");
+	public static final String AUTZ_UI_CONNECTOR_HOSTS_ALL_URL = NS_AUTHORIZATION_UI + "#connectorHostsAll";
+	
 
 	// Resource XML editor
 	public static final QName AUTZ_UI_RESOURCE_QNAME = new QName(NS_AUTHORIZATION_UI, "resource");
@@ -152,6 +172,12 @@ public class AuthorizationConstants {
     public static final QName AUTZ_UI_CONFIGURATION_INTERNALS_QNAME = new QName(NS_AUTHORIZATION_UI, "configInternals");
 	public static final String AUTZ_UI_CONFIGURATION_INTERNALS_URL = NS_AUTHORIZATION_UI + "#configInternals";
 	
+    public static final QName AUTZ_UI_CONFIGURATION_REPOSITORY_QUERY = new QName(NS_AUTHORIZATION_UI, "configRepositoryQuery");
+	public static final String AUTZ_UI_CONFIGURATION_REPOSITORY_QUERY_URL = NS_AUTHORIZATION_UI + "#configRepositoryQuery";
+
+    public static final QName AUTZ_UI_CONFIGURATION_EVALUATE_MAPPING = new QName(NS_AUTHORIZATION_UI, "configEvaluateMapping");
+	public static final String AUTZ_UI_CONFIGURATION_EVALUATE_MAPPING_URL = NS_AUTHORIZATION_UI + "#configEvaluateMapping";
+
 	//Roles
 	public static final QName AUTZ_UI_ROLES_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "rolesAll");
 	public static final String AUTZ_UI_ROLES_ALL_URL = NS_AUTHORIZATION_UI + "#rolesAll";
@@ -166,31 +192,16 @@ public class AuthorizationConstants {
 	public static final String AUTZ_UI_ROLE_DETAILS_URL = NS_AUTHORIZATION_UI + "#roleDetails";
 	
 	
-	//Work Items
-	public static final QName AUTZ_UI_WORK_ITEMS_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsAll");
-	public static final String AUTZ_UI_WORK_ITEMS_ALL_URL = NS_AUTHORIZATION_UI + "#workItemsAll";
-	
-	public static final QName AUTZ_UI_WORK_ITEMS_QNAME = new QName(NS_AUTHORIZATION_UI, "workItems");
-	public static final String AUTZ_UI_WORK_ITEMS_URL = NS_AUTHORIZATION_UI + "#workItems";
-	
-	public static final QName AUTZ_UI_WORK_ITEM_QNAME = new QName(NS_AUTHORIZATION_UI, "workItem");
+	//Approvals (workflows)
+	public static final String AUTZ_UI_APPROVALS_ALL_URL = NS_AUTHORIZATION_UI + "#approvalsAll";
+	public static final String AUTZ_UI_MY_WORK_ITEMS_URL = NS_AUTHORIZATION_UI + "#myWorkItems";
+	public static final String AUTZ_UI_CLAIMABLE_WORK_ITEMS_URL = NS_AUTHORIZATION_UI + "#claimableWorkItems";
+	public static final String AUTZ_UI_ALL_WORK_ITEMS_URL = NS_AUTHORIZATION_UI + "#allWorkItems";
 	public static final String AUTZ_UI_WORK_ITEM_URL = NS_AUTHORIZATION_UI + "#workItem";
-	
-	public static final QName AUTZ_UI_WORK_ITEMS_ALL_REQUESTS_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsAllRequests");
-	public static final String AUTZ_UI_WORK_ITEMS_ALL_REQUESTS_URL = NS_AUTHORIZATION_UI + "#workItemsAllRequests";
-	
-	public static final QName AUTZ_UI_WORK_ITEMS_MY_REQUESTS_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsMyRequests");
-	public static final String AUTZ_UI_WORK_ITEMS_MY_REQUESTS_URL = NS_AUTHORIZATION_UI + "#workItemsMyRequests";
-	
-	public static final QName AUTZ_UI_WORK_ITEMS_ABOUT_ME_REQUESTS_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsAboutMeRequests");
-	public static final String AUTZ_UI_WORK_ITEMS_ABOUT_ME_REQUESTS_URL = NS_AUTHORIZATION_UI + "#workItemsAboutMeRequests";
-	
-	public static final QName AUTZ_UI_WORK_ITEMS_PROCESS_INSTANCE_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsProcessInstance");
-	public static final String AUTZ_UI_WORK_ITEMS_PROCESS_INSTANCE_URL = NS_AUTHORIZATION_UI + "#workItemsProcessInstance";
+	public static final String AUTZ_UI_WORK_ITEMS_ALL_REQUESTS_URL = NS_AUTHORIZATION_UI + "#allRequests";
+	public static final String AUTZ_UI_MY_REQUESTS_URL = NS_AUTHORIZATION_UI + "#myRequests";
+	public static final String AUTZ_UI_REQUESTS_ABOUT_ME_URL = NS_AUTHORIZATION_UI + "#requestsAboutMe";
 
-    public static final QName AUTZ_UI_WORK_ITEMS_APPROVE_OTHERS_ITEMS_QNAME = new QName(NS_AUTHORIZATION_UI, "workItemsApproveOthersItems");
-    public static final String AUTZ_UI_WORK_ITEMS_APPROVE_OTHERS_ITEMS_URL = NS_AUTHORIZATION_UI + "#workItemsApproveOthersItems";
-    
 	//Tasks
 	public static final QName AUTZ_UI_TASKS_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "tasksAll");
 	public static final String AUTZ_UI_TASKS_ALL_URL = NS_AUTHORIZATION_UI + "#tasksAll";
@@ -221,12 +232,19 @@ public class AuthorizationConstants {
 	public static final QName AUTZ_UI_REPORTS_CREATED_REPORTS_QNAME = new QName(NS_AUTHORIZATION_UI, "createdReports");
 	public static final String AUTZ_UI_REPORTS_CREATED_REPORTS_URL = NS_AUTHORIZATION_UI + "#createdReports";
 
+	public static final QName AUTZ_UI_AUDIT_LOG_VIEWER_QNAME = new QName(NS_AUTHORIZATION_UI, "auditLogViewer");
+	public static final String AUTZ_UI_AUDIT_LOG_VIEWER_URL = NS_AUTHORIZATION_UI + "#auditLogViewer";
+
 	public static final QName AUTZ_UI_REPORTS_REPORT_CREATE_QNAME = new QName(NS_AUTHORIZATION_UI, "reportCreate");
 	public static final String AUTZ_UI_REPORTS_REPORT_CREATE_URL = NS_AUTHORIZATION_UI + "#reportCreate";
 
-    //Reports
-    public static final QName AUTZ_UI_CERTIFICATION_QNAME = new QName(NS_AUTHORIZATION_UI, "certification");
-    public static final String AUTZ_UI_CERTIFICATION_URL = NS_AUTHORIZATION_UI + "#certification";
+    //Certification
+	public static final String AUTZ_UI_CERTIFICATION_DEFINITIONS_URL = NS_AUTHORIZATION_UI + "#certificationDefinitions";
+	public static final String AUTZ_UI_CERTIFICATION_DEFINITION_URL = NS_AUTHORIZATION_UI + "#certificationDefinition";
+	public static final String AUTZ_UI_CERTIFICATION_NEW_DEFINITION_URL = NS_AUTHORIZATION_UI + "#certificationNewDefinition";
+	public static final String AUTZ_UI_CERTIFICATION_CAMPAIGNS_URL = NS_AUTHORIZATION_UI + "#certificationCampaigns";
+	public static final String AUTZ_UI_CERTIFICATION_CAMPAIGN_URL = NS_AUTHORIZATION_UI + "#certificationCampaign";
+	public static final String AUTZ_UI_CERTIFICATION_DECISIONS_URL = NS_AUTHORIZATION_UI + "#certificationDecisions";
 
     public static final QName AUTZ_UI_CERTIFICATION_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "certificationAll");
     public static final String AUTZ_UI_CERTIFICATION_ALL_URL = NS_AUTHORIZATION_UI + "#certificationAll";
@@ -266,15 +284,22 @@ public class AuthorizationConstants {
 	public static final QName AUTZ_UI_SELF_PROFILE_QNAME = new QName(NS_AUTHORIZATION_UI, "selfProfile");
 	public static final String AUTZ_UI_SELF_PROFILE_URL = NS_AUTHORIZATION_UI + "#selfProfile";
 
+	public static final QName AUTZ_UI_SELF_REQUEST_ROLE_QNAME = new QName(NS_AUTHORIZATION_UI, "selfRequestRole");
+	public static final String AUTZ_UI_SELF_REQUEST_ROLE_URL = NS_AUTHORIZATION_UI + "#selfRequestRole";
+
+	public static final QName AUTZ_UI_SELF_ASSIGNMENT_SHOP_KART_QNAME = new QName(NS_AUTHORIZATION_UI, "selfRequestAssignment");
+	public static final String AUTZ_UI_SELF_ASSIGNMENT_SHOP_KART_URL = NS_AUTHORIZATION_UI + "#selfRequestAssignment";
+
+	public static final QName AUTZ_UI_SELF_ASSIGNMENT_DETAILS_QNAME = new QName(NS_AUTHORIZATION_UI, "assignmentDetails");
+	public static final String AUTZ_UI_SELF_ASSIGNMENT_DETAILS_URL = NS_AUTHORIZATION_UI + "#assignmentDetails";
+
 	public static final QName AUTZ_UI_SELF_DASHBOARD_QNAME = new QName(NS_AUTHORIZATION_UI, "selfDashboard");
 	public static final String AUTZ_UI_SELF_DASHBOARD_URL = NS_AUTHORIZATION_UI + "#selfDashboard";
-	
+
 	//permitAll  - it means, no authorization is required, everyone can access these resources, this is user for about system and about midpoint pages..
 	public static final QName AUTZ_UI_PERMIT_ALL_QNAME = new QName(NS_AUTHORIZATION_UI, "permitAll");
 	public static final String AUTZ_UI_PERMIT_ALL_URL = QNameUtil.qNameToUri(AUTZ_UI_PERMIT_ALL_QNAME);
     public static final String AUTZ_UI_PERMIT_ALL = NS_AUTHORIZATION + "#permitAll";
-	
-	
 
 	
 	//About
@@ -283,5 +308,15 @@ public class AuthorizationConstants {
 //	
 //	public static final QName AUTZ_UI_ABOUT_SYSTEM_QNAME = new QName(NS_AUTHORIZATION, "abountSystem");
 //	public static final String AUTZ_UI_ABOUT_SYSTEM_URL = QNameUtil.qNameToUri(AUTZ_UI_ABOUT_SYSTEM_QNAME);
-	
+
+    // Does not really belong here. But there is no better place now.
+    public static final String ANONYMOUS_USER_PRINCIPAL = "anonymousUser";
+
+    //authorization for assign and unassign actions
+    public static final QName AUTZ_UI_ASSIGN_ACTION_QNAME = new QName(NS_AUTHORIZATION_MODEL, "assign");
+    public static final String AUTZ_UI_ASSIGN_ACTION_URL = NS_AUTHORIZATION_MODEL + "#assign";
+
+    public static final QName AUTZ_UI_UNASSIGN_ACTION_QNAME = new QName(NS_AUTHORIZATION_MODEL, "unassign");
+    public static final String AUTZ_UI_UNASSIGN_ACTION_URL = NS_AUTHORIZATION_MODEL + "#unassign";
+
 }

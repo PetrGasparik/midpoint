@@ -20,28 +20,18 @@ import static org.testng.AssertJUnit.assertEquals;
 import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertTrue;
 
-import javax.xml.namespace.QName;
-
 import com.evolveum.midpoint.prism.ComplexTypeDefinition;
-import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.PrismConstants;
-import com.evolveum.midpoint.prism.PrismContainer;
 import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.PrismReferenceDefinition;
 import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
-import com.evolveum.midpoint.schema.processor.ResourceAttribute;
-import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
 import com.evolveum.midpoint.util.DOMUtil;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ExtensionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.MetadataType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -61,7 +51,7 @@ public class SchemaTestUtil {
 		assertFocusDefinition(userDefinition.getComplexTypeDefinition(), "user");
 
 		PrismAsserts.assertPropertyDefinition(userDefinition, UserType.F_FULL_NAME, SchemaConstants.T_POLY_STRING_TYPE, 0, 1);
-		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, UserType.F_FULL_NAME, "Full Name");
+		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, UserType.F_FULL_NAME, "UserType.fullName");
 		PrismAsserts.assertItemDefinitionDisplayOrder(userDefinition, UserType.F_FULL_NAME, 100);
 		PrismAsserts.assertPropertyDefinition(userDefinition, UserType.F_GIVEN_NAME, PrismConstants.POLYSTRING_TYPE_QNAME, 0, 1);
 		PrismAsserts.assertPropertyDefinition(userDefinition, UserType.F_FAMILY_NAME, PrismConstants.POLYSTRING_TYPE_QNAME, 0, 1);
@@ -72,10 +62,10 @@ public class SchemaTestUtil {
 		assertNotNull("No "+defDesc+" definition", complexTypeDefinition);
 		
 		PrismAsserts.assertPropertyDefinition(complexTypeDefinition, ObjectType.F_NAME, PolyStringType.COMPLEX_TYPE, 0, 1);
-		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, ObjectType.F_NAME, "Name");
+		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, ObjectType.F_NAME, "ObjectType.name");
 		PrismAsserts.assertItemDefinitionDisplayOrder(complexTypeDefinition, ObjectType.F_NAME, 0);
 		PrismAsserts.assertPropertyDefinition(complexTypeDefinition, ObjectType.F_DESCRIPTION, DOMUtil.XSD_STRING, 0, 1);
-		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, ObjectType.F_DESCRIPTION, "Description");
+		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, ObjectType.F_DESCRIPTION, "ObjectType.description");
 		PrismAsserts.assertItemDefinitionDisplayOrder(complexTypeDefinition, ObjectType.F_DESCRIPTION, 10);
 		assertFalse(""+defDesc+" definition is marked as runtime", complexTypeDefinition.isRuntimeSchema());
 		
@@ -84,7 +74,7 @@ public class SchemaTestUtil {
 		assertTrue("Extension is NOT runtime", extensionContainer.isRuntimeSchema());
 		assertTrue("Extension is NOT dynamic", extensionContainer.isDynamic());
 		assertEquals("Extension size", 0, extensionContainer.getDefinitions().size());
-		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, UserType.F_EXTENSION, "Extension");
+		PrismAsserts.assertItemDefinitionDisplayName(complexTypeDefinition, UserType.F_EXTENSION, "ObjectType.extension");
 		PrismAsserts.assertItemDefinitionDisplayOrder(complexTypeDefinition, UserType.F_EXTENSION, 1000);
 
 		PrismContainerDefinition activationContainer = complexTypeDefinition.findContainerDefinition(UserType.F_ACTIVATION);

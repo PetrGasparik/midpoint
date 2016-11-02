@@ -32,7 +32,6 @@ import org.identityconnectors.framework.common.objects.OperationalAttributes;
 import org.identityconnectors.framework.common.objects.PredefinedAttributes;
 import org.identityconnectors.framework.common.objects.Uid;
 
-import com.evolveum.midpoint.prism.ComplexTypeDefinition;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
@@ -45,7 +44,6 @@ import com.evolveum.midpoint.schema.processor.ResourceAttribute;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeContainer;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeContainerDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
-import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
@@ -106,7 +104,8 @@ public class IcfConvertor {
 	 * @throws SchemaException
 	 */
 	<T extends ShadowType> PrismObject<T> convertToResourceObject(ConnectorObject co,
-			PrismObjectDefinition<T> objectDefinition, boolean full, boolean caseIgnoreAttributeNames) throws SchemaException {
+			PrismObjectDefinition<T> objectDefinition, boolean full, boolean caseIgnoreAttributeNames,
+			boolean legacySchema) throws SchemaException {
 
 		PrismObject<T> shadowPrism = null;
 		if (objectDefinition != null) {
@@ -135,11 +134,11 @@ public class IcfConvertor {
 			if (icfAttr.is(PredefinedAttributes.AUXILIARY_OBJECT_CLASS_NAME)) {
 				List<QName> auxiliaryObjectClasses = shadow.getAuxiliaryObjectClass();
 				for (Object auxiliaryIcfObjectClass: icfAttr.getValue()) {
-					QName auxiliaryObjectClassQname = icfNameMapper.objectClassToQname(new ObjectClass((String)auxiliaryIcfObjectClass), resourceSchemaNamespace, false);
+					QName auxiliaryObjectClassQname = icfNameMapper.objectClassToQname(new ObjectClass((String)auxiliaryIcfObjectClass), resourceSchemaNamespace, legacySchema);
 					auxiliaryObjectClasses.add(auxiliaryObjectClassQname);
 					ObjectClassComplexTypeDefinition auxiliaryObjectClassDefinition = icfNameMapper.getResourceSchema().findObjectClassDefinition(auxiliaryObjectClassQname);
 					if (auxiliaryObjectClassDefinition == null) {
-						throw new SchemaException("Resource object "+co+" refers to auxiliary objetc class "+auxiliaryObjectClassQname+" which is not in the schema");
+						throw new SchemaException("Resource object "+co+" refers to auxiliary object class "+auxiliaryObjectClassQname+" which is not in the schema");
 					}
 					auxiliaryObjectClassDefinitions.add(auxiliaryObjectClassDefinition);
 				}
@@ -162,12 +161,18 @@ public class IcfConvertor {
 			if (icfAttr.getName().equals(OperationalAttributes.PASSWORD_NAME)) {
 				// password has to go to the credentials section
 				ProtectedStringType password = getSingleValue(icfAttr, ProtectedStringType.class);
+				if (password == null) {
+					continue;
+				}
 				ShadowUtil.setPassword(shadow, password);
 				LOGGER.trace("Converted password: {}", password);
 				continue;
 			}
 			if (icfAttr.getName().equals(OperationalAttributes.ENABLE_NAME)) {
 				Boolean enabled = getSingleValue(icfAttr, Boolean.class);
+				if (enabled == null) {
+					continue;
+				}
 				ActivationType activationType = ShadowUtil.getOrCreateActivation(shadow);
 				ActivationStatusType activationStatusType;
 				if (enabled) {
@@ -183,6 +188,9 @@ public class IcfConvertor {
 			
 			if (icfAttr.getName().equals(OperationalAttributes.ENABLE_DATE_NAME)) {
 				Long millis = getSingleValue(icfAttr, Long.class);
+				if (millis == null) {
+					continue;
+				}
 				ActivationType activationType = ShadowUtil.getOrCreateActivation(shadow);
 				activationType.setValidFrom(XmlTypeConverter.createXMLGregorianCalendar(millis));
 				continue;
@@ -190,6 +198,9 @@ public class IcfConvertor {
 
 			if (icfAttr.getName().equals(OperationalAttributes.DISABLE_DATE_NAME)) {
 				Long millis = getSingleValue(icfAttr, Long.class);
+				if (millis == null) {
+					continue;
+				}
 				ActivationType activationType = ShadowUtil.getOrCreateActivation(shadow);
 				activationType.setValidTo(XmlTypeConverter.createXMLGregorianCalendar(millis));
 				continue;
@@ -197,6 +208,9 @@ public class IcfConvertor {
 			
 			if (icfAttr.getName().equals(OperationalAttributes.LOCK_OUT_NAME)) {
 				Boolean lockOut = getSingleValue(icfAttr, Boolean.class);
+				if (lockOut == null) {
+					continue;
+				}
 				if (lockOut != null){
 					ActivationType activationType = ShadowUtil.getOrCreateActivation(shadow);
 					LockoutStatusType lockoutStatusType;
@@ -275,10 +289,18 @@ public class IcfConvertor {
 
 		}
 		
-		// Add Uid if it is not there already. It can be already present, e.g. if Uid and Name represent the same attribute
+		// Add Uid if it is not there already. It can be already present, 
+		// e.g. if Uid and Name represent the same attribute
 		Uid uid = co.getUid();
-		ResourceAttribute<String> uidRoa = IcfUtil.createUidAttribute(uid, IcfUtil.getUidDefinition(attributesContainerDefinition.getComplexTypeDefinition()));
-		if (attributesContainer.getValue().findItem(uidRoa.getElementName()) == null) {
+		ObjectClassComplexTypeDefinition ocDef = attributesContainerDefinition.getComplexTypeDefinition();
+		ResourceAttributeDefinition<String> uidDefinition = IcfUtil.getUidDefinition(ocDef);
+		if (uidDefinition == null) {
+			throw new SchemaException("No definition for ConnId UID attribute found in definition "
+					+ ocDef);
+		}
+		if (attributesContainer.getValue().findItem(uidDefinition.getName()) == null) {
+			ResourceAttribute<String> uidRoa = uidDefinition.instantiate();
+			uidRoa.setValue(new PrismPropertyValue<String>(uid.getUidValue()));
 			attributesContainer.getValue().add(uidRoa);
 		}
 
@@ -319,7 +341,11 @@ public class IcfConvertor {
 			connIdAttributeValues.add(UcfUtil.convertValueToIcf(pval, protector, mpAttribute.getElementName()));
 		}
 
-		return AttributeBuilder.build(connIdAttrName, connIdAttributeValues);
+		try {
+			return AttributeBuilder.build(connIdAttrName, connIdAttributeValues);
+		} catch (IllegalArgumentException e) {
+			throw new SchemaException(e.getMessage(), e);
+		}
 	}
 	
 	private <T> T getSingleValue(Attribute icfAttr, Class<T> type) throws SchemaException {
@@ -329,6 +355,9 @@ public class IcfConvertor {
 				throw new SchemaException("Expected single value for " + icfAttr.getName());
 			}
 			Object val = convertValueFromIcf(values.get(0), null);
+			if (val == null) {
+				return null;
+			}
 			if (type.isAssignableFrom(val.getClass())) {
 				return (T) val;
 			} else {
@@ -337,7 +366,6 @@ public class IcfConvertor {
 			}
 		} else {
 			return null;
-//			throw new SchemaException("Empty value for " + icfAttr.getName());
 		}
 
 	}

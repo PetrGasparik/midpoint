@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 
 import org.apache.commons.configuration.*;
-import org.apache.wss4j.dom.WSSConfig;
+import org.apache.wss4j.dom.engine.WSSConfig;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 
@@ -47,7 +47,8 @@ public class StartupConfiguration implements MidpointConfiguration {
     private static final String MIDPOINT_HOME = "midpoint.home";
     private static final String MIDPOINT_SECTION = "midpoint";
     private static final String SAFE_MODE = "safeMode";
-    
+    private static final String PROFILING_ENABLED = "profilingEnabled";
+
     private static final String DEFAULT_CONFIG_FILE_NAME = "config.xml";
 	private static final String LOGBACK_CONFIG_FILENAME = "logback.xml";
 
@@ -196,24 +197,23 @@ public class StartupConfiguration implements MidpointConfiguration {
         DocumentBuilder documentBuilder = DOMUtil.createDocumentBuilder();          // we need namespace-aware document builder (see GeneralChangeProcessor.java)
 
         if (midpointHome != null) {
-        /* configuration logic */
-        	File f = new File(midpointHome, this.getConfigFilename());
-        	System.out.println("Loading midPoint configuration from file "+f);
-        	LOGGER.info("Loading midPoint configuration from file {}", f);
+        	
+            ApplicationHomeSetup ah = new ApplicationHomeSetup();
+            ah.init(MIDPOINT_HOME);
+
+        	File configFile = new File(midpointHome, this.getConfigFilename());
+        	System.out.println("Loading midPoint configuration from file "+configFile);
+        	LOGGER.info("Loading midPoint configuration from file {}", configFile);
         	try {
-                if (!f.exists()) {
-                    LOGGER.warn("Configuration file {} does not exists. Need to do extraction ...", f);
-
-                    ApplicationHomeSetup ah = new ApplicationHomeSetup();
-                    ah.init(MIDPOINT_HOME);
-                    ClassPathUtil.extractFileFromClassPath(this.getConfigFilename(), f.getPath());
-
+                if (!configFile.exists()) {
+                    LOGGER.warn("Configuration file {} does not exists. Need to do extraction ...", configFile);
+                    ClassPathUtil.extractFileFromClassPath(this.getConfigFilename(), configFile.getPath());
                 }
                 //Load and parse properties
                 config.addProperty(MIDPOINT_HOME, System.getProperty(MIDPOINT_HOME));
-                createXmlConfiguration(documentBuilder, f.getPath());
+                createXmlConfiguration(documentBuilder, configFile.getPath());
             } catch (ConfigurationException e) {
-                String message = "Unable to read configuration file [" + f + "]: " + e.getMessage();
+                String message = "Unable to read configuration file [" + configFile + "]: " + e.getMessage();
                 LOGGER.error(message);
                 System.out.println(message);
                 throw new SystemException(message, e);      // there's no point in continuing with midpoint initialization
@@ -274,6 +274,15 @@ public class StartupConfiguration implements MidpointConfiguration {
         }
         return c.getBoolean(SAFE_MODE, false);
     }
+
+	@Override
+	public boolean isProfilingEnabled() {
+		Configuration c = getConfiguration(MIDPOINT_SECTION);
+		if (c == null) {
+			return false;           // should not occur
+		}
+		return c.getBoolean(PROFILING_ENABLED, false);
+	}
 
     @Override
     public String toString() {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,31 @@
 
 package com.evolveum.midpoint.web.session;
 
+import java.util.Set;
+
 import com.evolveum.midpoint.prism.query.ObjectPaging;
-import com.evolveum.midpoint.web.page.admin.users.dto.OrgTreeDto;
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.web.component.search.Search;
+import com.evolveum.midpoint.web.component.util.SelectableBean;
 import com.evolveum.midpoint.web.page.admin.users.dto.OrgUnitSearchDto;
 import com.evolveum.midpoint.web.page.admin.users.dto.TreeStateSet;
-import com.evolveum.midpoint.web.page.admin.users.dto.UsersDto;
-
-import java.util.Set;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
 
 /**
  * @author lazyman
  */
-public class UsersStorage extends PageStorage {
+public class UsersStorage implements PageStorage, DebugDumpable {
 
     /**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+
+	/**
      * DTO used for search in {@link com.evolveum.midpoint.web.page.admin.users.PageUsers}
      */
-    private UsersDto usersSearch;
+    private Search usersSearch;
 
     /**
      * DTO used for search purposes in {@link com.evolveum.midpoint.web.page.admin.users in OrgUnitBrowser}
@@ -49,24 +57,28 @@ public class UsersStorage extends PageStorage {
      */
     private ObjectPaging usersPaging;
 
-    private OrgTreeDto selectedItem;                //selected tree item on the Org. structure page
-    private TreeStateSet<OrgTreeDto> expandedItems; //expanded tree items on the Org. structure page
+    private SelectableBean<OrgType> selectedItem;                //selected tree item on the Org. structure page
+    private TreeStateSet<SelectableBean<OrgType>> expandedItems; //expanded tree items on the Org. structure page
     private int selectedTabId = -1;                 //selected tab id on the Org. structure page
-    private OrgTreeDto collapsedItem = null;                 //selected tab id on the Org. structure page
+    private SelectableBean<OrgType> collapsedItem = null;                 //selected tab id on the Org. structure page
 
-    public ObjectPaging getUsersPaging() {
+    @Override
+    public ObjectPaging getPaging() {
         return usersPaging;
     }
 
-    public void setUsersPaging(ObjectPaging usersPaging) {
+    @Override
+    public void setPaging(ObjectPaging usersPaging) {
         this.usersPaging = usersPaging;
     }
 
-    public UsersDto getUsersSearch() {
+    @Override
+    public Search getSearch() {
         return usersSearch;
     }
 
-    public void setUsersSearch(UsersDto usersSearch) {
+    @Override
+    public void setSearch(Search usersSearch) {
         this.usersSearch = usersSearch;
     }
 
@@ -86,19 +98,19 @@ public class UsersStorage extends PageStorage {
         this.orgUnitPaging = orgUnitPaging;
     }
 
-    public Set<OrgTreeDto> getExpandedItems() {
+    public Set<SelectableBean<OrgType>> getExpandedItems() {
         return expandedItems;
     }
 
-    public void setExpandedItems(TreeStateSet<OrgTreeDto> expandedItems) {
+    public void setExpandedItems(TreeStateSet<SelectableBean<OrgType>> expandedItems) {
         this.expandedItems = expandedItems != null ? expandedItems.clone() : null;
     }
 
-    public OrgTreeDto getSelectedItem() {
+    public SelectableBean<OrgType> getSelectedItem() {
         return selectedItem;
     }
 
-    public void setSelectedItem(OrgTreeDto selectedItem) {
+    public void setSelectedItem(SelectableBean<OrgType> selectedItem) {
         this.selectedItem = selectedItem;
     }
 
@@ -110,11 +122,32 @@ public class UsersStorage extends PageStorage {
         this.selectedTabId = selectedTabId;
     }
 
-    public OrgTreeDto getCollapsedItem() {
+    public SelectableBean<OrgType> getCollapsedItem() {
         return collapsedItem;
     }
 
-    public void setCollapsedItem(OrgTreeDto collapsedItem) {
+    public void setCollapsedItem(SelectableBean<OrgType> collapsedItem) {
         this.collapsedItem = collapsedItem;
     }
+
+    @Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		StringBuilder sb = new StringBuilder();
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append("UsersStorage\n");
+		DebugUtil.debugDumpWithLabelLn(sb, "usersSearch", usersSearch, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "orgUnitSearch", orgUnitSearch, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "orgUnitPaging", orgUnitPaging, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "usersPaging", usersPaging, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "selectedItem", selectedItem, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "expandedItems", expandedItems, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "selectedTabId", selectedTabId, indent+1);
+		DebugUtil.debugDumpWithLabel(sb, "collapsedItem", collapsedItem, indent+1);
+		return sb.toString();
+	}
 }

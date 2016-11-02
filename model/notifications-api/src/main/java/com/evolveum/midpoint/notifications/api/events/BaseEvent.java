@@ -16,12 +16,8 @@
 
 package com.evolveum.midpoint.notifications.api.events;
 
-import com.evolveum.midpoint.prism.Item;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismReference;
-import com.evolveum.midpoint.prism.PrismValue;
+import com.evolveum.midpoint.notifications.api.NotificationFunctions;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
@@ -32,14 +28,10 @@ import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.LightweightIdentifier;
 import com.evolveum.midpoint.task.api.LightweightIdentifierGenerator;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.EventCategoryType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.EventOperationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.EventStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 
 import javax.xml.namespace.QName;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +44,14 @@ public abstract class BaseEvent implements Event {
     private LightweightIdentifier id;               // randomly generated event ID
     private SimpleObjectRef requester;              // who requested this operation (null if unknown)
 
+	/**
+	 * If needed, we can prescribe the handler that should process this event. It is recommended only for ad-hoc situations.
+	 * A better is to define handlers in system configuration.
+	 */
+	protected final EventHandlerType adHocHandler;
+
+	private transient NotificationFunctions notificationFunctions;	// needs not be set when creating an event ... it is set in NotificationManager
+
     // about who is this operation (null if unknown);
     // - for model notifications, this is the focus, (usually a user but may be e.g. role or other kind of object)
     // - for account notifications, this is the account owner,
@@ -63,10 +63,15 @@ public abstract class BaseEvent implements Event {
     private String channel;
 
     public BaseEvent(LightweightIdentifierGenerator lightweightIdentifierGenerator) {
-        id = lightweightIdentifierGenerator.generate();
+        this(lightweightIdentifierGenerator, null);
     }
 
-    public LightweightIdentifier getId() {
+	public BaseEvent(LightweightIdentifierGenerator lightweightIdentifierGenerator, EventHandlerType adHocHandler) {
+		id = lightweightIdentifierGenerator.generate();
+		this.adHocHandler = adHocHandler;
+	}
+
+	public LightweightIdentifier getId() {
         return id;
     }
 
@@ -163,6 +168,38 @@ public abstract class BaseEvent implements Event {
         return requestee.getOid();
     }
 
+	public ObjectType getRequesteeObject() {
+		if (requestee == null) {
+			return null;
+		}
+		return requestee.resolveObjectType(new OperationResult(BaseEvent.class + ".getRequesteeObject"), true);
+	}
+
+	public PolyStringType getRequesteeDisplayName() {
+		if (requestee == null) {
+			return null;
+		}
+		ObjectType requesteeObject = getRequesteeObject();
+		if (requesteeObject == null) {
+			return null;
+		}
+		if (requesteeObject instanceof UserType) {
+			return ((UserType) requesteeObject).getFullName();
+		} else if (requesteeObject instanceof AbstractRoleType) {
+			return ((AbstractRoleType) requesteeObject).getDisplayName();
+		} else {
+			return requesteeObject.getName();
+		}
+	}
+
+	public PolyStringType getRequesteeName() {
+		if (requestee == null) {
+			return null;
+		}
+		ObjectType requesteeObject = getRequesteeObject();
+		return requesteeObject != null ? requesteeObject.getName() : null;
+	}
+
     public void setRequestee(SimpleObjectRef requestee) {
         this.requestee = requestee;
     }
@@ -178,8 +215,8 @@ public abstract class BaseEvent implements Event {
 
     public void createExpressionVariables(Map<QName, Object> variables, OperationResult result) {
         variables.put(SchemaConstants.C_EVENT, this);
-        variables.put(SchemaConstants.C_REQUESTER, requester != null ? requester.resolveObjectType(result) : null);
-        variables.put(SchemaConstants.C_REQUESTEE, requestee != null ? requestee.resolveObjectType(result) : null);
+        variables.put(SchemaConstants.C_REQUESTER, requester != null ? requester.resolveObjectType(result, false) : null);
+        variables.put(SchemaConstants.C_REQUESTEE, requestee != null ? requestee.resolveObjectType(result, true) : null);
     }
 
     // Finding items in deltas/objects
@@ -301,4 +338,31 @@ public abstract class BaseEvent implements Event {
     public void setChannel(String channel) {
         this.channel = channel;
     }
+
+	public NotificationFunctions getNotificationFunctions() {
+		return notificationFunctions;
+	}
+
+	public void setNotificationFunctions(NotificationFunctions notificationFunctions) {
+		this.notificationFunctions = notificationFunctions;
+	}
+
+	public String getStatusAsText() {
+		if (isSuccess()) {
+			return "SUCCESS";
+		} else if (isOnlyFailure()) {
+			return "FAILURE";
+		} else if (isFailure()) {
+			return "PARTIAL FAILURE";
+		} else if (isInProgress()) {
+			return "IN PROGRESS";
+		} else {
+			return "UNKNOWN";
+		}
+	}
+
+	@Override
+	public EventHandlerType getAdHocHandler() {
+		return adHocHandler;
+	}
 }

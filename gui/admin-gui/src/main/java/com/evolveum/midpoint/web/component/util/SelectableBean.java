@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,35 @@
 package com.evolveum.midpoint.web.component.util;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.web.component.data.column.InlineMenuable;
+import com.evolveum.midpoint.web.component.menu.cog.InlineMenuItem;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultType;
 
 /**
  * @author lazyman
  */
-public class SelectableBean<T extends Serializable> extends Selectable {
+public class SelectableBean<T extends Serializable> extends Selectable implements InlineMenuable, DebugDumpable {
+	private static final long serialVersionUID = 1L;
 
-    public static final String F_VALUE = "value";
+	public static final String F_VALUE = "value";
 
+    /**
+     * Value of object that this bean represents. It may be null in case that non-success result is set.
+     */
     private T value;
+    
+    /**
+     * Result of object retrieval (or attempt of object retrieval). It case that it is not error the result is optional.
+     */
+    private OperationResult result;
+    
+    private List<InlineMenuItem> menuItems;
 
     public SelectableBean() {
     }
@@ -41,4 +61,78 @@ public class SelectableBean<T extends Serializable> extends Selectable {
     public void setValue(T value) {
         this.value = value;
     }
+    
+    public OperationResult getResult() {
+		return result;
+	}
+
+	public void setResult(OperationResult result) {
+		this.result = result;
+	}
+	
+	public void setResult(OperationResultType resultType) {
+		this.result = OperationResult.createOperationResult(resultType);
+	}
+
+	public List<InlineMenuItem> getMenuItems() {
+    	if (menuItems == null) {
+    		menuItems = new ArrayList<InlineMenuItem>();
+    	}
+		return menuItems;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((this.result == null) ? 0 : this.result.hashCode());
+		result = prime * result + ((value == null) ? 0 : value.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null) {
+			return false;
+		}
+		if (getClass() != obj.getClass()) {
+			return false;
+		}
+		SelectableBean other = (SelectableBean) obj;
+		if (result == null) {
+			if (other.result != null) {
+				return false;
+			}
+		} else if (!result.equals(other.result)) {
+			return false;
+		}
+		if (value == null) {
+			if (other.value != null) {
+				return false;
+			}
+		} else if (!value.equals(other.value)) {
+			return false;
+		}
+		return true;
+	}
+
+	@Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		StringBuilder sb = new StringBuilder();
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append("SelectableBean\n");
+		DebugUtil.debugDumpWithLabelLn(sb, "value", value==null?null:value.toString(), indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "result", result==null?null:result.toString(), indent+1);
+		DebugUtil.debugDumpWithLabel(sb, "menuItems", menuItems, indent+1);
+		return sb.toString();
+	}
+
 }

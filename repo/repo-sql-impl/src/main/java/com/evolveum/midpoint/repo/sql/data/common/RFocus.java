@@ -25,8 +25,10 @@ import com.evolveum.midpoint.repo.sql.query.definition.JaxbName;
 import com.evolveum.midpoint.repo.sql.query.definition.QueryEntity;
 import com.evolveum.midpoint.repo.sql.query.definition.VirtualCollection;
 import com.evolveum.midpoint.repo.sql.query.definition.VirtualQueryParam;
+import com.evolveum.midpoint.repo.sql.query2.definition.NotQueryable;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
@@ -53,10 +55,11 @@ import java.util.Set;
 @org.hibernate.annotations.Table(appliesTo = "m_focus",
         indexes = {@Index(name = "iFocusAdministrative", columnNames = "administrativeStatus"),
                 @Index(name = "iFocusEffective", columnNames = "effectiveStatus")})
+@Persister(impl = MidPointJoinedPersister.class)
 public abstract class RFocus<T extends FocusType> extends RObject<T> {
 
-    private Set<RObjectReference> linkRef;
-    private Set<RObjectReference> roleMembershipRef;
+    private Set<RObjectReference<RShadow>> linkRef;
+    private Set<RObjectReference<RAbstractRole>> roleMembershipRef;
     private Set<RAssignment> assignments;
     private RActivation activation;
     //photo
@@ -67,7 +70,7 @@ public abstract class RFocus<T extends FocusType> extends RObject<T> {
     @OneToMany(mappedBy = "owner", orphanRemoval = true)
     @ForeignKey(name = "none")
     @Cascade({org.hibernate.annotations.CascadeType.ALL})
-    public Set<RObjectReference> getLinkRef() {
+    public Set<RObjectReference<RShadow>> getLinkRef() {
         if (linkRef == null) {
             linkRef = new HashSet<>();
         }
@@ -78,7 +81,7 @@ public abstract class RFocus<T extends FocusType> extends RObject<T> {
     @OneToMany(mappedBy = "owner", orphanRemoval = true)
     @ForeignKey(name = "none")
     @Cascade({org.hibernate.annotations.CascadeType.ALL})
-    public Set<RObjectReference> getRoleMembershipRef() {
+    public Set<RObjectReference<RAbstractRole>> getRoleMembershipRef() {
         if (roleMembershipRef == null) {
             roleMembershipRef = new HashSet<>();
         }
@@ -112,6 +115,7 @@ public abstract class RFocus<T extends FocusType> extends RObject<T> {
     @OneToMany(mappedBy = RAssignment.F_OWNER, orphanRemoval = true)
     @ForeignKey(name = "none")
     @Cascade({org.hibernate.annotations.CascadeType.ALL})
+    @NotQueryable   // virtual definition is used instead
     public Set<RAssignment> getAssignments() {
         if (assignments == null) {
             assignments = new HashSet<>();
@@ -128,11 +132,11 @@ public abstract class RFocus<T extends FocusType> extends RObject<T> {
         this.assignments = assignments;
     }
 
-    public void setLinkRef(Set<RObjectReference> linkRef) {
+    public void setLinkRef(Set<RObjectReference<RShadow>> linkRef) {
         this.linkRef = linkRef;
     }
 
-    public void setRoleMembershipRef(Set<RObjectReference> roleMembershipRef) {
+    public void setRoleMembershipRef(Set<RObjectReference<RAbstractRole>> roleMembershipRef) {
         this.roleMembershipRef = roleMembershipRef;
     }
 

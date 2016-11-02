@@ -20,7 +20,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.evolveum.midpoint.model.impl.sync.TaskHandlerUtil;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.query.QueryJaxbConvertor;
 import com.evolveum.midpoint.repo.api.RepositoryService;
@@ -29,6 +28,7 @@ import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.security.api.SecurityEnforcer;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.prism.xml.ns._public.query_3.QueryType;
 
@@ -73,26 +73,29 @@ public abstract class AbstractSearchIterativeTaskHandler<O extends ObjectType, H
     private boolean preserveStatistics = true;
     private boolean enableIterationStatistics = true;   // beware, this controls whether task stores these statistics; see also recordIterationStatistics in AbstractSearchIterativeResultHandler
     private boolean enableSynchronizationStatistics = false;
-    private boolean enableActionsExecutedStatistics = false;
+    private boolean enableActionsExecutedStatistics = true;
 
 	// If you need to store fields specific to task instance or task run the ResultHandler is a good place to do that.
 	
 	// This is not ideal, TODO: refactor
 	private Map<Task, H> handlers = Collections.synchronizedMap(new HashMap<Task, H>());
 	
-	@Autowired(required=true)
+	@Autowired
 	protected TaskManager taskManager;
 	
-	@Autowired(required=true)
+	@Autowired
 	protected ModelObjectResolver modelObjectResolver;
 
     @Autowired
     @Qualifier("cacheRepositoryService")
     protected RepositoryService repositoryService;
 
-    @Autowired(required = true)
+    @Autowired
 	protected PrismContext prismContext;
-	
+
+	@Autowired
+	protected SecurityEnforcer securityEnforcer;
+
 	private static final transient Trace LOGGER = TraceManager.getTrace(AbstractSearchIterativeTaskHandler.class);
 	
 	protected AbstractSearchIterativeTaskHandler(String taskName, String taskOperationPrefix) {
@@ -164,7 +167,16 @@ public abstract class AbstractSearchIterativeTaskHandler<O extends ObjectType, H
 		TaskRunResult runResult = new TaskRunResult();
 		runResult.setOperationResult(opResult);
 
-		H resultHandler = createHandler(runResult, coordinatorTask, opResult);
+		H resultHandler = null;
+		try {
+			resultHandler = createHandler(runResult, coordinatorTask, opResult);
+		} catch (SecurityViolationException|SchemaException|RuntimeException e) {
+			LOGGER.error("{}: Error while creating a result handler: {}", taskName, e.getMessage(), e);
+			opResult.recordFatalError("Error while creating a result handler: " + e.getMessage(), e);
+			runResult.setRunResultStatus(TaskRunResultStatus.PERMANENT_ERROR);
+			runResult.setProgress(coordinatorTask.getProgress());
+			return runResult;
+		}
 		if (resultHandler == null) {
 			// the error should already be in the runResult
 			return runResult;
@@ -428,7 +440,7 @@ public abstract class AbstractSearchIterativeTaskHandler<O extends ObjectType, H
     protected abstract Class<? extends ObjectType> getType(Task task);
 
     protected abstract  H createHandler(TaskRunResult runResult, Task coordinatorTask,
-			OperationResult opResult);
+			OperationResult opResult) throws SchemaException, SecurityViolationException;
 	
 	/**
 	 * Used to properly initialize the "run", which is kind of task instance. The result handler is already created at this stage.

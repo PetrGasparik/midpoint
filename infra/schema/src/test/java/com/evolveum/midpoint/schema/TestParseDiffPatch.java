@@ -28,10 +28,10 @@ import java.util.List;
 import javax.xml.bind.JAXBException;
 import javax.xml.namespace.QName;
 
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
+import com.evolveum.midpoint.prism.xnode.RootXNode;
 import com.evolveum.midpoint.prism.xnode.XNode;
 import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectModificationType;
@@ -44,7 +44,6 @@ import org.testng.annotations.Test;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.DiffUtil;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
@@ -345,7 +344,7 @@ public class TestParseDiffPatch {
         Collection<? extends ItemDelta> modifications = diffDelta.getModifications();
         assertEquals("Unexpected number of modifications", 1, modifications.size());
         // there is only one property in the container. after deleting this property, all container will be deleted, isn't it right?
-        PrismAsserts.assertContainerDelete(diffDelta, new ItemPath(TaskType.F_EXTENSION));
+        PrismAsserts.assertContainerDeleteGetContainerDelta(diffDelta, new ItemPath(TaskType.F_EXTENSION));
 //        PrismAsserts.assertPropertyDelete(diffDelta, new ItemPath(TaskType.F_EXTENSION,
 //        		new QName("http://midpoint.evolveum.com/xml/ns/public/provisioning/liveSync-1.xsd","token")), 480);
 
@@ -429,7 +428,7 @@ public class TestParseDiffPatch {
         assertEquals("Wrong change type", ChangeType.MODIFY, resourceDelta.getChangeType());
         Collection<? extends ItemDelta> modifications = resourceDelta.getModifications();
         assertEquals("Unexpected number of modifications", 7, modifications.size());
-        PrismAsserts.assertContainerDelete(resourceDelta, ResourceType.F_SCHEMA);
+        PrismAsserts.assertContainerDeleteGetContainerDelta(resourceDelta, ResourceType.F_SCHEMA);
         PrismAsserts.assertPropertyReplace(resourceDelta, pathTimeouts("update"), 3);
         PrismAsserts.assertPropertyReplace(resourceDelta, pathTimeouts("scriptOnResource"), 4);
         PrismAsserts.assertPropertyDelete(resourceDelta,
@@ -656,7 +655,7 @@ public class TestParseDiffPatch {
      *
      * MidPoint uses an approximation there - it compares XNode serializations of values. Sometimes they match,
      * sometimes they do not. In this particular case they fail to match on serialization of c:ObjectReferenceType,
-     * because PrismBeanConverter is used, and ObjectReferenceType.getFilter() returns empty filter instead of null.
+     * because BeanMarshaller is used, and ObjectReferenceType.getFilter() returns empty filter instead of null.
      * This could be fixed; however, it would not help much, because it is almost sure that other similar problems
      * would sooner or later emerge.
      */
@@ -730,7 +729,7 @@ public class TestParseDiffPatch {
         for (ItemDeltaType itemDeltaType : objectChange.getItemDelta()) {
             for (RawType rawType : itemDeltaType.getValue()) {
                 rawType.getParsedItem(
-                        new PrismPropertyDefinition(itemDeltaType.getPath().getItemPath().lastNamed().getName(),
+                        new PrismPropertyDefinitionImpl(itemDeltaType.getPath().getItemPath().lastNamed().getName(),
                                 rawType.getXnode().getTypeQName(),
                                 prismContext));
             }
@@ -760,14 +759,7 @@ public class TestParseDiffPatch {
     private void assertModificationPolyStringValue(RawType value, PolyStringType... expectedValues) throws SchemaException {
     	XNode xnode = value.serializeToXNode();
         assertFalse(xnode.isEmpty());
-//        Object first = elements.get(0);
-//        QName elementQName = JAXBUtil.getElementQName(first);
-//        if (!propertyName.equals(elementQName)) {
-//            continue;
-//        }
-
-       
-        PolyStringType valueAsPoly = value.getPrismContext().getXnodeProcessor().parseAtomicValue(xnode, PolyStringType.COMPLEX_TYPE);
+        PolyStringType valueAsPoly = value.getPrismContext().parserFor(new RootXNode(new QName("dummy"), xnode)).parseRealValue(PolyStringType.class);
         boolean found = false;
         for (PolyStringType expectedValue: expectedValues) {
             if (expectedValue.getOrig().equals(valueAsPoly.getOrig()) && expectedValue.getNorm().equals(valueAsPoly.getNorm())) {

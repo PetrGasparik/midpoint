@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,27 @@
 
 package com.evolveum.midpoint.web.component.assignment;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+import javax.xml.namespace.QName;
+
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import org.apache.commons.lang.Validate;
+
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
-import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
+import com.evolveum.midpoint.prism.Item;
+import com.evolveum.midpoint.prism.ItemDefinition;
+import com.evolveum.midpoint.prism.PrismContainerDefinition;
+import com.evolveum.midpoint.prism.PrismContainerValue;
+import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.PrismPropertyDefinition;
 import com.evolveum.midpoint.prism.util.ItemPathUtil;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -28,25 +46,29 @@ import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.util.SelectableBean;
-import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.web.page.admin.dto.ObjectViewDto;
 import com.evolveum.midpoint.web.page.admin.users.dto.UserDtoStatus;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
-
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.Validate;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.AbstractRoleType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ExtensionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.LayerType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceAttributeDefinitionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
 
 /**
+ * TODO: unify with AssignmentItemDto
+ * 
  * @author lazyman
  */
 public class AssignmentEditorDto extends SelectableBean implements Comparable<AssignmentEditorDto> {
+	private static final long serialVersionUID = 1L;
 
 	private static final Trace LOGGER = TraceManager.getTrace(AssignmentEditorDto.class);
 
@@ -60,6 +82,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 	public static final String F_DESCRIPTION = "description";
 	public static final String F_ACTIVATION = "activation";
 	public static final String F_RELATION = "relation";
+	public static final String F_FOCUS_TYPE = "focusType";
 	public static final String F_TENANT_REF = "tenantRef";
 	public static final String F_ORG_REF = "orgRef";
 	public static final String F_ALT_NAME = "altName";
@@ -75,10 +98,13 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 
 	private boolean showEmpty = false;
 	private boolean minimized = true;
+	private boolean editable = true;
+	private boolean simpleView = false;
 
 	private Boolean isOrgUnitManager = Boolean.FALSE;
 	private AssignmentType newAssignment;
 	private List<ACAttributeDto> attributes;
+	private PageBase pageBase;
 
 	public AssignmentEditorDto(UserDtoStatus status, AssignmentType assignment, PageBase pageBase) {
 		Validate.notNull(status, "User dto status must not be null.");
@@ -88,6 +114,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		Validate.notNull(type, "Type must not be null.");
 		this.status = status;
 		this.oldAssignment = assignment;
+		this.pageBase = pageBase;
 
 		PrismContainerValue value = oldAssignment.asPrismContainerValue();
 
@@ -102,6 +129,13 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		// ConstructionType construction = oldAssignment.getConstruction();
 		// newAssignment.setConstruction(construction.clone());
 		// }
+		List<Item> itemsList = newValue.getItems();
+		if (itemsList != null && itemsList.size() > 0) {
+			Item item = itemsList.get(0);
+			if (item != null && item.getDefinition() != null) {
+				this.editable = item.getDefinition().canAdd() || item.getDefinition().canModify();
+			}
+		}
 
 		this.tenantRef = loadTenantOrgReference(assignment, assignment.getTenantRef());
 		this.orgRef = loadTenantOrgReference(assignment, assignment.getOrgRef());
@@ -113,6 +147,29 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		this.isOrgUnitManager = determineUserOrgRelation(assignment);
 	}
 
+	public static AssignmentEditorDto createDtoAddFromSelectedObject(ObjectType object, PageBase pageBase) {
+		AssignmentEditorDto dto = createDtoFromObject(object, UserDtoStatus.ADD, pageBase);
+		dto.setMinimized(true);
+		dto.setShowEmpty(true);
+
+		return dto;
+	}
+
+	public static AssignmentEditorDto createDtoFromObject(ObjectType object, UserDtoStatus status,
+			PageBase pageBase) {
+		AssignmentEditorDtoType aType = AssignmentEditorDtoType.getType(object.getClass());
+
+		ObjectReferenceType targetRef = new ObjectReferenceType();
+		targetRef.setOid(object.getOid());
+		targetRef.setType(aType.getQname());
+		targetRef.setTargetName(object.getName());
+
+		AssignmentType assignment = new AssignmentType();
+		assignment.setTargetRef(targetRef);
+
+		return new AssignmentEditorDto(status, assignment, pageBase);
+	}
+
 	private AssignmentEditorDtoType getType(AssignmentType assignment) {
 		if (assignment.getTarget() != null) {
 			// object assignment
@@ -120,7 +177,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		} else if (assignment.getTargetRef() != null) {
 			return AssignmentEditorDtoType.getType(assignment.getTargetRef().getType());
 		} // account assignment through account construction
-		return AssignmentEditorDtoType.ACCOUNT_CONSTRUCTION;
+		return AssignmentEditorDtoType.CONSTRUCTION;
 
 	}
 
@@ -161,7 +218,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 
 		try {
 			PrismContext prismContext = pageBase.getPrismContext();
-			RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resource,
+			RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resource,
 					LayerType.PRESENTATION, prismContext);
 			RefinedObjectClassDefinition objectClassDefinition = refinedSchema
 					.getRefinedDefinition(ShadowKindType.ACCOUNT, construction.getIntent());
@@ -200,7 +257,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 
 			result.recordSuccess();
 		} catch (Exception ex) {
-			LoggingUtils.logException(LOGGER, "Exception occurred during assignment attribute loading", ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Exception occurred during assignment attribute loading", ex);
 			result.recordFatalError("Exception occurred during assignment attribute loading.", ex);
 		} finally {
 			result.recomputeStatus();
@@ -223,7 +280,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 			target = pageBase.getModelService().getObject(type, ref.getOid(), null, task, subResult);
 			subResult.recordSuccess();
 		} catch (Exception ex) {
-			LoggingUtils.logException(LOGGER, "Couldn't get account construction resource ref", ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get account construction resource ref", ex);
 			subResult.recordFatalError("Couldn't get account construction resource ref.", ex);
 		}
 
@@ -250,18 +307,24 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 	}
 
 	private ObjectViewDto loadTenantOrgReference(AssignmentType assignment, ObjectReferenceType ref) {
-		ObjectViewDto dto;
+		ObjectViewDto dto = null;
 
 		if (isRole(assignment)) {
 			if (ref != null) {
-				if (ref.getTargetName() == null) {
+				Task task = pageBase.createSimpleTask("Load tenant for assignment");
+				OperationResult result = task.getResult();
+				PrismObject<OrgType> tenant = WebModelServiceUtils.loadObject(OrgType.class, ref.getOid(),
+						pageBase, task, result);
+				if (tenant != null) {
+
+					dto = new ObjectViewDto(ref.getOid(),
+							WebComponentUtil.getEffectiveName(tenant, OrgType.F_DISPLAY_NAME));
+					dto.setType(OrgType.class);
+				} else if (ref.getTargetName() == null) {
 					dto = new ObjectViewDto(ObjectViewDto.BAD_OID);
 					dto.setType(OrgType.class);
-					return dto;
 				}
-
-				dto = new ObjectViewDto(ref.getOid(), WebMiscUtil.getOrigStringFromPoly(ref.getTargetName()));
-				dto.setType(OrgType.class);
+				
 				return dto;
 			}
 		}
@@ -278,28 +341,41 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 
 		StringBuilder sb = new StringBuilder();
 
-		if (assignment.getTarget() != null) {
-			// object assignment
-			sb.append(WebMiscUtil.getName(assignment.getTarget()));
-			appendTenantAndOrgName(sb);
-		} else if (assignment.getTargetRef() != null) {
-			sb.append(WebMiscUtil.getName(assignment.getTargetRef()));
-			appendTenantAndOrgName(sb);
-		} else if (assignment.getConstruction() != null) {
+		if (assignment.getConstruction() != null) {
 			// account assignment through account construction
 			ConstructionType construction = assignment.getConstruction();
 			if (construction.getResource() != null) {
-				sb.append(WebMiscUtil.getName(construction.getResource()));
+				sb.append(WebComponentUtil.getName(construction.getResource()));
 			} else if (construction.getResourceRef() != null) {
-				sb.append(WebMiscUtil.getName(construction.getResourceRef()));
+				sb.append(WebComponentUtil.getName(construction.getResourceRef()));
 			}
+			return sb.toString();
+		}
+
+		if (assignment.getTarget() != null) {
+			sb.append(WebComponentUtil.getEffectiveName(assignment.getTarget(), OrgType.F_DISPLAY_NAME));
+			appendTenantAndOrgName(sb);
+		} else if (assignment.getTargetRef() != null) {
+			Task task = pageBase.createSimpleTask("Load assignment name");
+			PrismObject<AbstractRoleType> target = WebModelServiceUtils.loadObject(AbstractRoleType.class,
+					assignment.getTargetRef().getOid(), pageBase, task, task.getResult());
+			if (target != null) {
+				sb.append(WebComponentUtil.getEffectiveName(target, OrgType.F_DISPLAY_NAME));
+			} else {
+				sb.append(WebComponentUtil.getName(assignment.getTargetRef()));
+			}
+			appendTenantAndOrgName(sb);
+		}
+
+		if (determineUserOrgRelation(assignment)) {
+			sb.append(" - Manager");
 		}
 
 		return sb.toString();
 	}
 
-	private void appendTenantAndOrgName(StringBuilder sb){
-		if (tenantRef != null){
+	private void appendTenantAndOrgName(StringBuilder sb) {
+		if (tenantRef != null) {
 			if (ObjectViewDto.BAD_OID.equals(tenantRef.getOid())) {
 				sb.append(" - ").append("(tenant not found)");
 			} else if (tenantRef.getOid() != null) {
@@ -313,8 +389,9 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 				sb.append(" - ").append(orgRef.getName());
 			}
 		}
+
 	}
-	
+
 	private String getAlternativeName(AssignmentType assignment) {
 		if (assignment == null) {
 			return null;
@@ -354,6 +431,14 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		this.showEmpty = showEmpty;
 	}
 
+	public boolean isEditable() {
+		return editable;
+	}
+
+	public void setEditable(boolean editable) {
+		this.editable = editable;
+	}
+
 	public UserDtoStatus getStatus() {
 		return status;
 	}
@@ -377,6 +462,10 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		return newAssignment.getTargetRef();
 	}
 
+	public ExtensionType getExtension() {
+		return newAssignment.getExtension();
+	}
+
 	public AssignmentEditorDtoType getType() {
 		return type;
 	}
@@ -385,15 +474,15 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		this.status = status;
 	}
 
-	public boolean isModified() throws SchemaException {
-		return !getOldValue().equivalent(getNewValue());
+	public boolean isModified(PrismContext prismContext) throws SchemaException {
+		return !getOldValue().equivalent(getNewValue(prismContext));
 	}
 
-	public PrismContainerValue getOldValue() {
+	public PrismContainerValue<AssignmentType> getOldValue() {
 		return oldAssignment.asPrismContainerValue();
 	}
 
-	public PrismContainerValue getNewValue() throws SchemaException {
+	public PrismContainerValue<AssignmentType> getNewValue(PrismContext prismContext) throws SchemaException {
 		if (AssignmentEditorDtoType.ORG_UNIT.equals(getType())) {
 			if (isOrgUnitManager()) {
 				newAssignment.getTargetRef().setRelation(SchemaConstants.ORG_MANAGER);
@@ -443,7 +532,7 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 				continue;
 			}
 
-			construction.getAttribute().add(attribute.getConstruction());
+			construction.getAttribute().add(attribute.getConstruction(prismContext));
 		}
 
 		return newAssignment.asPrismContainerValue();
@@ -451,6 +540,10 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 
 	public String getDescription() {
 		return newAssignment.getDescription();
+	}
+	
+	public QName getFocusType() {
+		return newAssignment.getFocusType();
 	}
 
 	public String getRelation() {
@@ -466,6 +559,10 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		newAssignment.setDescription(description);
 	}
 
+	public void setFocusType(QName focusType) {
+		newAssignment.setFocusType(focusType);
+	}
+	
 	public Boolean isOrgUnitManager() {
 		return isOrgUnitManager;
 	}
@@ -528,7 +625,15 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		this.altName = altName;
 	}
 
-	@Override
+    public boolean isSimpleView() {
+        return simpleView;
+    }
+
+    public void setSimpleView(boolean simpleView) {
+        this.simpleView = simpleView;
+    }
+
+    @Override
 	public boolean equals(Object o) {
 		if (this == o)
 			return true;
@@ -542,6 +647,10 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		if (minimized != that.minimized)
 			return false;
 		if (showEmpty != that.showEmpty)
+			return false;
+		if (editable != that.editable)
+			return false;
+		if (simpleView != that.simpleView)
 			return false;
 		if (altName != null ? !altName.equals(that.altName) : that.altName != null)
 			return false;
@@ -576,9 +685,20 @@ public class AssignmentEditorDto extends SelectableBean implements Comparable<As
 		result = 31 * result + (orgRef != null ? orgRef.hashCode() : 0);
 		result = 31 * result + (showEmpty ? 1 : 0);
 		result = 31 * result + (minimized ? 1 : 0);
+		result = 31 * result + (simpleView ? 1 : 0);
 		result = 31 * result + (isOrgUnitManager ? 1 : 0);
 		result = 31 * result + (newAssignment != null ? newAssignment.hashCode() : 0);
 		result = 31 * result + (attributes != null ? attributes.hashCode() : 0);
 		return result;
+	}
+
+	@Override
+	public String toString() {
+		return "AssignmentEditorDto(name=" + name + ", status=" + status + ", showEmpty=" + showEmpty
+				+ ", minimized=" + minimized + ", isOrgUnitManager=" + isOrgUnitManager + ")";
+	}
+
+	public String getNameForTargetObject() {
+		return getNameForTargetObject(this.newAssignment);
 	}
 }

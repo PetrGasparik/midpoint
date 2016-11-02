@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@ package com.evolveum.midpoint.test.util;
 
 import static org.testng.AssertJUnit.assertEquals;
 import static org.testng.AssertJUnit.assertTrue;
+import static org.testng.AssertJUnit.assertNotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -128,6 +130,28 @@ public class MidPointAsserts {
 	public static <F extends FocusType> void assertNotAssignedRole(PrismObject<F> user, String roleOid) {
 		assertNotAssigned(user, roleOid, RoleType.COMPLEX_TYPE);
 	}
+	
+	public static <F extends FocusType> void assertAssignedRoles(PrismObject<F> user, String... roleOids) {
+		assertAssignedTargets(user, "roles", RoleType.COMPLEX_TYPE, roleOids);
+	}
+	
+	public static <F extends FocusType> void assertAssignedOrgs(PrismObject<F> user, String... orgOids) {
+		assertAssignedTargets(user, "orgs", OrgType.COMPLEX_TYPE, orgOids);
+	}
+	
+	public static <F extends FocusType> void assertAssignedTargets(PrismObject<F> user, String typeDesc, QName type, String... expectedTargetOids) {
+		F userType = user.asObjectable();
+		List<String> haveTagetOids = new ArrayList<>();
+		for (AssignmentType assignmentType: userType.getAssignment()) {
+			ObjectReferenceType targetRef = assignmentType.getTargetRef();
+			if (targetRef != null) {
+				if (type.equals(targetRef.getType())) {
+					haveTagetOids.add(targetRef.getOid());
+				}
+			}
+		}
+		PrismAsserts.assertSets("Wrong "+typeDesc+" in "+user, haveTagetOids, expectedTargetOids);
+	}
 
     public static <F extends FocusType> void assertNotAssignedResource(PrismObject<F> user, String resourceOid) {
         F userType = user.asObjectable();
@@ -191,14 +215,22 @@ public class MidPointAsserts {
 		AssertJUnit.fail(object + " does not have org " + orgOid);
 	}
 	
-	public static <O extends ObjectType> void assertHasOrg(PrismObject<O> user, String orgOid, QName relation) {
+	public static <O extends ObjectType> boolean hasOrg(PrismObject<O> user, String orgOid, QName relation) {
 		for (ObjectReferenceType orgRef: user.asObjectable().getParentOrgRef()) {
 			if (orgOid.equals(orgRef.getOid()) &&
 					MiscSchemaUtil.compareRelation(orgRef.getRelation(), relation)) {
-				return;
+				return true;
 			}
 		}
-		AssertJUnit.fail(user + " does not have org " + orgOid + ", relation "+relation);
+		return false;
+	}
+
+	public static <O extends ObjectType> void assertHasOrg(PrismObject<O> user, String orgOid, QName relation) {
+		AssertJUnit.assertTrue(user + " does not have org " + orgOid + ", relation "+relation, hasOrg(user, orgOid, relation));
+	}
+
+	public static <O extends ObjectType> void assertHasNoOrg(PrismObject<O> user, String orgOid, QName relation) {
+		AssertJUnit.assertFalse(user + " has org " + orgOid + ", relation "+relation+ " even if should NOT have it", hasOrg(user, orgOid, relation));
 	}
 	
 	public static <O extends ObjectType> void assertHasNoOrg(PrismObject<O> user) {
@@ -261,5 +293,11 @@ public class MidPointAsserts {
 	public static void assertObjectClass(ShadowType shadow, QName expectedStructuralObjectClass, QName... expectedAuxiliaryObjectClasses) {
 		assertEquals("Wrong object class in "+shadow, expectedStructuralObjectClass, shadow.getObjectClass());
 		PrismAsserts.assertEqualsCollectionUnordered("Wrong auxiliary object classes in "+shadow, shadow.getAuxiliaryObjectClass(), expectedAuxiliaryObjectClasses);
+	}
+
+	public static void assertInstanceOf(String message, Object object, Class<?> expectedClass) {
+		assertNotNull(message+" is null", object);
+		assertTrue(message+" is not instance of "+expectedClass+", it is "+object.getClass(),
+				expectedClass.isAssignableFrom(object.getClass()));
 	}
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2010-2015 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -75,6 +75,7 @@ It also contains inbound mappings and definition to enable synchronization.
 			<icfcldap:baseContext>dc=example,dc=com</icfcldap:baseContext>
 			<icfcldap:bindDn>cn=idm,ou=Administrators,dc=example,dc=com</icfcldap:bindDn>
 			<icfcldap:bindPassword><t:clearValue>secret</t:clearValue></icfcldap:bindPassword>
+			<icfcldap:usePermissiveModify>always</icfcldap:usePermissiveModify>
 			<icfcldap:pagingStrategy>auto</icfcldap:pagingStrategy>
 			<icfcldap:passwordHashAlgorithm>SSHA</icfcldap:passwordHashAlgorithm>
 			<icfcldap:vlvSortAttribute>uid</icfcldap:vlvSortAttribute>
@@ -361,6 +362,13 @@ It also contains inbound mappings and definition to enable synchronization.
 				<ref>ri:member</ref>
 				<matchingRule>mr:distinguishedName</matchingRule>
 				<fetchStrategy>minimal</fetchStrategy>
+				<outbound>
+					<strength>strong</strength>
+					<!-- Workaround - groupOfNames MUST have at least one member. Even non-existent DN. -->
+					<expression>
+						<value>cn=dummy,o=whatever</value>
+					</expression>
+				</outbound>
 			</attribute>			
 			<attribute>
 				<ref>ri:cn</ref>
@@ -402,10 +410,6 @@ It also contains inbound mappings and definition to enable synchronization.
     </capabilities>
 -->
 
-		<consistency>
-			<avoidDuplicateValues>true</avoidDuplicateValues>
-		</consistency>
-
         <!--
             Synchronization section describes the synchronization policy, timing,
             reactions and similar synchronization settings.
@@ -421,7 +425,7 @@ It also contains inbound mappings and definition to enable synchronization.
 	            <correlation>
 	                <q:description>
 	                    Correlation expression is a search query.
-	                    Following search queury will look for users that have "name"
+	                    Following search query will look for users that have "name"
 	                    equal to the "uid" attribute of the account. Simply speaking,
 	                    it will look for match in usernames in the IDM and the resource.
 	                    The correlation rule always looks for users, so it will not match

@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2010-2016 Evolveum
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.evolveum.midpoint.report.impl;
 
 import java.util.ArrayList;
@@ -10,6 +25,8 @@ import java.util.Set;
 
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.prism.Containerable;
+import com.evolveum.midpoint.prism.PrismContainerValue;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -17,19 +34,17 @@ import org.springframework.stereotype.Component;
 import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.model.api.ModelService;
-import com.evolveum.midpoint.model.api.expr.MidpointFunctions;
 import com.evolveum.midpoint.model.common.expression.ExpressionFactory;
 import com.evolveum.midpoint.model.common.expression.ExpressionUtil;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
 import com.evolveum.midpoint.model.common.expression.functions.FunctionLibrary;
 import com.evolveum.midpoint.model.common.expression.script.jsr223.Jsr223ScriptEvaluator;
-import com.evolveum.midpoint.model.impl.expr.MidpointFunctionsImpl;
 import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.parser.QueryConvertor;
+import com.evolveum.midpoint.prism.marshaller.QueryConvertor;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.TypeFilter;
@@ -96,8 +111,7 @@ public class ReportServiceImpl implements ReportService {
 			Task task = taskManager.createTaskInstance();
 			ModelExpressionThreadLocalHolder.pushCurrentResult(task.getResult());
 			ModelExpressionThreadLocalHolder.pushCurrentTask(task);
-			SearchFilterType filter = (SearchFilterType) prismContext.parseAtomicValue(query,
-					SearchFilterType.COMPLEX_TYPE);
+			SearchFilterType filter = prismContext.parserFor(query).parseRealValue(SearchFilterType.class);
 			LOGGER.trace("filter {}", filter);
 			ObjectFilter f = QueryConvertor.parseFilter(filter, UserType.class, prismContext);
 			LOGGER.trace("f {}", f.debugDump());
@@ -171,10 +185,10 @@ public class ReportServiceImpl implements ReportService {
 
 	}
 
-	public Collection<PrismObject<? extends ObjectType>> evaluateScript(String script,
+	public Collection<PrismContainerValue<? extends Containerable>> evaluateScript(String script,
 			Map<QName, Object> parameters) throws SchemaException, ExpressionEvaluationException,
 			ObjectNotFoundException {
-		List<PrismObject<? extends ObjectType>> results = new ArrayList<>();
+		List<PrismContainerValue<? extends Containerable>> results = new ArrayList<>();
 
 		ExpressionVariables variables = new ExpressionVariables();
 		variables.addVariableDefinitions(parameters);
@@ -182,7 +196,7 @@ public class ReportServiceImpl implements ReportService {
 		// special variable for audit report
 		variables.addVariableDefinition(new QName("auditParams"), getConvertedParams(parameters));
 
-		Task task = taskManager.createTaskInstance(ReportService.class.getName() + ".searchObjects()");
+		Task task = taskManager.createTaskInstance(ReportService.class.getName() + ".evaluateScript");
 		OperationResult parentResult = task.getResult();
 
 		Collection<FunctionLibrary> functions = createFunctionLibraries();
@@ -205,20 +219,30 @@ public class ReportServiceImpl implements ReportService {
 				Collection resultSet = (Collection) o;
 				if (resultSet != null && !resultSet.isEmpty()) {
 					for (Object obj : resultSet) {
-						if (obj instanceof PrismObject) {
-							results.add((PrismObject) obj);
-						} else if (obj instanceof Objectable) {
-							results.add(((Objectable) obj).asPrismObject());
-						}
+						results.add(convertResultingObject(obj));
 					}
 				}
 
 			} else {
-				results.add((PrismObject) o);
+				results.add(convertResultingObject(o));
 			}
 		}
 
 		return results;
+	}
+
+	protected PrismContainerValue convertResultingObject(Object obj) {
+		if (obj instanceof PrismObject) {
+            return ((PrismObject) obj).asObjectable().asPrismContainerValue();
+        } else if (obj instanceof Objectable) {
+            return ((Objectable) obj).asPrismContainerValue();
+        } else if (obj instanceof PrismContainerValue) {
+            return (PrismContainerValue) obj;
+        } else if (obj instanceof Containerable) {
+            return ((Containerable) obj).asPrismContainerValue();
+        } else {
+            throw new IllegalStateException("Reporting script should return something compatible with PrismContainerValue, not a " + obj.getClass());
+        }
 	}
 
 	public Collection<AuditEventRecord> evaluateAuditScript(String script, Map<QName, Object> parameters)
@@ -305,5 +329,4 @@ public class ReportServiceImpl implements ReportService {
 		functions.add(midPointLib);
 		return functions;
 	}
-
 }

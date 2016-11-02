@@ -60,6 +60,16 @@ public class MultiButtonColumn<T extends Serializable> extends AbstractColumn<T,
             }
 
             @Override
+            public boolean isButtonVisible(int id, IModel<T> model) {
+                return MultiButtonColumn.this.isButtonVisible(id, model);
+            }
+
+            @Override
+            protected String getButtonCssClass(int id) {
+                return MultiButtonColumn.this.getButtonCssClass(id);
+            }
+
+            @Override
             public String getButtonSizeCssClass(int id) {
                 return MultiButtonColumn.this.getButtonSizeCssClass(id);
             }
@@ -80,6 +90,17 @@ public class MultiButtonColumn<T extends Serializable> extends AbstractColumn<T,
     }
 
     public boolean isButtonEnabled(int id, IModel<T> model) {
+        return true;
+    }
+
+    protected String getButtonCssClass(int id) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(DoubleButtonColumn.BUTTON_BASE_CLASS).append(" ");
+        sb.append(getButtonColorCssClass(id)).append(" ").append(getButtonSizeCssClass(id));
+        return sb.toString();
+    }
+
+    public boolean isButtonVisible(int id, IModel<T> model) {
         return true;
     }
 

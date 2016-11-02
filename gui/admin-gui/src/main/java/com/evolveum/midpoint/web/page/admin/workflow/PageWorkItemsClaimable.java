@@ -24,16 +24,16 @@ import com.evolveum.midpoint.web.application.PageDescriptor;
  * @author lazyman
  */
 @PageDescriptor(url = "/admin/workItemsClaimable", action = {
-        @AuthorizationAction(actionUri = PageAdminWorkItems.AUTH_WORK_ITEMS_ALL,
-                label = PageAdminWorkItems.AUTH_WORK_ITEMS_ALL_LABEL,
-                description = PageAdminWorkItems.AUTH_WORK_ITEMS_ALL_DESCRIPTION),
-        @AuthorizationAction(actionUri = AuthorizationConstants.AUTZ_UI_WORK_ITEMS_URL,
-                label = "PageWorkItemsClaimable.auth.workItems.label",
-                description = "PageWorkItemsClaimable.auth.workItems.description")})
+        @AuthorizationAction(actionUri = PageAdminWorkItems.AUTH_APPROVALS_ALL,
+                label = PageAdminWorkItems.AUTH_APPROVALS_ALL_LABEL,
+                description = PageAdminWorkItems.AUTH_APPROVALS_ALL_DESCRIPTION),
+		@AuthorizationAction(actionUri = AuthorizationConstants.AUTZ_UI_CLAIMABLE_WORK_ITEMS_URL,
+				label = "PageWorkItemsClaimable.auth.claimableWorkItems.label",
+				description = "PageWorkItemsClaimable.auth.claimableWorkItems.description")})
 public class PageWorkItemsClaimable extends PageWorkItems {
 
     public PageWorkItemsClaimable() {
-        super(false);
+        super(true, false);
     }
 
 }

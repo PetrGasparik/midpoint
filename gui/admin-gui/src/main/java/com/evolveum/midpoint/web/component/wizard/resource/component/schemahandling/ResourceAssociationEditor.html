@@ -31,6 +31,8 @@
                 <h4 class="panel-title">
                     <a data-toggle="collapse" data-parent="#accordion" href="#main">
                         <wicket:message key="ResourceAssociationEditor.label.association"/>
+                        <span style="color: #f00; font-weight: bold;"
+                              wicket:message="title:prismPropertyPanel.required">*</span>
                         <button type="button" class="close"><span aria-hidden="true">&#8628;</span><span class="sr-only">Expand</span></button>
                     </a>
                 </h4>
@@ -42,6 +44,8 @@
                     <dl class="dl-horizontal">
                         <dt>
                             <label><wicket:message key="ResourceAssociationEditor.label.kind" /></label>
+                            <span style="color: #f00; font-weight: bold;"
+                                  wicket:message="title:prismPropertyPanel.required">*</span>
                             <i wicket:id="kindTooltip" wicket:message="title:SchemaHandlingStep.association.tooltip.kind"/>
                         </dt>
                         <dd>
@@ -53,6 +57,8 @@
                     <dl class="dl-horizontal">
                         <dt>
                             <label><wicket:message key="ResourceAssociationEditor.label.intent" /></label>
+                            <span style="color: #f00; font-weight: bold;"
+                                  wicket:message="title:prismPropertyPanel.required">*</span>
                             <i wicket:id="intentTooltip" wicket:message="title:SchemaHandlingStep.association.tooltip.intent"/>
                         </dt>
                         <div wicket:id="intent" />
@@ -61,6 +67,8 @@
                     <dl class="dl-horizontal">
                         <dt>
                             <label><wicket:message key="ResourceAssociationEditor.label.direction" /></label>
+                            <span style="color: #f00; font-weight: bold;"
+                                  wicket:message="title:prismPropertyPanel.required">*</span>
                             <i wicket:id="directionTooltip" wicket:message="title:SchemaHandlingStep.association.tooltip.direction"/>
                         </dt>
                         <dd>
@@ -71,6 +79,8 @@
                     <dl class="dl-horizontal">
                         <dt>
                             <label><wicket:message key="ResourceAssociationEditor.label.associationAttribute" /></label>
+                            <span style="color: #f00; font-weight: bold;"
+                                  wicket:message="title:prismPropertyPanel.required">*</span>
                             <i wicket:id="associationAttributeTooltip" wicket:message="title:SchemaHandlingStep.association.tooltip.associationAttribute"/>
                         </dt>
                         <dd>
@@ -81,6 +91,8 @@
                     <dl class="dl-horizontal">
                         <dt>
                             <label><wicket:message key="ResourceAssociationEditor.label.valueAttribute" /></label>
+                            <span style="color: #f00; font-weight: bold;"
+                                  wicket:message="title:prismPropertyPanel.required">*</span>
                             <i wicket:id="valueAttributeTooltip" wicket:message="title:SchemaHandlingStep.association.tooltip.valueAttribute"/>
                         </dt>
                         <dd>
@@ -108,6 +120,8 @@
                 <h4 class="panel-title">
                     <a data-toggle="collapse" data-parent="#accordion" href="#other">
                         <wicket:message key="ResourceAssociationEditor.label.resourceItem"/>
+                        <span style="color: #f00; font-weight: bold;"
+                              wicket:message="title:prismPropertyPanel.required">*</span>
                         <button type="button" class="close"><span aria-hidden="true">&#8628;</span><span class="sr-only">Expand</span></button>
                     </a>
                 </h4>
@@ -210,6 +224,7 @@
                         </dt>
                         <dd>
                             <select wicket:id="matchingRule" class="form-control input-sm"></select>
+                            <label wicket:id="unknownMatchingRule" class="text-danger"></label>
                         </dd>
                     </dl>
 
@@ -225,6 +240,10 @@
                                 <span class="input-group-btn">
                                     <a wicket:id="buttonOutbound" class="btn btn-sm btn-primary" title="Edit">
                                         <i class="fa fa-pencil-square-o"/>
+                                    </a>
+                                    <a wicket:id="deleteOutbound" class="btn btn-sm btn-danger"
+                                       wicket:message="title:ResourceAttributeEditor.title.delete">
+                                        <i class="fa fa-trash-o"/>
                                     </a>
                                 </span>
                             </div>

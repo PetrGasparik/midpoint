@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,14 +26,11 @@ import org.springframework.stereotype.Component;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
-import com.evolveum.midpoint.provisioning.api.ProvisioningOperationOptions;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
 import com.evolveum.midpoint.provisioning.consistency.api.ErrorHandler;
-import com.evolveum.midpoint.provisioning.impl.ShadowCacheReconciler;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.DeltaConvertor;
-import com.evolveum.midpoint.schema.ObjectOperationOption;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
@@ -48,8 +45,6 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AvailabilityStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FailedOperationTypeType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
@@ -74,9 +69,19 @@ public class GenericErrorHandler extends ErrorHandler{
 	
 	
 	@Override
-	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, boolean compensate, 
+	public <T extends ShadowType> T handleError(T shadow, FailedOperation op, Exception ex, 
+			boolean doDiscovery, boolean compensate, 
 			Task task, OperationResult parentResult) throws SchemaException, GenericFrameworkException, CommunicationException,
 			ObjectNotFoundException, ObjectAlreadyExistsException, ConfigurationException, SecurityViolationException {
+		
+		if (!doDiscovery) {
+			parentResult.recordFatalError(ex);
+			if (ex instanceof GenericFrameworkException) {
+				throw (GenericFrameworkException)ex;
+			} else {
+				throw new GenericFrameworkException(ex.getMessage(), ex);
+			}
+		}
 		
 //		OperationResult result = OperationResult.createOperationResult(shadow.getResult());
 		String operation = (shadow.getFailedOperationType() == null ? "null" : shadow.getFailedOperationType().name());
@@ -100,7 +105,7 @@ public class GenericErrorHandler extends ErrorHandler{
 
 				if (shadow.getFailedOperationType() == null) {
 					String message = "Generic error in the connector. Can't process shadow "
-							+ ObjectTypeUtil.toShortString(shadow) + ". ";
+							+ ObjectTypeUtil.toShortString(shadow) + ": " + ex.getMessage();
 					result.recordFatalError(message, ex);
 					throw new GenericFrameworkException(message, ex);
 				}

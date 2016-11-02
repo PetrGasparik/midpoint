@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,11 +35,13 @@ import com.evolveum.midpoint.prism.delta.ContainerDelta;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.delta.ReferenceDelta;
+import com.evolveum.midpoint.prism.delta.builder.DeltaBuilder;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.DeltaConvertor;
@@ -70,26 +72,7 @@ import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.IterativeTaskInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.EnvironmentalPerformanceInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActionsExecutedInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationStatsType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ScheduleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationInformationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskBindingType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskExecutionStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskRecurrenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskWaitingReasonType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ThreadStopActionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UriStack;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UriStackEntry;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.types_3.ItemDeltaType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 import org.apache.commons.lang.StringUtils;
@@ -105,6 +88,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Future;
+
+import static com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType.F_MODEL_OPERATION_CONTEXT;
+import static com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType.F_WORKFLOW_CONTEXT;
 
 /**
  * Implementation of a Task.
@@ -202,7 +188,7 @@ public class TaskQuartzImpl implements Task {
 	 */	
 	TaskQuartzImpl(TaskManagerQuartzImpl taskManager, LightweightIdentifier taskIdentifier, String operationName) {
 		this(taskManager);
-		this.repositoryService = null;
+		this.repositoryService = taskManager.getRepositoryService();
 		this.taskPrism = createPrism();
 
 		setTaskIdentifier(taskIdentifier.toString());
@@ -241,9 +227,11 @@ public class TaskQuartzImpl implements Task {
     }
 
 	private PrismObject<TaskType> createPrism() {
-		PrismObjectDefinition<TaskType> taskTypeDef = getPrismContext().getSchemaRegistry().findObjectDefinitionByCompileTimeClass(TaskType.class);
-		PrismObject<TaskType> taskPrism = taskTypeDef.instantiate();
-		return taskPrism;
+		try {
+			return getPrismContext().createObject(TaskType.class);
+		} catch (SchemaException e) {
+			throw new SystemException(e.getMessage(), e);
+		}
 	}
 
 	private void setDefaults() {
@@ -315,8 +303,32 @@ public class TaskQuartzImpl implements Task {
 	}
 
 	@Override
+	public void addModification(ItemDelta<?,?> delta) throws SchemaException {
+		addPendingModification(delta);
+		delta.applyTo(taskPrism);
+	}
+
+	@Override
+	public void addModifications(Collection<ItemDelta<?,?>> deltas) throws SchemaException {
+		for (ItemDelta<?,?> delta : deltas) {
+			addPendingModification(delta);
+			delta.applyTo(taskPrism);
+		}
+	}
+
+	@Override
+	public void addModificationImmediate(ItemDelta<?, ?> delta, OperationResult parentResult) throws SchemaException, ObjectAlreadyExistsException, ObjectNotFoundException {
+		addPendingModification(delta);
+		delta.applyTo(taskPrism);
+		savePendingModifications(parentResult);
+	}
+
+	@Override
 	public void savePendingModifications(OperationResult parentResult)
             throws ObjectNotFoundException, SchemaException, ObjectAlreadyExistsException {
+		if (isTransient()) {
+			return;
+		}
 		if (pendingModifications != null) {
 			synchronized (pendingModifications) {		// todo perhaps we should put something like this at more places here...
 				if (!pendingModifications.isEmpty()) {
@@ -1374,15 +1386,15 @@ public class TaskQuartzImpl implements Task {
         processModificationBatched(setChannelAndPrepareDelta(value));
     }
 
-//    @Override
-//    public void setDescriptionImmediate(String value, OperationResult parentResult)
-//            throws ObjectNotFoundException, SchemaException {
-//        try {
-//            processModificationNow(setDescriptionAndPrepareDelta(value), parentResult);
-//        } catch (ObjectAlreadyExistsException ex) {
-//            throw new SystemException(ex);
-//        }
-//    }
+    @Override
+    public void setChannelImmediate(String value, OperationResult parentResult)
+            throws ObjectNotFoundException, SchemaException {
+        try {
+            processModificationNow(setChannelAndPrepareDelta(value), parentResult);
+        } catch (ObjectAlreadyExistsException ex) {
+            throw new SystemException(ex);
+        }
+    }
 
     public void setChannelTransient(String name) {
         taskPrism.asObjectable().setChannel(name);
@@ -1720,7 +1732,7 @@ public class TaskQuartzImpl implements Task {
 	}
 	
 	@Override
-	public PrismProperty<?> getExtensionProperty(QName propertyName) {
+	public <T> PrismProperty<T> getExtensionProperty(QName propertyName) {
         if (getExtension() != null) {
 		    return getExtension().findProperty(propertyName);
         } else {
@@ -1728,7 +1740,17 @@ public class TaskQuartzImpl implements Task {
         }
 	}
 
-    @Override
+	@Override
+	public <T> T getExtensionPropertyRealValue(QName propertyName) {
+		PrismProperty<T> property = getExtensionProperty(propertyName);
+		if (property == null || property.isEmpty()) {
+			return null;
+		} else {
+			return property.getRealValue();
+		}
+	}
+
+	@Override
     public Item<?,?> getExtensionItem(QName propertyName) {
         if (getExtension() != null) {
             return getExtension().findItem(propertyName);
@@ -1943,7 +1965,103 @@ public class TaskQuartzImpl implements Task {
         requestee = user;
     }
 
-    //    @Override
+     /*
+      * Model operation context
+      */
+
+	@Override
+	public LensContextType getModelOperationContext() {
+		return taskPrism.asObjectable().getModelOperationContext();
+	}
+
+	@Override
+	public void setModelOperationContext(LensContextType value) throws SchemaException {
+		processModificationBatched(setModelOperationContextAndPrepareDelta(value));
+	}
+
+	//@Override
+	public void setModelOperationContextImmediate(LensContextType value, OperationResult parentResult)
+			throws ObjectNotFoundException, SchemaException {
+		try {
+			processModificationNow(setModelOperationContextAndPrepareDelta(value), parentResult);
+		} catch (ObjectAlreadyExistsException ex) {
+			throw new SystemException(ex);
+		}
+	}
+
+	public void setModelOperationContextTransient(LensContextType value) {
+		taskPrism.asObjectable().setModelOperationContext(value);
+	}
+
+	private ItemDelta<?, ?> setModelOperationContextAndPrepareDelta(LensContextType value)
+			throws SchemaException {
+		setModelOperationContextTransient(value);
+		if (!isPersistent()) {
+			return null;
+		}
+		if (value != null) {
+			return DeltaBuilder.deltaFor(TaskType.class, getPrismContext())
+					.item(F_MODEL_OPERATION_CONTEXT).replace(value.asPrismContainerValue().clone())
+					.asItemDelta();
+		} else {
+			return DeltaBuilder.deltaFor(TaskType.class, getPrismContext())
+					.item(F_MODEL_OPERATION_CONTEXT).replace()
+					.asItemDelta();
+		}
+	}
+	
+	/*
+	 *  Workflow context
+	 */
+
+	public void setWorkflowContext(WfContextType value) throws SchemaException {
+		processModificationBatched(setWorkflowContextAndPrepareDelta(value));
+	}
+
+	//@Override
+	public void setWorkflowContextImmediate(WfContextType value, OperationResult parentResult)
+			throws ObjectNotFoundException, SchemaException {
+		try {
+			processModificationNow(setWorkflowContextAndPrepareDelta(value), parentResult);
+		} catch (ObjectAlreadyExistsException ex) {
+			throw new SystemException(ex);
+		}
+	}
+
+	public void setWorkflowContextTransient(WfContextType value) {
+		taskPrism.asObjectable().setWorkflowContext(value);
+	}
+
+	private ItemDelta<?, ?> setWorkflowContextAndPrepareDelta(WfContextType value) throws SchemaException {
+		setWorkflowContextTransient(value);
+		if (!isPersistent()) {
+			return null;
+		}
+		if (value != null) {
+			return DeltaBuilder.deltaFor(TaskType.class, getPrismContext())
+					.item(F_WORKFLOW_CONTEXT).replace(value.asPrismContainerValue().clone())
+					.asItemDelta();
+		} else {
+			return DeltaBuilder.deltaFor(TaskType.class, getPrismContext())
+					.item(F_WORKFLOW_CONTEXT).replace()
+					.asItemDelta();
+		}
+	}
+
+	@Override
+	public WfContextType getWorkflowContext() {
+		return taskPrism.asObjectable().getWorkflowContext();
+	}
+
+	@Override
+	public void initializeWorkflowContextImmediate(String processInstanceId, OperationResult result)
+			throws SchemaException, ObjectNotFoundException {
+		WfContextType wfContextType = new WfContextType(getPrismContext());
+		wfContextType.setProcessInstanceId(processInstanceId);
+		setWorkflowContextImmediate(wfContextType, result);
+	}
+
+	//    @Override
 //    public PrismReference getRequesteeRef() {
 //        return (PrismReference) getExtensionItem(SchemaConstants.C_TASK_REQUESTEE_REF);
 //    }
@@ -2354,10 +2472,11 @@ public class TaskQuartzImpl implements Task {
         TaskQuartzImpl sub = (TaskQuartzImpl) taskManager.createTaskInstance();
         sub.setParent(this.getTaskIdentifier());
         sub.setOwner(this.getOwner());
+		sub.setChannel(this.getChannel());
 
 //        taskManager.registerTransientSubtask(sub, this);
 
-        LOGGER.trace("New subtask " + sub.getTaskIdentifier() + " has been created.");
+        LOGGER.trace("New subtask {} has been created.", sub.getTaskIdentifier());
         return sub;
     }
 
@@ -2429,34 +2548,21 @@ public class TaskQuartzImpl implements Task {
         result.addContext(OperationResult.CONTEXT_IMPLEMENTATION_CLASS, TaskQuartzImpl.class);
 
 		if (!isPersistent()) {
+			result.recordSuccessIfUnknown();
 			return new ArrayList<>(0);
 		}
 
-        ObjectFilter filter = null;
-//        try {
-            filter = EqualFilter.createEqual(TaskType.F_PARENT, TaskType.class, taskManager.getPrismContext(), null, getTaskIdentifier());
-//        } catch (SchemaException e) {
-//            throw new SystemException("Cannot create filter for 'parent equals task identifier' due to schema exception", e);
-//        }
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-
-        List<PrismObject<TaskType>> list = taskManager.getRepositoryService().searchObjects(TaskType.class, query, null, result);
-        result.recordSuccessIfUnknown();
-        return list;
+		return taskManager.listSubtasksForTask(getTaskIdentifier(), result);
     }
 
-    public List<PrismObject<TaskType>> listPrerequisiteTasksRaw(OperationResult parentResult) throws SchemaException {
+	public List<PrismObject<TaskType>> listPrerequisiteTasksRaw(OperationResult parentResult) throws SchemaException {
         OperationResult result = parentResult.createSubresult(DOT_INTERFACE + "listPrerequisiteTasksRaw");
         result.addContext(OperationResult.CONTEXT_OID, getOid());
         result.addContext(OperationResult.CONTEXT_IMPLEMENTATION_CLASS, TaskQuartzImpl.class);
 
-        ObjectFilter filter = null;
-//        try {
-            filter = EqualFilter.createEqual(TaskType.F_DEPENDENT, TaskType.class, taskManager.getPrismContext(), null, getTaskIdentifier());
-//        } catch (SchemaException e) {
-//            throw new SystemException("Cannot create filter for 'dependent contains task identifier' due to schema exception", e);
-//        }
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
+        ObjectQuery query = QueryBuilder.queryFor(TaskType.class, getPrismContext())
+				.item(TaskType.F_DEPENDENT).eq(getTaskIdentifier())
+				.build();
 
         List<PrismObject<TaskType>> list = taskManager.getRepositoryService().searchObjects(TaskType.class, query, null, result);
         result.recordSuccessIfUnknown();
@@ -2703,14 +2809,16 @@ public class TaskQuartzImpl implements Task {
 	}
 
 	@Override
-	public void recordMappingOperation(String objectOid, String objectName, String mappingName, long duration) {
-		environmentalPerformanceInformation.recordMappingOperation(objectOid, objectName, mappingName, duration);
+	public void recordMappingOperation(String objectOid, String objectName, String objectTypeName, String mappingName, long duration) {
+		environmentalPerformanceInformation.recordMappingOperation(objectOid, objectName, objectTypeName, mappingName, duration);
 	}
 
 	@Override
-	public synchronized void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid, long started, Throwable exception, SynchronizationInformation.Record increment) {
+	public synchronized void recordSynchronizationOperationEnd(String objectName, String objectDisplayName, QName objectType, String objectOid,
+			long started, Throwable exception, SynchronizationInformation.Record originalStateIncrement, SynchronizationInformation.Record newStateIncrement) {
 		if (synchronizationInformation != null) {
-			synchronizationInformation.recordSynchronizationOperationEnd(objectName, objectDisplayName, objectType, objectOid, started, exception, increment);
+			synchronizationInformation.recordSynchronizationOperationEnd(objectName, objectDisplayName, objectType, objectOid, started, exception,
+					originalStateIncrement, newStateIncrement);
 		}
 	}
 

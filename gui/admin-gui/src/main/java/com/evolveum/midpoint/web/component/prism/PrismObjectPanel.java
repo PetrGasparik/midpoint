@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,287 +16,94 @@
 
 package com.evolveum.midpoint.web.component.prism;
 
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.web.component.menu.cog.InlineMenuItem;
-import com.evolveum.midpoint.web.component.menu.cog.InlineMenuItemAction;
-import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.resource.img.ImgResources;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
+import java.util.List;
 
-import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.Component;
-import org.apache.wicket.ajax.AjaxEventBehavior;
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.behavior.AttributeAppender;
-import org.apache.wicket.markup.head.CssHeaderItem;
-import org.apache.wicket.markup.head.IHeaderResponse;
-import org.apache.wicket.markup.head.OnDomReadyHeaderItem;
-import org.apache.wicket.markup.html.WebMarkupContainer;
-import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.form.Form;
-import org.apache.wicket.markup.html.image.Image;
 import org.apache.wicket.markup.html.list.ListItem;
 import org.apache.wicket.markup.html.list.ListView;
-import org.apache.wicket.markup.html.panel.EmptyPanel;
 import org.apache.wicket.markup.html.panel.Panel;
-import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.PropertyModel;
-import org.apache.wicket.model.StringResourceModel;
-import org.apache.wicket.request.resource.PackageResourceReference;
 import org.apache.wicket.request.resource.ResourceReference;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 
 /**
  * @author lazyman
  */
 public class PrismObjectPanel<O extends ObjectType> extends Panel {
-
-    private static final String STRIPED_CLASS = "striped";
+	private static final long serialVersionUID = 1L;
+	
+	private static final String STRIPED_CLASS = "striped";
+	
     private static final String ID_HEADER = "header";
+    private static final String ID_CONTAINERS = "containers";
+    private static final String ID_CONTAINER = "container";
 
-    private boolean showHeader = true;
+    private static final Trace LOGGER = TraceManager.getTrace(PrismObjectPanel.class);
+
     private PageBase pageBase;
 
-    public PrismObjectPanel(String id, IModel<ObjectWrapper<O>> model, ResourceReference image, Form form, PageBase pageBase) {
+    public PrismObjectPanel(String id, IModel<ObjectWrapper<O>> model, ResourceReference image, Form<ObjectWrapper<O>> form, PageBase pageBase) {
         super(id);
         setOutputMarkupId(true);
+
+        LOGGER.trace("Creating object panel for {}", model.getObject());
 
         this.pageBase = pageBase;
         initLayout(model, image, form);
     }
+    
+    private void initLayout(final IModel<ObjectWrapper<O>> model, ResourceReference image, final Form<ObjectWrapper<O>> form) {
+        Component headerComponent = createHeader(ID_HEADER, model, form);
+        add(headerComponent);
 
-    @Override
-    public void renderHead(IHeaderResponse response) {
-        super.renderHead(response);
+        addOrReplaceContainers(model, form, false);
 
-        response.render(CssHeaderItem.forReference(
-                new PackageResourceReference(PrismObjectPanel.class, "PrismObjectPanel.css")));
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("fixStripingOnPrismForm('").append(getMarkupId()).append("', '").append(STRIPED_CLASS).append("');");
-        response.render(OnDomReadyHeaderItem.forScript(sb.toString()));
     }
 
-    private AjaxEventBehavior createHeaderOnClickBehaviour(final IModel<ObjectWrapper<O>> model) {
-        return new AjaxEventBehavior("onClick") {
+	public void removeAllContainerWrappers() {
+		((ListView<ContainerWrapper>) get(ID_CONTAINERS)).removeAll();
+	}
 
-            @Override
-            protected void onEvent(AjaxRequestTarget target) {
-                headerOnClickPerformed(target, model);
-            }
-        };
-    }
+    protected Component createHeader(String id, final IModel<ObjectWrapper<O>> model, final Form<ObjectWrapper<O>> form) {
+    	PrismHeaderPanel header = new PrismHeaderPanel(ID_HEADER, model) {
+			private static final long serialVersionUID = 1L;
 
-    private IModel<String> createHeaderClassModel(final IModel<ObjectWrapper<O>> model) {
-        return new AbstractReadOnlyModel<String>() {
-            @Override
-            public String getObject() {
-                ObjectWrapper wrapper = model.getObject();
-                if (wrapper.isProtectedAccount()) {
-                    return "protected";
-                }
-
-                return wrapper.getHeaderStatus().name().toLowerCase();
-            }
-        };
-    }
-
-    private IModel<String> createHeaderNameClassModel(final IModel<ObjectWrapper<O>> model) {
-        return new AbstractReadOnlyModel<String>() {
-            @Override
-            public String getObject() {
-                ObjectWrapper wrapper = model.getObject();
-                if (isDisabled(wrapper)) {
-                    return "disable";
-                }
-                return "";
-            }
-        };
-    }
-
-    /**
-     * Method uses value from administrativeStatus property for
-     * {@link com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType}
-     * and effectiveStatus property for {@link com.evolveum.midpoint.xml.ns._public.common.common_3.UserType}.
-     *
-     * @return true if panel should look like its' object is disabled (strike through font).
-     */
-    public boolean isDisabled(ObjectWrapper wrapper) {
-//        PrismObject object = wrapper.getObject();
-//
-//        if (UserType.class.isAssignableFrom(object.getCompileTimeClass())) {
-//            ActivationStatusType status = getActivationStatus(object, ActivationType.F_EFFECTIVE_STATUS);
-//            return ActivationStatusType.DISABLED.equals(status);
-//        } else if (ShadowType.class.isAssignableFrom(object.getCompileTimeClass())) {
-//            ActivationStatusType status = getActivationStatus(object, ActivationType.F_ADMINISTRATIVE_STATUS);
-//            return ActivationStatusType.DISABLED.equals(status);
-//        }
-
-        // attempt to fix MID-1580
-        ContainerWrapper activation = wrapper.findContainerWrapper(new ItemPath(
-                ShadowType.F_ACTIVATION));
-        if (activation == null) {
-            return false;
-        }
-        PropertyWrapper enabledProperty = (PropertyWrapper) activation.findPropertyWrapper(ActivationType.F_ADMINISTRATIVE_STATUS);
-        if (enabledProperty == null || enabledProperty.getValues().isEmpty()) {
-            return false;
-        }
-        ValueWrapper value = enabledProperty.getValues().get(0);
-        if (value.getValue() == null) {
-            return false;
-        }
-        ActivationStatusType status = (ActivationStatusType) ((PrismPropertyValue)value.getValue()).getValue();
-        return ActivationStatusType.DISABLED.equals(status);
-    }
-
-//    private ActivationStatusType getActivationStatus(PrismObject object, QName property) {
-//        PrismProperty prismProperty = object.findProperty(new ItemPath(ShadowType.F_ACTIVATION, property));
-//        if (prismProperty == null || prismProperty.isEmpty()) {
-//            return null;
-//        }
-//
-//        return (ActivationStatusType) prismProperty.getRealValue();
-//    }
-
-    protected Component createHeader(String id, IModel<ObjectWrapper<O>> model) {
-        H3Header header = new H3Header(id, model) {
-
-            @Override
-            protected List<InlineMenuItem> createMenuItems() {
-                return createDefaultMenuItems(getModel());
-            }
-        };
-
+			@Override
+			protected void onButtonClick(AjaxRequestTarget target) {
+                addOrReplaceContainers(model, form, true);
+				target.add(PrismObjectPanel.this);
+			}
+    		
+			@Override
+			public boolean isButtonsVisible() {
+				return true;
+			}
+    	};
         return header;
     }
 
-    protected List<InlineMenuItem> createDefaultMenuItems(IModel<ObjectWrapper> model) {
-        List<InlineMenuItem> items = new ArrayList<InlineMenuItem>();
 
-        InlineMenuItem item = new InlineMenuItem(createMinMaxLabel(model), createMinMaxAction(model));
-        items.add(item);
-
-        item = new InlineMenuItem(createEmptyLabel(model), createEmptyAction(model));
-        items.add(item);
-
-        return items;
+    protected IModel<List<ContainerWrapper>> createContainerModel(IModel<ObjectWrapper<O>> model){
+        return new PropertyModel<>(model, ObjectWrapper.PROPERTY_CONTAINERS);
     }
 
-    private InlineMenuItemAction createEmptyAction(final IModel<ObjectWrapper> model) {
-        return new InlineMenuItemAction() {
-
-            @Override
-            public void onClick(AjaxRequestTarget target) {
-                ObjectWrapper wrapper = model.getObject();
-                wrapper.setShowEmpty(!wrapper.isShowEmpty());
-                target.add(PrismObjectPanel.this);
-            }
-        };
+    protected void createContainerPanel(ListItem<ContainerWrapper> item, Form form){
+        PrismContainerPanel panel = new PrismContainerPanel(ID_CONTAINER, item.getModel(), true, form, pageBase);
+        panel.setOutputMarkupPlaceholderTag(true);
+        item.add(panel);
     }
 
-    private IModel<String> createEmptyLabel(final IModel<ObjectWrapper> model) {
-        return new AbstractReadOnlyModel<String>() {
-
-            @Override
-            public String getObject() {
-                ObjectWrapper wrapper = model.getObject();
-                String key = wrapper.isShowEmpty() ? "PrismObjectPanel.hideEmpty" : "PrismObjectPanel.showEmpty";
-                return new StringResourceModel(key, PrismObjectPanel.this, null, key).getString();
-            }
-        };
-    }
-
-    private InlineMenuItemAction createMinMaxAction(final IModel<ObjectWrapper> model) {
-        return new InlineMenuItemAction() {
-
-            @Override
-            public void onClick(AjaxRequestTarget target) {
-                ObjectWrapper wrapper = model.getObject();
-                wrapper.setMinimalized(!wrapper.isMinimalized());
-                target.add(PrismObjectPanel.this);
-            }
-        };
-    }
-
-    private IModel<String> createMinMaxLabel(final IModel<ObjectWrapper> model) {
-        return new AbstractReadOnlyModel<String>() {
-
-            @Override
-            public String getObject() {
-                ObjectWrapper wrapper = model.getObject();
-                String key = wrapper.isMinimalized() ? "PrismObjectPanel.maximize" : "PrismObjectPanel.minimize";
-                return new StringResourceModel(key, PrismObjectPanel.this, null, key).getString();
-            }
-        };
-    }
-
-    private void initLayout(final IModel<ObjectWrapper<O>> model, ResourceReference image, final Form form) {
-        add(createHeader(ID_HEADER, model));
-
-        WebMarkupContainer headerPanel = new WebMarkupContainer("headerPanel");
-        headerPanel.add(new AttributeAppender("class", createHeaderClassModel(model), " "));
-//        TODO - attempt to fix row color application when certain actions performed, similar to AssignmentEditorPanel.
-//        headerPanel.add(AttributeModifier.append("class", createHeaderClassModel(model)));
-//        headerPanel.setOutputMarkupId(true);
-        add(headerPanel);
-        headerPanel.add(new VisibleEnableBehaviour() {
-
-            @Override
-            public boolean isVisible() {
-                return isShowHeader();
-                
-            }
-        });
-
-        Image shield = new Image("shield", new PackageResourceReference(ImgResources.class, ImgResources.SHIELD));
-        shield.add(new VisibleEnableBehaviour() {
-
-            @Override
-            public boolean isVisible() {
-                ObjectWrapper<O> wrapper = model.getObject();
-                return wrapper.isProtectedAccount();
-            }
-        });
-        headerPanel.add(shield);
-
-        Label header = new Label("header", createDisplayName(model));
-        header.add(new AttributeAppender("class", createHeaderNameClassModel(model), " "));
-        header.add(createHeaderOnClickBehaviour(model));
-        headerPanel.add(header);
-        Label description = new Label("description", createDescription(model));
-        description.add(new AttributeModifier("title", createDescription(model)));
-
-        description.add(createHeaderOnClickBehaviour(model));
-        headerPanel.add(description);
-
-        Image headerImg = new Image("headerImg", image);
-        headerImg.add(createHeaderOnClickBehaviour(model));
-        headerPanel.add(headerImg);
-
-        initButtons(headerPanel, model);
-
-        WebMarkupContainer body = new WebMarkupContainer("body");
-        body.add(new VisibleEnableBehaviour() {
-
-            @Override
-            public boolean isVisible() {
-                ObjectWrapper wrapper = model.getObject();
-                return !wrapper.isMinimalized();
-            }
-        });
-        add(body);
-
-        ListView<ContainerWrapper> containers = new ListView<ContainerWrapper>("containers",
+    private void addOrReplaceContainers(IModel<ObjectWrapper<O>> model, final Form form, boolean isToBeReplaced){
+        ListView<ContainerWrapper> containers = new ListView<ContainerWrapper>(ID_CONTAINERS,
                 createContainerModel(model)) {
+            private static final long serialVersionUID = 1L;
 
             @Override
             protected void populateItem(ListItem<ContainerWrapper> item) {
@@ -304,65 +111,11 @@ public class PrismObjectPanel<O extends ObjectType> extends Panel {
             }
         };
         containers.setReuseItems(true);
-        body.add(containers);
+        if (isToBeReplaced) {
+            replace(containers);
+        } else {
+            add(containers);
+        }
     }
 
-    protected IModel<List<ContainerWrapper>> createContainerModel(IModel<ObjectWrapper<O>> model){
-        return new PropertyModel<>(model, "containers");
-    }
-
-    protected void createContainerPanel(ListItem<ContainerWrapper> item, Form form){
-        item.add(new PrismContainerPanel("container", item.getModel(), true, form, pageBase));
-    }
-
-    protected IModel<String> createDisplayName(IModel<ObjectWrapper<O>> model) {
-        return new PropertyModel<>(model, "displayName");
-    }
-
-    protected IModel<String> createDescription(IModel<ObjectWrapper<O>> model) {
-        return new PropertyModel<>(model, "description");
-    }
-
-    private void initButtons(WebMarkupContainer headerPanel, final IModel<ObjectWrapper<O>> model) {
-        headerPanel.add(new PrismOptionButtonPanel("optionButtons", (IModel) model) {
-
-            @Override
-            public void checkBoxOnUpdate(AjaxRequestTarget target) {
-                target.add(PrismObjectPanel.this);
-            }
-
-            @Override
-            public void minimizeOnClick(AjaxRequestTarget target) {
-                ObjectWrapper wrapper = model.getObject();
-                wrapper.setMinimalized(!wrapper.isMinimalized());
-                target.add(PrismObjectPanel.this);
-            }
-
-            @Override
-            public void showEmptyOnClick(AjaxRequestTarget target) {
-                ObjectWrapper wrapper = model.getObject();
-                wrapper.setShowEmpty(!wrapper.isShowEmpty());
-                target.add(PrismObjectPanel.this);
-            }
-        });
-        headerPanel.add(createOperationPanel("operationButtons"));
-    }
-
-    protected Panel createOperationPanel(String id) {
-        return new EmptyPanel(id);
-    }
-
-    public boolean isShowHeader() {
-        return showHeader;
-    }
-
-    public void setShowHeader(boolean showHeader) {
-        this.showHeader = showHeader;
-    }
-
-    public void headerOnClickPerformed(AjaxRequestTarget target, IModel<ObjectWrapper<O>> model) {
-        ObjectWrapper<O> wrapper = model.getObject();
-        wrapper.setMinimalized(!wrapper.isMinimalized());
-        target.add(PrismObjectPanel.this);
-    }
 }

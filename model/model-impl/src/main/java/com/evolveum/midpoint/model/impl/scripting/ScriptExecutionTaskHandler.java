@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package com.evolveum.midpoint.model.impl.scripting;
 import com.evolveum.midpoint.model.api.ScriptExecutionException;
 import com.evolveum.midpoint.model.api.ScriptExecutionResult;
 import com.evolveum.midpoint.model.api.ScriptingService;
-import com.evolveum.midpoint.model.impl.sync.TaskHandlerUtil;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -81,7 +80,7 @@ public class ScriptExecutionTaskHandler implements TaskHandler {
             runResult.setRunResultStatus(TaskRunResult.TaskRunResultStatus.FINISHED);
         } catch (ScriptExecutionException|SecurityViolationException|SchemaException e) {
             result.recordFatalError("Couldn't execute script: " + e.getMessage(), e);
-            LoggingUtils.logException(LOGGER, "Couldn't execute script", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't execute script", e);
             runResult.setRunResultStatus(TaskRunResult.TaskRunResultStatus.PERMANENT_ERROR);
         } finally {
             task.storeOperationStats();

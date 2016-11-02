@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,71 +16,61 @@
 
 package com.evolveum.midpoint.model.impl.util;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import javax.xml.namespace.QName;
-
 import com.evolveum.midpoint.common.crypto.CryptoUtil;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
+import com.evolveum.midpoint.model.common.expression.script.ScriptExpression;
 import com.evolveum.midpoint.model.impl.ModelConstants;
+import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.model.impl.importer.ObjectImporter;
+import com.evolveum.midpoint.model.impl.lens.AssignmentPathVariables;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
+import com.evolveum.midpoint.model.impl.lens.LensElementContext;
 import com.evolveum.midpoint.model.impl.lens.LensFocusContext;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismReference;
-import com.evolveum.midpoint.prism.PrismReferenceDefinition;
-import com.evolveum.midpoint.prism.PrismReferenceValue;
-import com.evolveum.midpoint.prism.PrismValue;
-import com.evolveum.midpoint.prism.Visitable;
+import com.evolveum.midpoint.model.impl.lens.LensProjectionContext;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.Visitor;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
 import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.parser.QueryConvertor;
-import com.evolveum.midpoint.prism.query.ObjectFilter;
-import com.evolveum.midpoint.prism.query.ObjectPaging;
-import com.evolveum.midpoint.prism.query.ObjectQuery;
-import com.evolveum.midpoint.prism.query.QueryJaxbConvertor;
-import com.evolveum.midpoint.provisioning.api.ProvisioningService;
+import com.evolveum.midpoint.prism.marshaller.QueryConvertor;
+import com.evolveum.midpoint.prism.query.*;
 import com.evolveum.midpoint.repo.api.RepositoryService;
-import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.ObjectDeltaOperation;
 import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
-import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.ExpressionConstants;
+import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.processor.ObjectClassComplexTypeDefinition;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.Handler;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
+import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
+import com.evolveum.prism.xml.ns._public.types_3.EvaluationTimeType;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
-import org.w3c.dom.Element;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import javax.xml.namespace.QName;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * @author lazyman
+ * @author semancik
  */
 public final class Utils {
 
@@ -88,40 +78,6 @@ public final class Utils {
 	private static final String OPERATION_RESOLVE_REFERENCE = ObjectImporter.class.getName()
 	            + ".resolveReference";
 	
-    private Utils() {
-    }
-
-	// inefficient (does not make use of LensContext resource cache)
-	// and seemingly not used at all => commenting out before deleting forever
-//    public static void resolveResource(ShadowType shadow, ProvisioningService provisioning,
-//            OperationResult result) throws CommunicationException, SchemaException, ObjectNotFoundException, ConfigurationException,
-//            SecurityViolationException {
-//
-//        Validate.notNull(shadow, "Resource object shadow must not be null.");
-//        Validate.notNull(provisioning, "Provisioning service must not be null.");
-//
-//        ResourceType resource = getResource(shadow, provisioning, result);
-//        shadow.setResourceRef(null);
-//        shadow.setResource(resource);
-//    }
-//
-//    public static ResourceType getResource(ShadowType shadow, ProvisioningService provisioning,
-//            OperationResult result) throws CommunicationException, SchemaException, ObjectNotFoundException, ConfigurationException,
-//            SecurityViolationException {
-//
-//        if (shadow.getResource() != null) {
-//            return shadow.getResource();
-//        }
-//
-//        if (shadow.getResourceRef() == null) {
-//            throw new IllegalArgumentException("Couldn't resolve resource. Resource object shadow doesn't" +
-//                    " contain resource nor resource ref.");
-//        }
-//
-//        ObjectReferenceType resourceRef = shadow.getResourceRef();
-//        return provisioning.getObject(ResourceType.class, resourceRef.getOid(), null, null, result).asObjectable();
-//    }
-
 	@Deprecated	// use RepositoryService.objectSearchIterative instead
 	public static <T extends ObjectType> void searchIterative(RepositoryService repositoryService, Class<T> type, ObjectQuery query, 
 			Handler<PrismObject<T>> handler, int blockSize, OperationResult opResult) throws SchemaException {
@@ -153,7 +109,7 @@ public final class Utils {
 	 * @param result
 	 */
 	public static <T extends ObjectType> void resolveReferences(final PrismObject<T> object, final RepositoryService repository,
-	    		final boolean enforceReferentialIntegrity, final boolean forceFilterReevaluation,
+	    		final boolean enforceReferentialIntegrity, final boolean forceFilterReevaluation, final EvaluationTimeType resolutionTime,
 				final PrismContext prismContext, final OperationResult result) {
 	    	
 	    	Visitor visitor = new Visitor() {
@@ -162,7 +118,8 @@ public final class Utils {
 					if (!(visitable instanceof PrismReferenceValue)) {
 						return;
 					}
-					resolveRef((PrismReferenceValue)visitable, repository, enforceReferentialIntegrity, forceFilterReevaluation, prismContext, object.toString(), result);
+					resolveRef((PrismReferenceValue)visitable, repository, enforceReferentialIntegrity, forceFilterReevaluation,
+							resolutionTime, prismContext, object.toString(), result);
 				}
 			};
 			object.accept(visitor);
@@ -175,6 +132,7 @@ public final class Utils {
 
 	public static <T extends ObjectType> void resolveReferences(final ObjectDelta<T> objectDelta, final RepositoryService repository,
 																final boolean enforceReferentialIntegrity, final boolean forceFilterReevaluation,
+																final EvaluationTimeType resolutionTime,
 																final PrismContext prismContext, final OperationResult result) {
 
 		Visitor visitor = new Visitor() {
@@ -183,7 +141,8 @@ public final class Utils {
 				if (!(visitable instanceof PrismReferenceValue)) {
 					return;
 				}
-				resolveRef((PrismReferenceValue)visitable, repository, enforceReferentialIntegrity, forceFilterReevaluation, prismContext, objectDelta.toString(), result);
+				resolveRef((PrismReferenceValue)visitable, repository, enforceReferentialIntegrity, forceFilterReevaluation,
+						resolutionTime, prismContext, objectDelta.toString(), result);
 			}
 		};
 		// We could use objectDelta.accept(visitor), but we want to visit only values to add and replace
@@ -222,10 +181,17 @@ public final class Utils {
 	}
 
 	private static void resolveRef(PrismReferenceValue refVal, RepositoryService repository,
-									   boolean enforceReferentialIntegrity, boolean forceFilterReevaluation,
+									   boolean enforceReferentialIntegrity, boolean forceFilterReevaluation, EvaluationTimeType evaluationTimeType,
 									   PrismContext prismContext, String contextDesc, OperationResult parentResult) {
 			QName refName = refVal.getParent().getElementName();
-	        OperationResult result = parentResult.createSubresult(OPERATION_RESOLVE_REFERENCE);
+			
+			if ((refVal.getResolutionTime() != null && refVal.getResolutionTime() != evaluationTimeType) ||
+					(refVal.getResolutionTime() == null && evaluationTimeType != EvaluationTimeType.IMPORT)) {
+				LOGGER.trace("Skipping resolution of reference {} in {} because the resolutionTime is set to {}", refName, contextDesc, refVal.getResolutionTime());
+				return;
+			}
+			
+	        OperationResult result = parentResult.createMinorSubresult(OPERATION_RESOLVE_REFERENCE);
 	        result.addContext(OperationResult.CONTEXT_ITEM, refName);
 
 	        QName typeQName = null;
@@ -315,6 +281,12 @@ public final class Utils {
 	            result.recordFatalError("Missing definition of type of reference " + refName);
 	            return;
 	        }
+	        
+	        if (containExpression(objFilter)){
+	        	result.recordSuccessIfUnknown();
+	        	return;
+	        }
+	        
 	        try {
 	        	ObjectQuery query = ObjectQuery.createObjectQuery(objFilter);
 	            objects = (List)repository.searchObjects(type, query, null, result);
@@ -343,6 +315,22 @@ public final class Utils {
 	        refVal.setOid(oid);
 	        result.recordSuccessIfUnknown();
 	    }
+	
+	private static boolean containExpression(ObjectFilter filter){
+		if (filter == null){
+			return false;
+		}
+		
+		if (filter instanceof InOidFilter && ((InOidFilter) filter).getExpression() != null){
+			return true;
+		}
+		
+		if (filter instanceof ValueFilter && ((ValueFilter) filter).getExpression() != null){
+			return true;
+		}
+		
+		return false;
+	}
 
         public static ObjectClassComplexTypeDefinition determineObjectClass(RefinedResourceSchema refinedSchema, Task task) throws SchemaException {
 
@@ -367,8 +355,8 @@ public final class Utils {
             return determineObjectClassInternal(refinedSchema, objectclass, kind, intent, task);
         }
 
-        public static ObjectClassComplexTypeDefinition determineObjectClass(RefinedResourceSchema refinedSchema, PrismObject<ShadowType> shadowToImport) throws SchemaException {
-            ShadowType s = shadowToImport.asObjectable();
+        public static ObjectClassComplexTypeDefinition determineObjectClass(RefinedResourceSchema refinedSchema, PrismObject<ShadowType> shadow) throws SchemaException {
+            ShadowType s = shadow.asObjectable();
             return determineObjectClassInternal(refinedSchema, s.getObjectClass(), s.getKind(), s.getIntent(), s);
         }
 
@@ -471,6 +459,22 @@ public final class Utils {
     	
 		return dryRun.booleanValue(); 
     }
+
+	public static ExpressionVariables getDefaultExpressionVariables(@NotNull LensContext<?> context, @Nullable LensProjectionContext projCtx) throws SchemaException {
+		ExpressionVariables variables = new ExpressionVariables();
+		if (context.getFocusContext() != null) {
+			variables.addVariableDefinition(ExpressionConstants.VAR_FOCUS, context.getFocusContext().getObjectDeltaObject());
+			variables.addVariableDefinition(ExpressionConstants.VAR_USER, context.getFocusContext().getObjectDeltaObject());
+		}
+		if (projCtx != null) {
+			variables.addVariableDefinition(ExpressionConstants.VAR_PROJECTION, projCtx.getObjectDeltaObject());
+			variables.addVariableDefinition(ExpressionConstants.VAR_SHADOW, projCtx.getObjectDeltaObject());
+			variables.addVariableDefinition(ExpressionConstants.VAR_ACCOUNT, projCtx.getObjectDeltaObject());
+			variables.addVariableDefinition(ExpressionConstants.VAR_RESOURCE, projCtx.getResource());
+		}
+		variables.addVariableDefinition(ExpressionConstants.VAR_CONFIGURATION, context.getSystemConfiguration());
+		return variables;
+	}
     
     public static ExpressionVariables getDefaultExpressionVariables(ObjectType focusType,
     		ShadowType shadowType, ResourceType resourceType, SystemConfigurationType configurationType) {
@@ -490,24 +494,23 @@ public final class Utils {
     	if (configurationType != null) {
     		configuration = configurationType.asPrismObject();
     	}
-		return getDefaultExpressionVariables(focus, shadow, null, resource, configuration);
+		return getDefaultExpressionVariables(focus, shadow, null, resource, configuration, null);
     }
     
-    public static ExpressionVariables getDefaultExpressionVariables(PrismObject<? extends ObjectType> focus,
+    public static <O extends ObjectType> ExpressionVariables getDefaultExpressionVariables(PrismObject<? extends ObjectType> focus,
     		PrismObject<? extends ShadowType> shadow, ResourceShadowDiscriminator discr, 
-    		PrismObject<ResourceType> resource, PrismObject<SystemConfigurationType> configuration) {
+    		PrismObject<ResourceType> resource, PrismObject<SystemConfigurationType> configuration, LensElementContext<O> affectedElementContext) {
     	ExpressionVariables variables = new ExpressionVariables();
-    	addDefaultExpressionVariables(variables, focus, shadow, discr, resource, configuration);
+    	addDefaultExpressionVariables(variables, focus, shadow, discr, resource, configuration, affectedElementContext);
     	return variables;
     }
     
-    public static void addDefaultExpressionVariables(ExpressionVariables variables, PrismObject<? extends ObjectType> focus,
+    public static <O extends ObjectType> void addDefaultExpressionVariables(ExpressionVariables variables, PrismObject<? extends ObjectType> focus,
     		PrismObject<? extends ShadowType> shadow, ResourceShadowDiscriminator discr, 
-    		PrismObject<ResourceType> resource, PrismObject<SystemConfigurationType> configuration) {
+    		PrismObject<ResourceType> resource, PrismObject<SystemConfigurationType> configuration, LensElementContext<O> affectedElementContext) {
 
         // Legacy. And convenience/understandability.
-        if (focus == null || (focus != null && focus.canRepresent(UserType.class))
-                || (discr != null && discr.getKind() == ShadowKindType.ACCOUNT)) {
+        if (focus == null || focus.canRepresent(UserType.class) || (discr != null && discr.getKind() == ShadowKindType.ACCOUNT)) {
 		    variables.addVariableDefinition(ExpressionConstants.VAR_USER, focus);
             variables.addVariableDefinition(ExpressionConstants.VAR_ACCOUNT, shadow);
         }
@@ -516,7 +519,19 @@ public final class Utils {
 		variables.addVariableDefinition(ExpressionConstants.VAR_SHADOW, shadow);
 		variables.addVariableDefinition(ExpressionConstants.VAR_RESOURCE, resource);
 		variables.addVariableDefinition(ExpressionConstants.VAR_CONFIGURATION, configuration);
+		
+		if (affectedElementContext != null) {
+			variables.addVariableDefinition(ExpressionConstants.VAR_OPERATION, affectedElementContext.getOperation().getValue());
+		}
 	}
+    
+    public static void addAssignmentPathVariables(AssignmentPathVariables assignmentPathVariables, ExpressionVariables expressionVariables) {
+    	expressionVariables.addVariableDefinition(ExpressionConstants.VAR_ASSIGNMENT, assignmentPathVariables.getMagicAssignment());
+    	expressionVariables.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ASSIGNMENT, assignmentPathVariables.getImmediateAssignment());
+    	expressionVariables.addVariableDefinition(ExpressionConstants.VAR_THIS_ASSIGNMENT, assignmentPathVariables.getThisAssignment());
+    	expressionVariables.addVariableDefinition(ExpressionConstants.VAR_FOCUS_ASSIGNMENT, assignmentPathVariables.getFocusAssignment());
+    	expressionVariables.addVariableDefinition(ExpressionConstants.VAR_IMMEDIATE_ROLE, assignmentPathVariables.getImmediateRole());
+    }
 
 	public static String getPolicyDesc(ObjectSynchronizationType synchronizationPolicy) {
 		if (synchronizationPolicy == null) {
@@ -527,48 +542,69 @@ public final class Utils {
 		}
 		return synchronizationPolicy.toString();
 	}
-
-	private static PrismObject<SystemConfigurationType> cachedSystemConfiguration = null;
-	private static long cachedSystemConfigurationRetrieveTimestamp = 0;
-	private static final long CACHED_SYSTEM_CONFIGURATION_TTL = 120000L;		// just to avoid stalled data if version is not incremented for any reason
-
-	private static final String NO_SYSTEM_CONFIG_MSG = "System configuration object was not found (should not happen in production except for initial repository loading)";
-	public static PrismObject<SystemConfigurationType> getSystemConfiguration(RepositoryService repositoryService, OperationResult result) throws SchemaException {
-		PrismObject<SystemConfigurationType> systemConfiguration = null;
-		if (cachedSystemConfiguration != null && cachedSystemConfigurationRetrieveTimestamp + CACHED_SYSTEM_CONFIGURATION_TTL >= System.currentTimeMillis()) {
-			String currentVersion;
-			try {
-				currentVersion = repositoryService.getVersion(SystemConfigurationType.class, SystemObjectsType.SYSTEM_CONFIGURATION.value(), result);
-			} catch (ObjectNotFoundException e) {
-				// see below
-				LOGGER.warn(NO_SYSTEM_CONFIG_MSG);
-				return null;
-			}
-			if (currentVersion != null && currentVersion.equals(cachedSystemConfiguration.getVersion())) {
-				LOGGER.trace("Using cached system configuration object; version = {}", currentVersion);
-				return cachedSystemConfiguration.clone();
+	
+	public static PrismReferenceValue determineAuditTargetDeltaOps(Collection<ObjectDeltaOperation<? extends ObjectType>> deltaOps) {
+		if (deltaOps == null || deltaOps.isEmpty()) {
+			return null;
+		}
+		if (deltaOps.size() == 1) {
+			ObjectDeltaOperation<? extends ObjectType> deltaOp = deltaOps.iterator().next();
+			return getAditTarget(deltaOp.getObjectDelta());
+		}
+		for (ObjectDeltaOperation<? extends ObjectType> deltaOp: deltaOps) {
+			if (!ShadowType.class.isAssignableFrom(deltaOp.getObjectDelta().getObjectTypeClass())) {
+				return getAditTarget(deltaOp.getObjectDelta());
 			}
 		}
-		try {
-			LOGGER.trace("Cache miss: reading system configuration from the repository");
-			systemConfiguration = repositoryService.getObject(SystemConfigurationType.class, SystemObjectsType.SYSTEM_CONFIGURATION.value(),
-					SelectorOptions.createCollection(GetOperationOptions.createAllowNotFound()), result);
-		} catch (ObjectNotFoundException e) {
-			// just go on ... we will return and continue
-			// This is needed e.g. to set up new system configuration is the old one gets deleted
+		// Several raw operations, all on shadows, no focus ... this should not happen
+		// But if it does we rather do not specify any target. We should not like to choose
+		// target randomly. That would be confusing.
+		return null;
+	}
+	
+	public static PrismReferenceValue determineAuditTarget(Collection<ObjectDelta<? extends ObjectType>> deltas) {
+		if (deltas == null || deltas.isEmpty()) {
+			return null;
 		}
-		if (systemConfiguration == null) {
-		    // throw new SystemException("System configuration object is null (should not happen!)");
-		    // This should not happen, but it happens in tests. And it is a convenient short cut. Tolerate it for now.
-		    LOGGER.warn(NO_SYSTEM_CONFIG_MSG);
-		    return null;
+		if (deltas.size() == 1) {
+			ObjectDelta<? extends ObjectType> delta = deltas.iterator().next();
+			return getAditTarget(delta);
 		}
-		cachedSystemConfiguration = systemConfiguration.clone();
-		cachedSystemConfigurationRetrieveTimestamp = System.currentTimeMillis();
-		return systemConfiguration;
+		for (ObjectDelta<? extends ObjectType> delta: deltas) {
+			if (!ShadowType.class.isAssignableFrom(delta.getObjectTypeClass())) {
+				return getAditTarget(delta);
+			}
+		}
+		// Several raw operations, all on shadows, no focus ... this should not happen
+		// But if it does we rather do not specify any target. We should not like to choose
+		// target randomly. That would be confusing.
+		return null;
 	}
 
-	public static void clearSystemConfigurationCache() {
-		cachedSystemConfiguration = null;
+	public static PrismReferenceValue getAditTarget(ObjectDelta<? extends ObjectType> delta) {
+		PrismReferenceValue targetRef = new PrismReferenceValue(delta.getOid());
+		targetRef.setTargetType(ObjectTypes.getObjectType(delta.getObjectTypeClass()).getTypeQName());
+		if (delta.isAdd()) {
+			targetRef.setObject(delta.getObjectToAdd());
+		}
+		return targetRef;
 	}
+	
+	public static <V extends PrismValue, F extends ObjectType> List<V> evaluateScript(
+            ScriptExpression scriptExpression, LensContext<F> lensContext, ExpressionVariables variables, boolean useNew, String shortDesc, Task task, OperationResult parentResult) throws ExpressionEvaluationException, ObjectNotFoundException, SchemaException {
+        ModelExpressionThreadLocalHolder.pushLensContext(lensContext);
+        ModelExpressionThreadLocalHolder.pushCurrentResult(parentResult);
+        ModelExpressionThreadLocalHolder.pushCurrentTask(task);
+        try {
+            return scriptExpression.evaluate(variables, ScriptExpressionReturnTypeType.SCALAR, useNew, shortDesc, task, parentResult);
+        } finally {
+            ModelExpressionThreadLocalHolder.popLensContext();
+            ModelExpressionThreadLocalHolder.popCurrentResult();
+            ModelExpressionThreadLocalHolder.popCurrentTask();
+//			if (lensContext.getDebugListener() != null) {
+//				lensContext.getDebugListener().afterScriptEvaluation(lensContext, scriptExpression);
+//			}
+        }
+    }
+	
 }

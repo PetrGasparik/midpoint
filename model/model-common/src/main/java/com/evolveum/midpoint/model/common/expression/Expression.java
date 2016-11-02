@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,12 +30,12 @@ import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.Validate;
 import org.w3c.dom.Element;
 
-import com.evolveum.midpoint.common.InternalsConfig;
 import com.evolveum.midpoint.prism.ItemDefinition;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.prism.path.ItemPath;
+import com.evolveum.midpoint.schema.internals.InternalsConfig;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
 import com.evolveum.midpoint.util.MiscUtil;
@@ -138,7 +138,11 @@ public class Expression<V extends PrismValue,D extends ItemDefinition> {
 					}
 					outputTriple.removeEmptyValues(allowEmptyRealValues);
 					if (InternalsConfig.consistencyChecks) {
-						outputTriple.checkConsistence();
+						try {
+							outputTriple.checkConsistence();
+						} catch (IllegalStateException e) {
+							throw new IllegalStateException(e.getMessage() + "; in expression " + this +", evaluator " + evaluator, e);
+						}
 					}
 					traceSuccess(context, processedVariables, outputTriple);
 					return outputTriple;
@@ -162,7 +166,7 @@ public class Expression<V extends PrismValue,D extends ItemDefinition> {
 	}
 	
 	private void traceSuccess(ExpressionEvaluationContext context, ExpressionVariables processedVariables, PrismValueDeltaSetTriple<V> outputTriple) {
-		if (!LOGGER.isTraceEnabled()) {
+		if (!isTrace()) {
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -175,12 +179,12 @@ public class Expression<V extends PrismValue,D extends ItemDefinition> {
 			sb.append(outputTriple.toHumanReadableString());
 		}
 		appendTraceFooter(sb);
-		LOGGER.trace(sb.toString());
+		trace(sb.toString());
 	}
-	
+
 	private void traceFailure(ExpressionEvaluationContext context, ExpressionVariables processedVariables, Exception e) {
 		LOGGER.error("Error evaluating expression in {}: {}", new Object[]{context.getContextDescription(), e.getMessage(), e});
-		if (!LOGGER.isTraceEnabled()) {
+		if (!isTrace()) {
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -188,9 +192,21 @@ public class Expression<V extends PrismValue,D extends ItemDefinition> {
 		appendTraceHeader(sb, context, processedVariables);
 		sb.append("\nERROR: ").append(e.getClass().getSimpleName()).append(": ").append(e.getMessage());
 		appendTraceFooter(sb);
-		LOGGER.trace(sb.toString());
+		trace(sb.toString());
 	}
 
+	private boolean isTrace() {
+		return LOGGER.isTraceEnabled() || (expressionType != null && expressionType.isTrace() == Boolean.TRUE); 
+	}
+	
+	private void trace(String msg) {
+		if (expressionType != null && expressionType.isTrace() == Boolean.TRUE) {
+			LOGGER.info(msg);
+		} else {
+			LOGGER.trace(msg);
+		}
+	}
+	
 	private void appendTraceHeader(StringBuilder sb, ExpressionEvaluationContext context, ExpressionVariables processedVariables) {
 		sb.append("---[ EXPRESSION in ");
 		sb.append(context.getContextDescription());

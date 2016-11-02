@@ -17,7 +17,9 @@
 package com.evolveum.midpoint.common;
 
 import com.evolveum.midpoint.schema.util.SystemConfigurationTypeUtil;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.WfConfigurationType;
 
 /**
  * This is a class that statically holds current system configuration.
@@ -29,6 +31,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationT
  *
  * @author mederly
  */
+@Deprecated
 public class SystemConfigurationHolder {
 
     private static SystemConfigurationType currentConfiguration;
@@ -40,4 +43,20 @@ public class SystemConfigurationHolder {
     public static boolean isExperimentalCodeEnabled() {
         return SystemConfigurationTypeUtil.isExperimentalCodeEnabled(currentConfiguration);
     }
+
+    public static AccessCertificationConfigurationType getCertificationConfiguration() {
+        if (currentConfiguration != null) {
+            return currentConfiguration.getAccessCertification();
+        } else {
+            return null;
+        }
+    }
+
+	public static WfConfigurationType getWorkflowConfiguration() {
+		if (currentConfiguration != null) {
+			return currentConfiguration.getWorkflowConfiguration();
+		} else {
+			return null;
+		}
+	}
 }

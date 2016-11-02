@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.processor.ResourceAttribute;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
+import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinitionImpl;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.util.JAXBUtil;
@@ -39,6 +40,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -138,7 +140,7 @@ public class TestUtil {
     public static void setAttribute(PrismObject<ShadowType> account, QName attrName, QName typeName, 
 			PrismContext prismContext, String value) throws SchemaException {
 		PrismContainer<Containerable> attributesContainer = account.findContainer(ShadowType.F_ATTRIBUTES);
-		ResourceAttributeDefinition attrDef = new ResourceAttributeDefinition(attrName, typeName, prismContext);
+		ResourceAttributeDefinition attrDef = new ResourceAttributeDefinitionImpl(attrName, typeName, prismContext);
 		ResourceAttribute attribute = attrDef.instantiate();
 		attribute.setRealValue(value);
 		attributesContainer.add(attribute);
@@ -589,5 +591,15 @@ public class TestUtil {
 			throw new IllegalStateException("Cannot match java version string '"+javaVersionString+"'");
 		}
 		
+	}
+
+	public static void assertMessageContains(String message, String expectedSubstring) {
+		assertTrue("Expected that message will contain substring '"+expectedSubstring+"', but it did not. Message: "+message,
+				message.contains(expectedSubstring));
+	}
+	
+	// WARNING! Only works on Linux
+	public static int getPid() throws NumberFormatException, IOException {
+		return Integer.parseInt(new File("/proc/self").getCanonicalFile().getName());
 	}
 }

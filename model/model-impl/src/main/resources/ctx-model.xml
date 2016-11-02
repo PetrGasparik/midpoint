@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  ~ Copyright (c) 2010-2014 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -105,7 +105,13 @@
           <constructor-arg name="prismContext" ref="prismContext"/>
           <constructor-arg name="protector" ref="protector"/>
     </bean>
-    
+
+    <bean id="velocityScriptEvaluator" class="com.evolveum.midpoint.model.common.expression.script.velocity.VelocityScriptEvaluator"
+          scope="singleton">
+          <constructor-arg name="prismContext" ref="prismContext"/>
+          <constructor-arg name="protector" ref="protector"/>
+    </bean>
+
     <bean id="scriptExpressionFactory" class="com.evolveum.midpoint.model.common.expression.script.ScriptExpressionFactory"
           scope="singleton">
         <constructor-arg ref="modelObjectResolver"/>
@@ -124,6 +130,7 @@
         		<ref bean="javascriptScriptEvaluator"/>
         		<ref bean="groovyScriptEvaluator"/>
         		<ref bean="pythonScriptEvaluator"/>
+        		<ref bean="velocityScriptEvaluator"/>
         	</list>
         </property>
     </bean>
@@ -330,8 +337,8 @@
                  -->
             </map>
         </property>
-        <property name="model">
-            <ref bean="modelController"/>
+        <property name="modelObjectResolver">
+            <ref bean="modelObjectResolver"/>
         </property>
         <property name="clockwork">
             <ref bean="clockwork"/>
@@ -461,11 +468,8 @@
     <bean id="springAuthenticationJanitor" class="com.evolveum.midpoint.model.impl.security.SpringAuthenticationJanitorInterceptor">
     </bean>
 
-
     <bean id="passwordCallback" class="com.evolveum.midpoint.model.impl.security.PasswordCallback">
-        <constructor-arg name="userDetailsService" ref="userDetailsService"/>
-        <constructor-arg name="protector" ref="protector"/>
-        <constructor-arg name="securityHelper" ref="securityHelper"/>
+        <constructor-arg name="authenticationEvaluatorImpl" ref="authenticationEvaluator"/>
     </bean>
 
     <!--Example of authorization for WS-->

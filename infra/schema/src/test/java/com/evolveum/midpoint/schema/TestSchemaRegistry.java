@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,8 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.Validator;
 
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.prism.schema.SchemaRegistryImpl;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 
 import org.testng.annotations.Test;
@@ -39,20 +41,16 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismReferenceDefinition;
+import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.schema.PrismSchema;
 import com.evolveum.midpoint.prism.schema.SchemaRegistry;
 import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.LookupTableType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemObjectsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 import org.testng.annotations.Test;
@@ -129,7 +127,7 @@ public class TestSchemaRegistry {
         SchemaRegistry schemaRegistry = context.getSchemaRegistry();
         
         // Common schema should be parsed during creation of the context
-        schemaRegistry.loadPrismSchemaResource("schema/extension.xsd");
+		((SchemaRegistryImpl) schemaRegistry).loadPrismSchemaResource("schema/extension.xsd");
         
         // Check that the extension schema was loaded
         PrismSchema extensionSchema = schemaRegistry.findSchemaByNamespace(EXTENSION_SCHEMA_NAMESPACE);
@@ -140,7 +138,7 @@ public class TestSchemaRegistry {
         System.out.println("UserRef definition:");
         System.out.println(itemDefinition.debugDump());
 
-        assertEquals("Wrong userRef definition class", PrismReferenceDefinition.class, itemDefinition.getClass());
+        assertEquals("Wrong userRef definition class", PrismReferenceDefinitionImpl.class, itemDefinition.getClass());
     }
 
     @Test
@@ -153,20 +151,29 @@ public class TestSchemaRegistry {
 		PrismObjectDefinition<UserType> userDefinition = schemaRegistry.findObjectDefinitionByCompileTimeClass(UserType.class);
 		assertNotNull("No user definition", userDefinition);
 		
-		System.out.println("testCommonSchemaUserType:");
+		System.out.println("testUserType:");
 		System.out.println(userDefinition.debugDump());
 		
 		assertFalse("User definition is marked as runtime", userDefinition.isRuntimeSchema());
 		
-		PrismPropertyDefinition nameDef = userDefinition.findPropertyDefinition(ObjectType.F_NAME);
+		PrismPropertyDefinition<PolyString> nameDef = userDefinition.findPropertyDefinition(ObjectType.F_NAME);
 		assertNotNull("No name definition", nameDef);
 
 		PrismContainerDefinition extensionDef = userDefinition.findContainerDefinition(UserType.F_EXTENSION);
 		assertNotNull("No 'extension' definition", extensionDef);
 		assertTrue("Extension definition is NOT marked as runtime", extensionDef.isRuntimeSchema());
 		
-		PrismPropertyDefinition givenNameDef = userDefinition.findPropertyDefinition(UserType.F_GIVEN_NAME);
+		PrismPropertyDefinition<PolyString> givenNameDef = userDefinition.findPropertyDefinition(UserType.F_GIVEN_NAME);
 		assertNotNull("No givenName definition", givenNameDef);
+		
+		PrismPropertyDefinition<String> preferredLanguageDef = userDefinition.findPropertyDefinition(UserType.F_PREFERRED_LANGUAGE);
+		assertNotNull("No preferredLanguage definition", preferredLanguageDef);
+		PrismReferenceValue preferredLanguageValueEnumerationRef = preferredLanguageDef.getValueEnumerationRef();
+		assertNotNull("No valueEnumerationRef in preferredLanguage definition", preferredLanguageValueEnumerationRef);
+		assertEquals("Wrong OID in valueEnumerationRef in preferredLanguage definition",
+				SystemObjectsType.LOOKUP_LANGUAGES.value(), preferredLanguageValueEnumerationRef.getOid());
+		assertEquals("Wrong type in valueEnumerationRef in preferredLanguage definition",
+				LookupTableType.COMPLEX_TYPE, preferredLanguageValueEnumerationRef.getTargetType());
 		
 		// Just make sure this does not end with NPE or stack overflow
 		PrismObjectDefinition<UserType> shallowClone = userDefinition.clone();

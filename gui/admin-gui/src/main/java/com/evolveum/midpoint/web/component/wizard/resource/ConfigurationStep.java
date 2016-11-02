@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,99 +16,175 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource;
 
+import com.evolveum.midpoint.gui.api.component.result.OpResult;
+import com.evolveum.midpoint.gui.api.model.NonEmptyLoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.model.api.ModelService;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.delta.DiffUtil;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.schema.GetOperationOptions;
-import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.prism.path.ItemPath;
+import com.evolveum.midpoint.prism.schema.PrismSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.schema.util.ConnectorTypeUtil;
+import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.AjaxSubmitButton;
+import com.evolveum.midpoint.web.component.TabbedPanel;
 import com.evolveum.midpoint.web.component.prism.ContainerStatus;
-import com.evolveum.midpoint.web.component.prism.ObjectWrapper;
-import com.evolveum.midpoint.web.component.prism.PrismObjectPanel;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.ObjectWrapperUtil;
+import com.evolveum.midpoint.web.component.prism.ContainerWrapper;
+import com.evolveum.midpoint.web.component.prism.ContainerWrapperFactory;
+import com.evolveum.midpoint.web.component.prism.PrismContainerPanel;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.component.wizard.WizardStep;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
+import com.evolveum.midpoint.web.page.admin.resources.component.TestConnectionResultPanel;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorConfigurationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
+import org.apache.wicket.extensions.markup.html.tabs.AbstractTab;
+import org.apache.wicket.extensions.markup.html.tabs.ITab;
+import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.form.Form;
-import org.apache.wicket.markup.html.form.TextField;
-import org.apache.wicket.markup.html.panel.FeedbackPanel;
-import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
+import org.apache.wicket.model.util.ListModel;
+import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * @author lazyman
+ * @author mederly
  */
 public class ConfigurationStep extends WizardStep {
 
-    private static final Trace LOGGER = TraceManager.getTrace(ConfigurationStep.class);
+	private static final Trace LOGGER = TraceManager.getTrace(ConfigurationStep.class);
 
     private static final String DOT_CLASS = ConfigurationStep.class.getName() + ".";
     private static final String TEST_CONNECTION = DOT_CLASS + "testConnection";
     private static final String OPERATION_SAVE = DOT_CLASS + "saveResource";
 
     private static final String ID_CONFIGURATION = "configuration";
-    private static final String ID_TIMEOUTS = "timeouts";
     private static final String ID_TEST_CONNECTION = "testConnection";
+	private static final String ID_MAIN = "main";
 
-    private IModel<PrismObject<ResourceType>> resourceModel;
-    private boolean isNewResource;
-    private IModel<ObjectWrapper> configurationProperties;
+	final private NonEmptyLoadableModel<PrismObject<ResourceType>> resourceModelNoFetch;
+	final private NonEmptyLoadableModel<List<ContainerWrapper>> configurationPropertiesModel;
+	final private PageResourceWizard parentPage;
 
-    public ConfigurationStep(IModel<PrismObject<ResourceType>> resourceModel, boolean isNewResource, PageBase pageBase) {
-        super(pageBase);
-        this.resourceModel = resourceModel;
-        this.isNewResource = isNewResource;
+    public ConfigurationStep(NonEmptyLoadableModel<PrismObject<ResourceType>> modelNoFetch, final PageResourceWizard parentPage) {
+        super(parentPage);
+        this.resourceModelNoFetch = modelNoFetch;
+		this.parentPage = parentPage;
 
-        this.configurationProperties = new LoadableModel<ObjectWrapper>(false) {
-
+        this.configurationPropertiesModel = new NonEmptyLoadableModel<List<ContainerWrapper>>(false) {
             @Override
-            protected ObjectWrapper load() {
-            	ObjectWrapper wrapper = ObjectWrapperUtil.createObjectWrapper(null, null, ConfigurationStep.this.resourceModel.getObject(),
-                        ContainerStatus.MODIFYING, getPageBase());
-//                ObjectWrapper wrapper = new ObjectWrapper(null, null, ConfigurationStep.this.resourceModel.getObject(),
-//                        ContainerStatus.MODIFYING);
-                wrapper.setMinimalized(false);
-                wrapper.setShowEmpty(true);
-
-                if (wrapper.getResult() != null && !WebMiscUtil.isSuccessOrHandledError(wrapper.getResult())) {
-                    ((PageBase) getPage()).showResultInSession(wrapper.getResult());
-                }
-
-                return wrapper;
+			@NotNull
+            protected List<ContainerWrapper> load() {
+				try {
+					return createConfigContainerWrappers();
+				} catch (SchemaException e) {
+					throw new SystemException(e.getMessage(), e);
+				}
             }
-        };
+		};
+		parentPage.registerDependentModel(configurationPropertiesModel);
 
         initLayout();
     }
 
-    private void initLayout() {
-    	com.evolveum.midpoint.web.component.form.Form form = new com.evolveum.midpoint.web.component.form.Form<>("main", true);
+	@NotNull
+	private List<ContainerWrapper> createConfigContainerWrappers() throws SchemaException {
+		PrismObject<ResourceType> resource = resourceModelNoFetch.getObject();
+		PrismContainer<ConnectorConfigurationType> configuration = resource.findContainer(ResourceType.F_CONNECTOR_CONFIGURATION);
+
+		List<ContainerWrapper> containerWrappers = new ArrayList<>();
+
+		if (configuration == null) {
+			PrismObject<ConnectorType> connector = ResourceTypeUtil.getConnectorIfPresent(resource);
+			if (connector == null) {
+				throw new IllegalStateException("No resolved connector object in resource object");
+			}
+			ConnectorType connectorType = connector.asObjectable();
+			PrismSchema schema;
+			try {
+				schema = ConnectorTypeUtil.parseConnectorSchema(connectorType, parentPage.getPrismContext());
+			} catch (SchemaException e) {
+				throw new SystemException("Couldn't parse connector schema: " + e.getMessage(), e);
+			}
+			PrismContainerDefinition<ConnectorConfigurationType> definition = ConnectorTypeUtil.findConfigurationContainerDefinition(connectorType, schema);
+			// Fixing (errorneously) set maxOccurs = unbounded. See MID-2317 and related issues.
+			PrismContainerDefinition<ConnectorConfigurationType> definitionFixed = definition.clone();
+			((PrismContainerDefinitionImpl) definitionFixed).setMaxOccurs(1);
+			configuration = definitionFixed.instantiate();
+		}
+
+		List<PrismContainerDefinition> containerDefinitions = getSortedConfigContainerDefinitions(configuration);
+		for (PrismContainerDefinition<?> containerDef : containerDefinitions) {
+			ItemPath containerPath = new ItemPath(ResourceType.F_CONNECTOR_CONFIGURATION, containerDef.getName());
+			PrismContainer container = configuration.findContainer(containerDef.getName());
+
+			ContainerWrapperFactory cwf = new ContainerWrapperFactory(parentPage);
+			ContainerWrapper containerWrapper;
+			if (container != null) {
+				containerWrapper = cwf.createContainerWrapper(container, ContainerStatus.MODIFYING, containerPath, parentPage.isReadOnly());
+			} else {
+				container = containerDef.instantiate();
+				containerWrapper = cwf.createContainerWrapper(container, ContainerStatus.ADDING, containerPath, parentPage.isReadOnly());
+			}
+			containerWrappers.add(containerWrapper);
+		}
+		return containerWrappers;
+	}
+
+	@NotNull
+	private List<PrismContainerDefinition> getSortedConfigContainerDefinitions(PrismContainer<ConnectorConfigurationType> configuration) {
+		List<PrismContainerDefinition> relevantDefinitions = new ArrayList<>();
+		for (ItemDefinition<?> def : configuration.getDefinition().getDefinitions()) {
+			if (def instanceof PrismContainerDefinition) {
+				relevantDefinitions.add((PrismContainerDefinition) def);
+			}
+		}
+		Collections.sort(relevantDefinitions, new Comparator<PrismContainerDefinition>() {
+			@Override
+			public int compare(PrismContainerDefinition o1, PrismContainerDefinition o2) {
+				int ord1 = o1.getDisplayOrder() != null ? o1.getDisplayOrder() : Integer.MAX_VALUE;
+				int ord2 = o2.getDisplayOrder() != null ? o2.getDisplayOrder() : Integer.MAX_VALUE;
+				return Integer.compare(ord1, ord2);
+			}
+		});
+		return relevantDefinitions;
+	}
+
+	@Override
+	protected void onConfigure() {
+		updateConfigurationTabs();
+	}
+
+	private void initLayout() {
+    	com.evolveum.midpoint.web.component.form.Form form = new com.evolveum.midpoint.web.component.form.Form<>(ID_MAIN, true);
         form.setOutputMarkupId(true);
         add(form);
-        
-        final PrismObjectPanel configuration = new PrismObjectPanel(ID_CONFIGURATION, configurationProperties, null, null, getPageBase());
-        form.add(configuration);
 
-        AjaxSubmitButton testConnection = new AjaxSubmitButton(ID_TEST_CONNECTION,
+		form.add(WebComponentUtil.createTabPanel(ID_CONFIGURATION, parentPage, new ArrayList<ITab>(), null));
+
+		AjaxSubmitButton testConnection = new AjaxSubmitButton(ID_TEST_CONNECTION,
                 createStringResource("ConfigurationStep.button.testConnection")) {
 
             @Override
             protected void onError(final AjaxRequestTarget target, Form<?> form) {
-                WebMiscUtil.refreshFeedbacks(form, target);
+                WebComponentUtil.refreshFeedbacks(form, target);
             }
 
             @Override
@@ -116,79 +192,117 @@ public class ConfigurationStep extends WizardStep {
                 testConnectionPerformed(target);
             }
         };
+		testConnection.add(new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				return !parentPage.isReadOnly();
+			}
+		});
         add(testConnection);
     }
 
-    private void testConnectionPerformed(AjaxRequestTarget target) {
-        saveChanges();
+	private void updateConfigurationTabs() {
+		final com.evolveum.midpoint.web.component.form.Form form = getForm();
+		TabbedPanel<ITab> tabbedPanel = getConfigurationTabbedPanel();
+		List<ITab> tabs = tabbedPanel.getTabs().getObject();
+		tabs.clear();
 
-        PageBase page = getPageBase();
-        ModelService model = page.getModelService();
+		List<ContainerWrapper> wrappers = configurationPropertiesModel.getObject();
+		for (final ContainerWrapper wrapper : wrappers) {
+			String tabName = getString(wrapper.getDisplayName(), null, wrapper.getDisplayName());
+			tabs.add(new AbstractTab(new Model<>(tabName)) {
+				@Override
+				public WebMarkupContainer getPanel(String panelId) {
+					return new PrismContainerPanel(panelId, new Model<>(wrapper), true, form, parentPage);
+				}
+			});
+		}
+		int i = tabbedPanel.getSelectedTab();
+		if (i < 0 || i > tabs.size()) {
+			i = 0;
+		}
+		tabbedPanel.setSelectedTab(i);
+	}
 
-        OperationResult result = null;
-        try {
-            Task task = page.createSimpleTask(TEST_CONNECTION);
-            String oid = resourceModel.getObject().getOid();
-            result = model.testResource(oid, task);
-        } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Error occurred during resource test connection", ex);
-            if (result == null) {
-                result = new OperationResult(TEST_CONNECTION);
-            }
+	@SuppressWarnings("unchecked")
+	private com.evolveum.midpoint.web.component.form.Form getForm() {
+		return (com.evolveum.midpoint.web.component.form.Form) get(ID_MAIN);
+	}
 
-            result.recordFatalError("Couldn't perform test connection.", ex);
-        } finally {
-            result.computeStatusIfUnknown();
-        }
+	@SuppressWarnings("unchecked")
+	private TabbedPanel<ITab> getConfigurationTabbedPanel() {
+		return (TabbedPanel<ITab>) get(createComponentPath(ID_MAIN, ID_CONFIGURATION));
+	}
 
-        page.showResult(result);
-        target.add(page.getFeedbackPanel());
-    }
+	// copied from PageResource, TODO deduplicate
+	private void testConnectionPerformed(AjaxRequestTarget target) {
+		parentPage.refreshIssues(null);
+		if (parentPage.isReadOnly() || !isComplete()) {
+			return;
+		}
+		saveChanges();
 
-    @Override
+		PageBase page = getPageBase();
+		ModelService model = page.getModelService();
+
+		OperationResult result = new OperationResult(TEST_CONNECTION);
+		List<OpResult> resultDtoList = new ArrayList<>();
+		try {
+			Task task = page.createSimpleTask(TEST_CONNECTION);
+			String oid = resourceModelNoFetch.getObject().getOid();
+			result = model.testResource(oid, task);
+			resultDtoList = WebComponentUtil.getTestConnectionResults(result, page);
+		} catch (ObjectNotFoundException ex) {
+			result.recordFatalError("Failed to test resource connection", ex);
+		}
+
+		TestConnectionResultPanel testConnectionPanel = new TestConnectionResultPanel(page.getMainPopupBodyId(), new ListModel<>(resultDtoList), getPage());
+		testConnectionPanel.setOutputMarkupId(true);
+		page.showMainPopup(testConnectionPanel, target);
+		page.showResult(result, "Test connection failed", false);
+		target.add(page.getFeedbackPanel());
+		target.add(getForm());
+	}
+
+	@Override
     public void applyState() {
-        saveChanges();
+		parentPage.refreshIssues(null);
+		if (parentPage.isReadOnly() || !isComplete()) {
+			return;
+		}
+		saveChanges();
     }
 
     private void saveChanges() {
-        PageBase page = getPageBase();
-
-        Task task = page.createSimpleTask(OPERATION_SAVE);
+        Task task = parentPage.createSimpleTask(OPERATION_SAVE);
         OperationResult result = task.getResult();
+		boolean saved = false;
         try {
-            PrismObject<ResourceType> newResource = resourceModel.getObject();
-            //apply configuration to old resource
-            ObjectWrapper wrapper = configurationProperties.getObject();
-            ObjectDelta delta = wrapper.getObjectDelta();
-            delta.applyTo(newResource);
-
-            page.getPrismContext().adopt(newResource);
-
-            PrismObject<ResourceType> oldResource;
-
-            if(isNewResource){
-                Collection<SelectorOptions<GetOperationOptions>> options = SelectorOptions.createCollection(GetOperationOptions.createRaw());
-                oldResource = WebModelUtils.loadObject(ResourceType.class, newResource.getOid(), options, page, task, result);
-            } else {
-                oldResource = WebModelUtils.loadObject(ResourceType.class, newResource.getOid(), page, task, result);
-            }
-
-            delta = DiffUtil.diff(oldResource, newResource);
-
-            WebModelUtils.save(delta, result, page);
-
-            newResource = WebModelUtils.loadObject(ResourceType.class, newResource.getOid(), page, task, result);
-            resourceModel.setObject(newResource);
+            List<ContainerWrapper> wrappers = configurationPropertiesModel.getObject();
+			ObjectDelta delta = ObjectDelta.createEmptyModifyDelta(ResourceType.class, parentPage.getEditedResourceOid(), parentPage.getPrismContext());
+			for (ContainerWrapper wrapper : wrappers) {
+				wrapper.collectModifications(delta);
+			}
+			if (!delta.isEmpty()) {
+				parentPage.logDelta(delta);
+				WebModelServiceUtils.save(delta, result, parentPage);
+				parentPage.resetModels();
+				saved = true;
+			}
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Error occurred during resource test connection", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Error occurred during saving changes", ex);
             result.recordFatalError("Couldn't save configuration changes.", ex);
         } finally {
             result.computeStatusIfUnknown();
             setResult(result);
         }
 
-        if (WebMiscUtil.showResultInPage(result)) {
-            page.showResult(result);
+		if (parentPage.showSaveResultInPage(saved, result)) {
+            parentPage.showResult(result);
         }
-    }
+
+		configurationPropertiesModel.reset();
+		updateConfigurationTabs();
+
+	}
 }

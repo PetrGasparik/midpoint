@@ -25,14 +25,14 @@
          xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
          xmlns:p="http://example.com/p"
          xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
-         xsi:schemaLocation="http://midpoint.evolveum.com/xml/ns/public/common/common-3 ../../../../../../infra/schema/src/main/resources/xml/ns/public/common/common-3.xsd">
+         xsi:schemaLocation="http://midpoint.evolveum.com/xml/ns/public/common/common-3 ../../../../../../infra/schema/src/main/resources/xml/ns/public/common/common-core-3.xsd
+         http://prism.evolveum.com/xml/ns/public/query-3 ../../../../../../infra/prism/src/main/resources/xml/ns/public/query-3.xsd">
 
-    <user version="1" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-
-            xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+    <user version="1" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <c:name>atestuserX00002</c:name>
-        
+
+        <lifecycleState>testLifecycleStatus</lifecycleState>
+
         <trigger id="2">
             <handlerUri>http://triggerUri</handlerUri>
             <timestamp>2013-05-07T10:38:21.350+02:00</timestamp>
@@ -141,9 +141,7 @@
     </user>
 
     <object xsi:type="UserType" version="1" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-
-            xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <name>atestuserX00003</name>
 
         <linkRef oid="1234" />
@@ -203,15 +201,16 @@
         <description>LDAP resource using an Identity Connector Framework LDAP connector.</description>
         <connectorRef type="ConnectorType" oid="123">
             <description>Reference to the ICF LDAP connector.</description>
-            <and>
-                <type uri="http://midpoint.evolveum.com/xml/ns/public/common/common-3#ConnectorType"/>
-                <equal>
-                    <value>
-                        <connectorType>org.identityconnectors.ldap.LdapConnector</connectorType>
-                    </value>
-                </equal>
-            </and>
+            <filter>
+                <q:equal>
+                    <q:path>connectorType</q:path>
+                    <q:value>org.identityconnectors.ldap.LdapConnector</q:value>
+                </q:equal>
+            </filter>
         </connectorRef>
+        <operationalState>
+            <lastAvailabilityStatus>up</lastAvailabilityStatus>
+        </operationalState>
 
         <connectorConfiguration
                 xmlns:icfcldap="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/org.forgerock.openicf.connectors.ldap.ldap/org.identityconnectors.ldap.LdapConnector"
@@ -543,7 +542,7 @@
             <correlation>
                 <q:description>
                     Correlation expression is a search query.
-                    Following search queury will look for users that have "name"
+                    Following search query will look for users that have "name"
                     equal to the "uid" attribute of the account. Simply speaking,
                     it will look for match in usernames in the IDM and the resource.
                     The correlation rule always looks for users, so it will not match
@@ -651,6 +650,9 @@
                 <t:norm>userx00002</t:norm>
             </p:polyType>
             <p:skipAutogeneration>true</p:skipAutogeneration>
+            <p:multivalued>Bratislava</p:multivalued>
+            <p:multivalued>Levice</p:multivalued>
+            <p:multivalued>Kalna</p:multivalued>
         </extension>
         <objectType>http://myself.me/schemas/objects#SampleConfigType</objectType>
     </genericObject>
@@ -670,13 +672,15 @@
         </schedule>
     </task>
 
-    <object xsi:type="ShadowType" oid="11223344" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:gen300="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd"  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+    <object xsi:type="ShadowType" oid="11223344" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+            xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <name>8daaeeae-f0c7-41c9-b258-2a3351aa8876</name>
         <resourceRef oid="ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2" type="ResourceType"/>
         <objectClass xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance/ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2">ri:AccountObjectClass</objectClass>
         <kind>account</kind>
         <attributes>
-            <icfs:uid xsi:type="xsd:string" xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gen664="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd">8daaeeae-f0c7-41c9-b258-2a3351aa8876</icfs:uid>
+            <icfs:uid xsi:type="xsd:string" xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:xsd="http://www.w3.org/2001/XMLSchema">8daaeeae-f0c7-41c9-b258-2a3351aa8876</icfs:uid>
         </attributes>
         <intent>aaa</intent>
         <activation>
@@ -684,11 +688,7 @@
             <effectiveStatus>disabled</effectiveStatus>
         </activation>
         <result xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-
-                     xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
-                     xmlns:gen160="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd"
-                     xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-                     xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+                     xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3">
             <operation>com.evolveum.midpoint.xml.ns._public.model.model_1_wsdl.ModelPortType.importFromResource
             </operation>
             <status>in_progress</status>
@@ -765,13 +765,13 @@
         </synchronizationSituationDescription>
     </object>
 
-    <object xsi:type="ShadowType" oid="11223355" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:gen300="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd"  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+    <object xsi:type="ShadowType" oid="11223355" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <name>8daaeeae-f0c7-41c9-b258-2a3351aa8876</name>
         <resourceRef oid="ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2" type="ResourceType"/>
         <objectClass xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance/ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2">ri:AccountObjectClass</objectClass>
         <kind>account</kind>
         <attributes>
-            <icfs:uid xsi:type="xsd:string" xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gen664="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd">8daaeeae-f0c7-41c9-b258-2a3351aa8876</icfs:uid>
+            <icfs:uid xsi:type="xsd:string" xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:xsd="http://www.w3.org/2001/XMLSchema">8daaeeae-f0c7-41c9-b258-2a3351aa8876</icfs:uid>
         </attributes>
         <intent>aaa</intent>
         <activation>
@@ -780,7 +780,7 @@
         </activation>
     </object>
 
-    <object xsi:type="ConnectorType" oid="1234" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:gen300="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd"  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+    <object xsi:type="ConnectorType" oid="1234" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3" xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <name>ICF com.evolveum.polygon.csvfile.CSVFileConnector</name>
         <framework>http://midpoint.evolveum.com/xml/ns/public/connector/icf-1</framework>
         <connectorType>com.evolveum.polygon.csvfile.CSVFileConnector</connectorType>
@@ -794,7 +794,8 @@
             xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
             xmlns:a="http://prism.evolveum.com/xml/ns/public/annotation-3"
             xmlns:ra="http://midpoint.evolveum.com/xml/ns/public/resource/annotation-3"
-            xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gen366="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd" xmlns:gen538="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/openicf-csvfile-connector/com.evolveum.polygon.csvfile.CSVFileConnector">
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                        xmlns:gen538="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/openicf-csvfile-connector/com.evolveum.polygon.csvfile.CSVFileConnector">
                 <xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3"/>
 
                 <xsd:import namespace="http://prism.evolveum.com/xml/ns/public/annotation-3"/>
@@ -902,11 +903,8 @@
      <object xsi:type="SystemConfigurationType"
              xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
              xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-             xmlns:gen300="http://midpoint.evolveum.com/xml/ns/public/communication/workflow-1.xsd"
              xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
-             xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
          <name>SystemConfiguration123</name>
          <logging>
              <subSystemLogger>
@@ -977,7 +975,7 @@
          </profilingConfiguration>
      </object>
 
-    <object xsi:type="ConnectorHostType" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+    <object xsi:type="ConnectorHostType" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
         <name>ICF Connector server on admachine:8759</name>
         <hostname>admachine.example.com</hostname>
         <port>8759</port>
@@ -988,6 +986,9 @@
           xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
           xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3">
         <name>Judge</name>
+        <displayName>The honest one</displayName>
+        <riskLevel>critical</riskLevel>
+        <identifier>123</identifier>
         <linkRef oid="11223355"/>
         <assignment id="1">
             <construction>
@@ -1184,7 +1185,7 @@
 
                     <xsd:element name="hqlQuery" type="xsd:string"/>
                     <xsd:element name="type" type="xsd:QName"/>
-                    <xsd:element name="filter" type="q:FilterType"/>
+                    <xsd:element name="filter" type="q:SearchFilterType"/>
                     <xsd:element name="LOGO_PATH" type="xsd:string"/>
                     <xsd:element name="BaseTemplateStyles" type="xsd:string"/>
                     <xsd:element name="from" type="xsd:dateTime"/>
@@ -1265,8 +1266,6 @@
         	</securityQuestions>
         </credentials>
    </securityPolicy>
-    
-    
 
     <objectTemplate oid="10000000-0000-0000-0000-000000000223"
                     xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
@@ -1345,4 +1344,306 @@
             <value>3 value</value>
         </row>
     </lookupTable>
+
+    <accessCertificationCampaign xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                                 xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
+                                 xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+                                 xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                                 xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+                                 xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3">
+        <name>All user assignments 1</name>
+        <description>Certifies all users' assignments. Everything is certified by the administrator.</description>
+        <trigger id="677504621">
+            <timestamp>2015-12-18T23:59:59.999+01:00</timestamp>
+            <handlerUri>http://midpoint.evolveum.com/xml/ns/public/certification/trigger/close-stage/handler-3</handlerUri>
+        </trigger>
+        <trigger id="677504622">
+            <timestamp>2015-12-16T23:59:59.999+01:00</timestamp>
+            <handlerUri>http://midpoint.evolveum.com/xml/ns/public/certification/trigger/close-stage-approaching/handler-3</handlerUri>
+        </trigger>
+        <trigger id="677504623">
+            <timestamp>2015-12-18T11:59:59.999+01:00</timestamp>
+            <handlerUri>http://midpoint.evolveum.com/xml/ns/public/certification/trigger/close-stage-approaching/handler-3</handlerUri>
+        </trigger>
+        <metadata>
+            <createTimestamp>2015-12-04T00:37:08.885+01:00</createTimestamp>
+            <creatorRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></creatorRef>
+            <createChannel>http://midpoint.evolveum.com/xml/ns/public/gui/channels-3#user</createChannel>
+        </metadata>
+        <definitionRef oid="068e0a87-b456-47c7-811a-5fd9b6f78099"
+                       type="c:AccessCertificationDefinitionType"><!-- All user assignments --></definitionRef>
+        <ownerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></ownerRef>
+        <handlerUri>http://midpoint.evolveum.com/xml/ns/public/certification/handlers-3#direct-assignment</handlerUri>
+        <remediationDefinition>
+            <style>automated</style>
+        </remediationDefinition>
+        <stageDefinition>
+            <number>1</number>
+            <name>Administrator's review</name>
+            <description>In this stage, the administrator has to review all the assignments of all users.</description>
+            <duration>P14D</duration>
+            <notifyBeforeDeadline>PT48H</notifyBeforeDeadline>
+            <notifyBeforeDeadline>PT12H</notifyBeforeDeadline>
+            <notifyOnlyWhenNoDecision>true</notifyOnlyWhenNoDecision>
+            <reviewerSpecification>
+                <defaultReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></defaultReviewerRef>
+            </reviewerSpecification>
+        </stageDefinition>
+        <start>2015-12-04T00:38:03.031+01:00</start>
+        <state>inReviewStage</state>
+        <stageNumber>1</stageNumber>
+        <stage id="8">
+            <number>1</number>
+            <name>Administrator's review</name>
+            <description>In this stage, the administrator has to review all the assignments of all users.</description>
+            <start>2015-12-04T00:38:00.708+01:00</start>
+            <end>2015-12-18T23:59:59.999+01:00</end>
+        </stage>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="1"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <objectRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></objectRef>
+            <targetRef oid="00000000-0000-0000-0000-000000000004" type="c:RoleType"><!-- Superuser --></targetRef>
+            <currentStageNumber>1</currentStageNumber>
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>notDecided</response>
+                <timestamp>2015-12-04T01:10:20.032+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>notDecided</currentStageOutcome>
+            <assignment id="1">
+                <targetRef oid="00000000-0000-0000-0000-000000000004" type="c:RoleType"><!-- Superuser --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="2"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <objectRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></objectRef>
+            <targetRef oid="00000000-0000-0000-0000-000000000008" type="c:RoleType"><!-- End user --></targetRef>
+            <currentStageNumber>1</currentStageNumber>
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>accept</response>
+                <timestamp>2015-12-04T01:04:06.385+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>accept</currentStageOutcome>
+            <assignment id="2">
+                <targetRef oid="00000000-0000-0000-0000-000000000008" type="c:RoleType"><!-- End user --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="3"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <objectRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></objectRef>
+            <targetRef oid="214a489c-459d-4ac4-9778-585a00af11df" type="c:RoleType"><!-- r1 --></targetRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>noResponse</response>
+                <timestamp>2015-12-04T01:10:08.670+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>noResponse</currentStageOutcome>
+            <currentStageNumber>1</currentStageNumber>
+            <assignment id="3">
+                <targetRef oid="214a489c-459d-4ac4-9778-585a00af11df" type="c:RoleType"><!-- r1 --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="4"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <objectRef oid="ee53eba7-5c16-4c16-ad15-dd6a2360ab1a" type="c:UserType"><!-- u001 --></objectRef>
+            <targetRef oid="ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2" type="c:ResourceType"><!-- Localhost OpenDJ (no extension schema) --></targetRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>revoke</response>
+                <timestamp>2015-12-04T01:10:13.814+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>revoke</currentStageOutcome>
+            <currentStageNumber>1</currentStageNumber>
+            <assignment id="1">
+                <construction>
+                    <resourceRef oid="ef2bc95b-76e0-48e2-86d6-3d4f02d3e1a2" type="c:ResourceType"><!-- Localhost OpenDJ (no extension schema) --></resourceRef>
+                    <attribute>
+                        <c:ref>ri:cn</c:ref>
+                        <outbound>
+                            <strength>strong</strength>
+                            <expression>
+                                <value>CN</value>
+                            </expression>
+                        </outbound>
+                    </attribute>
+                    <attribute>
+                        <c:ref>ri:sn</c:ref>
+                        <outbound>
+                            <strength>strong</strength>
+                            <expression>
+                                <value>SN</value>
+                            </expression>
+                        </outbound>
+                    </attribute>
+                </construction>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="5"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <objectRef oid="86591a19-bbbc-41cd-ad46-4cc3b6acfe55" type="c:UserType"><!-- u1 --></objectRef>
+            <targetRef oid="00000000-0000-0000-0000-000000000008" type="c:RoleType"><!-- End user --></targetRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>revoke</response>
+                <timestamp>2015-12-04T01:10:14.614+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>revoke</currentStageOutcome>
+            <currentStageNumber>1</currentStageNumber>
+            <assignment id="1">
+                <targetRef oid="00000000-0000-0000-0000-000000000008" type="c:RoleType"><!-- End user --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="6"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <objectRef oid="86591a19-bbbc-41cd-ad46-4cc3b6acfe55" type="c:UserType"><!-- u1 --></objectRef>
+            <targetRef oid="00000000-0000-0000-0000-000000000004" type="c:RoleType"><!-- Superuser --></targetRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>reduce</response>
+                <timestamp>2015-12-04T01:10:15.375+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>reduce</currentStageOutcome>
+            <currentStageNumber>1</currentStageNumber>
+            <assignment id="2">
+                <targetRef oid="00000000-0000-0000-0000-000000000004" type="c:RoleType"><!-- Superuser --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+        <case xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              id="7"
+              xsi:type="c:AccessCertificationAssignmentCaseType">
+            <currentReviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></currentReviewerRef>
+            <objectRef oid="86591a19-bbbc-41cd-ad46-4cc3b6acfe55" type="c:UserType"><!-- u1 --></objectRef>
+            <targetRef oid="214a489c-459d-4ac4-9778-585a00af11df" type="c:RoleType"><!-- r1 --></targetRef>
+            <currentReviewRequestedTimestamp>2015-12-04T00:38:00.708+01:00</currentReviewRequestedTimestamp>
+            <currentReviewDeadline>2015-12-18T23:59:59.999+01:00</currentReviewDeadline>
+            <decision id="1">
+                <stageNumber>1</stageNumber>
+                <reviewerRef oid="00000000-0000-0000-0000-000000000002" type="c:UserType"><!-- administrator --></reviewerRef>
+                <response>revoke</response>
+                <timestamp>2015-12-04T01:10:16.136+01:00</timestamp>
+            </decision>
+            <currentStageOutcome>revoke</currentStageOutcome>
+            <currentStageNumber>1</currentStageNumber>
+            <assignment id="3">
+                <targetRef oid="214a489c-459d-4ac4-9778-585a00af11df" type="c:RoleType"><!-- r1 --></targetRef>
+            </assignment>
+            <isInducement>false</isInducement>
+        </case>
+    </accessCertificationCampaign>
+
+    <service version="1">
+        <name>lazyman vm</name>
+        <serviceType>some service type</serviceType>
+        <locality>bratislava</locality>
+        <displayOrder>123</displayOrder>
+
+        <linkRef oid="11223355"/>
+        <assignment id="1">
+            <construction>
+                <resourceRef oid="10000000-0000-0000-0000-000000000004" type="c:ResourceType"/>
+            </construction>
+        </assignment>
+        <inducement id="5">
+            <construction>
+                <resourceRef oid="10000000-0000-0000-0000-000000000005" type="c:ResourceType"/>
+                <kind>account</kind>
+                <intent>admin</intent>
+            </construction>
+        </inducement>
+        <authorization id="3">
+            <description>some authorization description</description>
+            <decision>allow</decision>
+            <action>http://example.com/uri1</action>
+            <action>http://example.com/uri2</action>
+            <object>
+                <description>object description</description>
+                <type>c:UserType</type>
+                <filter>
+                    <q:substring>
+                        <q:matching>normIgnoreCase</q:matching>
+                        <q:path>c:name</q:path>
+                        <q:value>user</q:value>
+                    </q:substring>
+                </filter>
+                <special>self</special>
+            </object>
+            <item>c:name</item>
+            <target>
+                <description>target description</description>
+                <type>c:UserType</type>
+                <filter>
+                    <q:substring>
+                        <q:matching>normIgnoreCase</q:matching>
+                        <q:path>c:name</q:path>
+                        <q:value>user</q:value>
+                    </q:substring>
+                </filter>
+                <special>self</special>
+            </target>
+        </authorization>
+        <authorization id="4">
+            <description>some authorization description 2</description>
+            <decision>allow</decision>
+            <action>http://example.com/uri3</action>
+            <action>http://example.com/uri4</action>
+        </authorization>
+        <exclusion id="2">
+            <description>A judge cannot be a pirate at the same time. At least not openly.</description>
+            <targetRef oid="12345678-d34d-b33f-f00d-555555556666" type="c:RoleType"/>
+            <policy>enforce</policy>
+        </exclusion>
+        <approverExpression>
+            <script>
+                <code>giveName + ' ' + familyName</code>
+            </script>
+        </approverExpression>
+        <approverExpression>
+            <script>
+                <code>giveName + '-' + familyName</code>
+            </script>
+        </approverExpression>
+        <automaticallyApproved>
+            <script>
+                <code>giveName + ' ' + familyName</code>
+            </script>
+        </automaticallyApproved>
+    </service>
+
 </objects>

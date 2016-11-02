@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,10 @@
  */
 package com.evolveum.midpoint.model.common.expression.evaluator;
 
+import java.util.Collection;
+
 import javax.xml.namespace.QName;
 
-import com.evolveum.midpoint.common.InternalsConfig;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.model.api.ModelService;
 import com.evolveum.midpoint.model.common.expression.ExpressionEvaluationContext;
@@ -31,7 +32,10 @@ import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.query.AndFilter;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.ExpressionConstants;
+import com.evolveum.midpoint.schema.internals.InternalsConfig;
 import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
 import com.evolveum.midpoint.security.api.SecurityEnforcer;
@@ -78,6 +82,15 @@ public class AssociationTargetSearchExpressionEvaluator
 		ObjectFilter extendedFilter = AndFilter.createAnd(resourceFilter, objectClassFilter, query.getFilter());
 		query.setFilter(extendedFilter);
 		return query;
+	}
+	
+	@Override
+	protected void extendOptions(Collection<SelectorOptions<GetOperationOptions>> options,
+			boolean searchOnResource) {
+		super.extendOptions(options, searchOnResource);
+		// We do not need to worry about associations of associations here
+		// (nested associations). Avoiding that will make the query faster.
+		options.add(SelectorOptions.create(ShadowType.F_ASSOCIATION, GetOperationOptions.createDontRetrieve()));
 	}
 
 	protected PrismContainerValue<ShadowAssociationType> createPrismValue(String oid, QName targetTypeQName, ExpressionEvaluationContext params) {

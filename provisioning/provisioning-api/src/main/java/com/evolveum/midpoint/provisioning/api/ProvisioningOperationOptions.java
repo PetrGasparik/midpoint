@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,24 +19,23 @@ package com.evolveum.midpoint.provisioning.api;
 import java.io.Serializable;
 
 public class ProvisioningOperationOptions implements Serializable {
-
     private static final long serialVersionUID = -6960273605308871338L;
 
     /**
 	 * Avoid any smart processing of the data except for schema application. Do not synchronize the data, do not apply
 	 * any expressions, etc.
 	 */
-	Boolean raw;
+	private Boolean raw;
 	
-	Boolean completePostponed;
+	private Boolean completePostponed;
 	
-	Boolean force;
+	private Boolean force;
 	
-	Boolean postpone;
+	private Boolean postpone;
 	
-	Boolean doDiscovery;
+	private Boolean doNotDiscovery;
 
-	Boolean overwrite;
+	private Boolean overwrite;
 	
 	public Boolean getCompletePostponed() {
 		return completePostponed;
@@ -111,27 +110,27 @@ public class ProvisioningOperationOptions implements Serializable {
 		return opts;
 	}
 
-	public Boolean getDoDiscovery() {
-		return doDiscovery;
+	public Boolean getDoNotDiscovery() {
+		return doNotDiscovery;
 	}
 
-	public void setDoDiscovery(Boolean doDiscovery) {
-		this.doDiscovery = doDiscovery;
+	public void setDoNotDiscovery(Boolean doDiscovery) {
+		this.doNotDiscovery = doDiscovery;
 	}
 	
-	public static boolean isDoDiscovery(ProvisioningOperationOptions options){
+	public static boolean isDoNotDiscovery(ProvisioningOperationOptions options){
 		if (options == null) {
 			return false;
 		}
-		if (options.doDiscovery == null) {
+		if (options.doNotDiscovery == null) {
 			return false;
 		}
-		return options.doDiscovery;
+		return options.doNotDiscovery;
 	}
 	
-	public static ProvisioningOperationOptions createDoDiscovery(boolean doDiscovery) {
+	public static ProvisioningOperationOptions createDoNotDiscovery(boolean doDiscovery) {
 		ProvisioningOperationOptions opts = new ProvisioningOperationOptions();
-		opts.setDoDiscovery(doDiscovery);
+		opts.setDoNotDiscovery(doDiscovery);
 		return opts;
 	}
 
@@ -184,5 +183,32 @@ public class ProvisioningOperationOptions implements Serializable {
 		return opts;
 	}
 
-
+	@Override
+    public String toString() {
+    	StringBuilder sb = new StringBuilder("ProvisioningOperationOptions(");
+    	appendFlag(sb, "raw", raw);
+    	appendFlag(sb, "completePostponed", completePostponed);
+    	appendFlag(sb, "force", force);
+    	appendFlag(sb, "postpone", postpone);
+    	appendFlag(sb, "doNotDiscovery", doNotDiscovery);
+    	appendFlag(sb, "overwrite", overwrite);
+    	if (sb.charAt(sb.length() - 1) == ',') {
+			sb.deleteCharAt(sb.length() - 1);
+		}
+		sb.append(")");
+		return sb.toString();
+    }
+    
+    private void appendFlag(StringBuilder sb, String name, Boolean val) {
+		if (val == null) {
+			return;
+		} else if (val) {
+			sb.append(name);
+			sb.append(",");
+		} else {
+			sb.append(name);
+			sb.append("=false,");
+		}
+	}
+	
 }

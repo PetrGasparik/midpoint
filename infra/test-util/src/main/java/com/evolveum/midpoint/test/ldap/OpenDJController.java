@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package com.evolveum.midpoint.test.ldap;
 import static org.testng.AssertJUnit.assertEquals;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,7 +26,6 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
@@ -41,12 +39,13 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.Validate;
 import org.opends.messages.Message;
 import org.opends.messages.MessageBuilder;
 import org.opends.server.config.ConfigException;
 import org.opends.server.core.AddOperation;
 import org.opends.server.core.BindOperation;
+import org.opends.server.core.DeleteOperation;
 import org.opends.server.core.ModifyDNOperation;
 import org.opends.server.core.ModifyOperation;
 import org.opends.server.protocols.internal.InternalClientConnection;
@@ -209,6 +208,7 @@ public class OpenDJController extends AbstractResourceController {
 	 * @return the value of internelConnection
 	 */
 	public InternalClientConnection getInternalConnection() {
+		Validate.notNull(internalConnection, "Not connected");
 		return internalConnection;
 	}
 
@@ -506,6 +506,7 @@ public class OpenDJController extends AbstractResourceController {
 	}
 	
 	public Entry fetchEntry(String dn) throws DirectoryException {
+		Validate.notNull(dn);
 		InternalSearchOperation op = getInternalConnection().processSearch(
 				dn, SearchScope.BASE_OBJECT, DereferencePolicy.NEVER_DEREF_ALIASES, 100,
 				100, false, "(objectclass=*)", getSearchAttributes());
@@ -535,7 +536,7 @@ public class OpenDJController extends AbstractResourceController {
 
 	public boolean isAccountEnabled(Entry ldapEntry) {
 		String pwpAccountDisabled = getAttributeValue(ldapEntry, "ds-pwp-account-disabled");
-		if (pwpAccountDisabled != null && pwpAccountDisabled.equals("true")) {
+		if (pwpAccountDisabled != null && pwpAccountDisabled.equalsIgnoreCase("true")) {
 			return false;
 		}
 		return true;
@@ -549,6 +550,10 @@ public class OpenDJController extends AbstractResourceController {
 		assertEquals("Too many attributes for name "+name+": ",
 				1, attrs.size());
 		Attribute attribute = attrs.get(0);
+		return getAttributeValue(attribute);
+	}
+	
+	public static String getAttributeValue(Attribute attribute) {
 		return attribute.iterator().next().getValue().toString();
 	}
 	
@@ -794,6 +799,23 @@ public class OpenDJController extends AbstractResourceController {
         return executeLdifChange(ldif);
     }
 	
+	public ChangeRecordEntry modifyAdd(String entryDn, String attributeName, String value) throws IOException, LDIFException {
+        String ldif = "dn: " + entryDn + "\nchangetype: modify\nadd: "+attributeName+"\n"+attributeName+": " + value;
+        return executeLdifChange(ldif);
+    }
+	
+	public ChangeRecordEntry modifyDelete(String entryDn, String attributeName, String value) throws IOException, LDIFException {
+        String ldif = "dn: " + entryDn + "\nchangetype: modify\ndelete: "+attributeName+"\n"+attributeName+": " + value;
+        return executeLdifChange(ldif);
+    }
+	
+	public void delete(String entryDn) {
+		DeleteOperation deleteOperation = getInternalConnection().processDelete(entryDn);
+		if (ResultCode.SUCCESS != deleteOperation.getResultCode()) {
+        	throw new RuntimeException("LDAP operation error: "+deleteOperation.getResultCode()+": "+deleteOperation.getErrorMessage());
+        }
+	}
+	
 	public String dumpEntries() throws DirectoryException {
 		InternalSearchOperation op = getInternalConnection().processSearch(
 				LDAP_SUFFIX, SearchScope.WHOLE_SUBTREE, DereferencePolicy.NEVER_DEREF_ALIASES, 100,
@@ -801,14 +823,54 @@ public class OpenDJController extends AbstractResourceController {
 
 		StringBuilder sb = new StringBuilder();
 		for (SearchResultEntry searchEntry: op.getSearchEntries()) {
-			sb.append(searchEntry.toLDIFString());
+			sb.append(toHumanReadableLdifoid(searchEntry));
 			sb.append("\n");
 		}
 		
 		return sb.toString();
 	}
+	
+	public String dumpTree() throws DirectoryException {
+		StringBuilder sb = new StringBuilder();
+		sb.append(LDAP_SUFFIX).append("\n");
+		dumpTreeLevel(sb, LDAP_SUFFIX, 1);
+		return sb.toString();
+	}
+		
+	private void dumpTreeLevel(StringBuilder sb, String dn, int indent) throws DirectoryException {
+		InternalSearchOperation op = getInternalConnection().processSearch(
+				dn, SearchScope.SINGLE_LEVEL, DereferencePolicy.NEVER_DEREF_ALIASES, 100,
+				100, false, "(objectclass=*)", getSearchAttributes());
 
-    public Collection<String> getGroupUniqueMembers(String groupDn) throws DirectoryException {
+		for (SearchResultEntry searchEntry: op.getSearchEntries()) {
+			ident(sb, indent);
+			sb.append(searchEntry.getDN().getRDN());
+			sb.append("\n");
+			dumpTreeLevel(sb, searchEntry.getDN().toString(), indent + 1);
+		}
+	}
+
+	private void ident(StringBuilder sb, int indent) {
+		for(int i=0; i < indent; i++) {
+			sb.append("  ");
+		}
+	}
+
+	public String toHumanReadableLdifoid(Entry entry) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("dn: ").append(entry.getDN()).append("\n");
+		for (Attribute attribute: entry.getAttributes()) {
+			for (AttributeValue val: attribute) {
+				sb.append(attribute.getName());
+				sb.append(": ");
+				sb.append(val);
+				sb.append("\n");
+			}
+		}
+		return sb.toString();
+	}
+
+	public Collection<String> getGroupUniqueMembers(String groupDn) throws DirectoryException {
     	Entry groupEntry = fetchEntry(groupDn);
         if (groupEntry == null) {
             throw new IllegalArgumentException(groupDn + " was not found");

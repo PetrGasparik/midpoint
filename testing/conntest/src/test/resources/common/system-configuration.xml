@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!--
-  ~ Copyright (c) 2010-2015 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -44,6 +44,10 @@
 	        <package>com.evolveum.midpoint.model</package>
       	</classLogger>
         <classLogger>
+	        <level>TRACE</level>
+	        <package>com.evolveum.midpoint.model.impl.sync.SynchronizationServiceImpl</package>
+      	</classLogger>
+        <classLogger>
 	        <level>INFO</level>
 	        <package>org.identityconnectors</package>
       	</classLogger>
@@ -65,10 +69,14 @@
       	</classLogger>
         <classLogger>
 	        <level>DEBUG</level>
-	        <package>com.evolveum.midpoint.model.impl.lens.Clockwork</package>
+	        <package>com.evolveum.polygon.connector.ldap.ConnectionManager</package>
       	</classLogger>
         <classLogger>
 	        <level>DEBUG</level>
+	        <package>com.evolveum.midpoint.model.impl.lens.Clockwork</package>
+      	</classLogger>
+        <classLogger>
+	        <level>TRACE</level>
 	        <package>com.evolveum.midpoint.provisioning</package>
       	</classLogger>
       	<classLogger>

@@ -32,7 +32,6 @@ import com.evolveum.midpoint.model.common.mapping.MappingFactory;
 import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
 import com.evolveum.midpoint.model.impl.lens.LensElementContext;
-import com.evolveum.midpoint.model.impl.lens.LensUtil;
 import com.evolveum.midpoint.model.impl.trigger.RecomputeTriggerHandler;
 import com.evolveum.midpoint.prism.Item;
 import com.evolveum.midpoint.prism.ItemDefinition;
@@ -68,10 +67,10 @@ public class MappingEvaluator {
 	
 	private static final Trace LOGGER = TraceManager.getTrace(MappingEvaluator.class);
 	
-	@Autowired(required = true)
+	@Autowired
     private PrismContext prismContext;
 
-    @Autowired(required = true)
+    @Autowired
     private MappingFactory mappingFactory;
 
     public <V extends PrismValue, D extends ItemDefinition, F extends ObjectType> void evaluateMapping(
@@ -79,8 +78,15 @@ public class MappingEvaluator {
 		ModelExpressionThreadLocalHolder.pushLensContext(lensContext);
 		ModelExpressionThreadLocalHolder.pushCurrentResult(parentResult);
 		ModelExpressionThreadLocalHolder.pushCurrentTask(task);
-		String objectOid = mapping.getOriginObject() != null ? mapping.getOriginObject().getOid() : null;
-		String objectName = mapping.getOriginObject() != null ? String.valueOf(mapping.getOriginObject().getName()) : null;
+		ObjectType originObject = mapping.getOriginObject();
+		String objectOid, objectName, objectTypeName;
+		if (originObject != null) {
+			objectOid = originObject.getOid();
+			objectName = String.valueOf(originObject.getName());
+			objectTypeName = originObject.getClass().getSimpleName();
+		} else {
+			objectOid = objectName = objectTypeName = null;
+		}
 		String mappingName = mapping.getItemName() != null ? mapping.getItemName().getLocalPart() : null;
 		long start = System.currentTimeMillis();
 		try {
@@ -91,7 +97,7 @@ public class MappingEvaluator {
 			task.recordState("Evaluation of mapping " + mapping.getMappingContextDescription() + " finished with error in " + (System.currentTimeMillis()-start) + " ms.");
 			throw new IllegalArgumentException(e.getMessage()+" in "+mapping.getContextDescription(), e);
 		} finally {
-			task.recordMappingOperation(objectOid, objectName, mappingName, System.currentTimeMillis() - start);
+			task.recordMappingOperation(objectOid, objectName, objectTypeName, mappingName, System.currentTimeMillis() - start);
 			ModelExpressionThreadLocalHolder.popLensContext();
 			ModelExpressionThreadLocalHolder.popCurrentResult();
 			ModelExpressionThreadLocalHolder.popCurrentTask();
@@ -117,26 +123,27 @@ public class MappingEvaluator {
 
 		for (MappingType mappingType: mappingTypes) {
 			
-			Mapping<V,D> mapping = mappingFactory.createMapping(mappingType, mappingDesc);
+			Mapping.Builder<V,D> mappingBuilder = mappingFactory.createMappingBuilder(mappingType, mappingDesc);
 		
-			if (!mapping.isApplicableToChannel(params.getContext().getChannel())) {
+			if (!mappingBuilder.isApplicableToChannel(params.getContext().getChannel())) {
 	        	continue;
 	        }
 			
-			mapping.setNow(params.getNow());
+			mappingBuilder.setNow(params.getNow());
 			if (defaultTargetItemPath != null && targetObjectDefinition != null) {
 				D defaultTargetItemDef = targetObjectDefinition.findItemDefinition(defaultTargetItemPath);
-				mapping.setDefaultTargetDefinition(defaultTargetItemDef);
-				mapping.setDefaultTargetPath(defaultTargetItemPath);
+				mappingBuilder.setDefaultTargetDefinition(defaultTargetItemDef);
+				mappingBuilder.setDefaultTargetPath(defaultTargetItemPath);
 			} else {
-				mapping.setDefaultTargetDefinition(params.getTargetItemDefinition());
-				mapping.setDefaultTargetPath(defaultTargetItemPath);
+				mappingBuilder.setDefaultTargetDefinition(params.getTargetItemDefinition());
+				mappingBuilder.setDefaultTargetPath(defaultTargetItemPath);
 			}
-			mapping.setTargetContext(targetObjectDefinition);
+			mappingBuilder.setTargetContext(targetObjectDefinition);
 			
 			// Initialize mapping (using Inversion of Control)
-			params.getInitializer().initialize(mapping);
-			
+			mappingBuilder = params.getInitializer().initialize(mappingBuilder);
+
+			Mapping<V,D> mapping = mappingBuilder.build();
 			Boolean timeConstraintValid = mapping.evaluateTimeConstraintValid(task, result);
 			
 			if (params.getEvaluateCurrent() != null) {
@@ -175,6 +182,10 @@ public class MappingEvaluator {
 			evaluateMapping(mapping, params.getContext(), task, result);
 			
 			PrismValueDeltaSetTriple<V> mappingOutputTriple = mapping.getOutputTriple();
+			if (LOGGER.isTraceEnabled()) {
+				LOGGER.trace("Output triple of mapping {}\n{}", mapping.getContextDescription(),
+						mappingOutputTriple==null?null:mappingOutputTriple.debugDump(1));
+			}
 			if (mappingOutputTriple != null) {
 
 				MappingOutputStruct<V> mappingOutputStruct = outputTripleMap.get(mappingOutputPath);
@@ -271,6 +282,13 @@ public class MappingEvaluator {
 					aPrioriTargetItem = aPrioriTargetObject.findItem(mappingOutputPath);
 				}
 				
+				// WARNING
+				// Following code seems to be wrong. It is not very relativisic. It seems to always
+				// go for replace.
+				// It seems that it is only used for activation mappings (outbout and inbound). As
+				// these are quite special single-value properties then it seems to work fine
+				// (with the exception of MID-3418). Todo: make it more relativistic: MID-3419
+				
 				if (targetContext.isAdd()) {
 		        	
 		        	Collection<V> nonNegativeValues = outputTriple.getNonNegativeValues();
@@ -296,6 +314,12 @@ public class MappingEvaluator {
 		            } else {
 		                valuesToReplace = outputTriple.getPlusSet();
 		            }
+		            
+		            if (LOGGER.isTraceEnabled()) {
+		            	LOGGER.trace("{}: hasFullTargetObject={}, isStrongMappingWasUsed={}, valuesToReplace={}", 
+		            			new Object[]{mappingDesc, params.hasFullTargetObject(), 
+		            					mappingOutputStruct.isStrongMappingWasUsed(), valuesToReplace});
+		            }
 	
 		        	if (valuesToReplace != null && !valuesToReplace.isEmpty()) {
 	
@@ -310,6 +334,13 @@ public class MappingEvaluator {
 		                	}
 		                }
 		                targetItemDelta.setValuesToReplace(PrismValue.cloneCollection(valuesToReplace));
+		                
+		        	} else if (outputTriple.hasMinusSet()) {
+		        		LOGGER.trace("{} resulted in null or empty value for {} and there is a minus set, resetting it (replace with empty)", mappingDesc, targetContext);
+		        		targetItemDelta.setValueToReplace();
+		        		
+		        	} else {
+		        		LOGGER.trace("{} resulted in null or empty value for {}, skipping", mappingDesc, targetContext);
 		        	}
 		        	
 		        }
@@ -318,7 +349,7 @@ public class MappingEvaluator {
 		        	continue;
 		        }
 		        
-		        LOGGER.trace("{} adding new delta for {}: {}", new Object[]{mappingDesc, targetContext, targetItemDelta});
+		        LOGGER.trace("{} adding new delta for {}: {}", mappingDesc, targetContext, targetItemDelta);
 		        targetContext.swallowToSecondaryDelta(targetItemDelta);
 			}
 			

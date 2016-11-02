@@ -15,10 +15,7 @@
  */
 package com.evolveum.midpoint.model.common.expression;
 
-import com.evolveum.midpoint.prism.Item;
-import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.schema.util.SchemaDebugUtil;
-import com.evolveum.midpoint.schema.util.ObjectResolver;
 import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
@@ -26,21 +23,22 @@ import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-
 import org.apache.commons.lang.StringUtils;
 import org.w3c.dom.Element;
 
 import javax.xml.namespace.QName;
-
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 /**
  * @author Radovan Semancik
  */
 public class ExpressionVariables implements DebugDumpable {
 
-    private Map<QName, Object> variables = new HashMap<QName, Object>();
+    private final Map<QName, Object> variables = new HashMap<>();
 
     private static final Trace LOGGER = TraceManager.getTrace(ExpressionVariables.class);
 
@@ -52,7 +50,7 @@ public class ExpressionVariables implements DebugDumpable {
     public void addVariableDefinitions(Map<QName, Object> extraVariables) {
         for (Entry<QName, Object> entry : extraVariables.entrySet()) {
         	Object value = entry.getValue();
-        	if (value instanceof ObjectDeltaObject<?>) {
+        	if (!areDeltasAllowed() && value instanceof ObjectDeltaObject<?>) {
         		ObjectDeltaObject<?> odo = (ObjectDeltaObject<?>)value;
         		if (odo.getObjectDelta() != null) {
         			throw new IllegalArgumentException("Cannot use variables with deltas in addVariableDefinitions, use addVariableDefinitionsOld or addVariableDefinitionsNew");
@@ -62,8 +60,16 @@ public class ExpressionVariables implements DebugDumpable {
             variables.put(entry.getKey(), value);
         }
     }
-    
-    public void addVariableDefinitions(ExpressionVariables extraVariables) {
+
+    // TODO There are situations where we do not want to be any relative data (ObjectDeltaObject, ItemDeltaItem) here.
+	// Namely, when this class is used in lower layers of evaluation (e.g. script evaluation). However, as of 3.4.1,
+	// we don't want to start a big cleanup of this functionality, so - for now - let us just put a placeholder here.
+	// The plan is to distinguish "real" ExpressionVariables that may contain deltas and ScriptVariables that may not.
+	private boolean areDeltasAllowed() {
+		return true;
+	}
+
+	public void addVariableDefinitions(ExpressionVariables extraVariables) {
     	addVariableDefinitions(extraVariables.getMap());
     }
 

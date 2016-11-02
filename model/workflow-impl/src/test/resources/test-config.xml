@@ -28,11 +28,11 @@
         </repository>
         <workflow>
             <enabled>true</enabled>
-            <allowApproveOthersItems>true</allowApproveOthersItems>
             <jdbcUrl>jdbc:h2:mem:activiti;DB_CLOSE_DELAY=1000</jdbcUrl>
             <jdbcDriver>org.h2.Driver</jdbcDriver>
             <jdbcUsername>sa</jdbcUsername>
             <jdbcPassword/>
+            <activitiSchemaUpdate>true</activitiSchemaUpdate>
             <!-- <autoDeploymentFrom>file:d:/midpoint/home/processes/*.bpmn20.xml</autoDeploymentFrom> -->
         </workflow>
         <audit>

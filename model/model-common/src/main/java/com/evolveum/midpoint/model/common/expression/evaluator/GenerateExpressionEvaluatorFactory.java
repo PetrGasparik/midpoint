@@ -35,8 +35,6 @@ import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.GenerateExpressionEvaluatorType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectFactory;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.StringPolicyType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ValuePolicyType;
 
 /**
  * @author semancik
@@ -85,14 +83,7 @@ public class GenerateExpressionEvaluatorFactory implements ExpressionEvaluatorFa
         
         GenerateExpressionEvaluatorType generateEvaluatorType = (GenerateExpressionEvaluatorType)evaluatorTypeObject;
         
-        StringPolicyType elementStringPolicy = null;
-        if (generateEvaluatorType.getValuePolicyRef() != null) {
-        	ValuePolicyType valuePolicyType = objectResolver.resolve(generateEvaluatorType.getValuePolicyRef(), ValuePolicyType.class,
-        			null, "resolving value policy reference in "+contextDescription, task, result);
-        	elementStringPolicy = valuePolicyType.getStringPolicy();
-        }
-        
-		return new GenerateExpressionEvaluator<V,D>(generateEvaluatorType, outputDefinition, protector, elementStringPolicy, prismContext);
+		return new GenerateExpressionEvaluator<V,D>(generateEvaluatorType, outputDefinition, protector, objectResolver, prismContext);
 	}
 
 }

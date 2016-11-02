@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,10 @@
 
 package com.evolveum.midpoint.web.page.admin.certification;
 
-import com.evolveum.midpoint.certification.api.CertificationManager;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
+import com.evolveum.midpoint.model.api.AccessCertificationService;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -32,21 +35,17 @@ import com.evolveum.midpoint.web.component.data.BoxedTablePanel;
 import com.evolveum.midpoint.web.component.data.Table;
 import com.evolveum.midpoint.web.component.data.column.DoubleButtonColumn.BUTTON_COLOR_CLASS;
 import com.evolveum.midpoint.web.component.data.column.MultiButtonColumn;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.PageTemplate;
 import com.evolveum.midpoint.web.page.admin.certification.dto.CertCampaignDto;
 import com.evolveum.midpoint.web.page.admin.certification.dto.CertCaseDto;
 import com.evolveum.midpoint.web.page.admin.certification.dto.CertCaseDtoProvider;
+import com.evolveum.midpoint.web.page.admin.certification.helpers.AvailableResponses;
+import com.evolveum.midpoint.web.session.UserProfileStorage;
 import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignStateType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.extensions.markup.html.repeater.data.sort.SortOrder;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.IColumn;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.PropertyColumn;
 import org.apache.wicket.markup.html.basic.Label;
@@ -62,25 +61,8 @@ import javax.xml.namespace.QName;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.OP_CLOSE_CAMPAIGN;
-import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.OP_CLOSE_STAGE;
-import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.OP_OPEN_NEXT_STAGE;
-import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.OP_START_CAMPAIGN;
-import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.OP_START_REMEDIATION;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_ACCEPT;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_DELEGATE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_NOT_DECIDE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_REDUCE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_REDUCE_AND_REMEDIED;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_REVOKE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_MARKED_AS_REVOKE_AND_REMEDIED;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.F_WITHOUT_RESPONSE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.ACCEPT;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.DELEGATE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.NOT_DECIDED;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.NO_RESPONSE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.REDUCE;
-import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType.REVOKE;
+import static com.evolveum.midpoint.web.page.admin.certification.PageCertCampaigns.*;
+import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCasesStatisticsType.*;
 
 /**
  * @author mederly
@@ -89,7 +71,11 @@ import static com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertifi
 		action = {
 				@AuthorizationAction(actionUri = PageAdminCertification.AUTH_CERTIFICATION_ALL,
 						label = PageAdminCertification.AUTH_CERTIFICATION_ALL_LABEL,
-						description = PageAdminCertification.AUTH_CERTIFICATION_ALL_DESCRIPTION) })
+						description = PageAdminCertification.AUTH_CERTIFICATION_ALL_DESCRIPTION),
+				@AuthorizationAction(actionUri = PageAdminCertification.AUTH_CERTIFICATION_CAMPAIGN,
+						label = PageAdminCertification.AUTH_CERTIFICATION_CAMPAIGN_LABEL,
+						description = PageAdminCertification.AUTH_CERTIFICATION_CAMPAIGN_DESCRIPTION)
+		})
 public class PageCertCampaign extends PageAdminCertification {
 
 	private static final Trace LOGGER = TraceManager.getTrace(PageCertCampaign.class);
@@ -128,20 +114,20 @@ public class PageCertCampaign extends PageAdminCertification {
 	private static final String OPERATION_CLOSE_CAMPAIGN = DOT_CLASS + "closeCampaign";
 	private static final String OPERATION_START_REMEDIATION = DOT_CLASS + "startRemediation";
 
-	private static final String ID_DECISIONS_TABLE = "decisionsTable";
+	private static final String ID_OUTCOMES_TABLE = "outcomesTable";
 
 	private LoadableModel<AccessCertificationCasesStatisticsType> statModel;
 	private LoadableModel<CertCampaignDto> campaignModel;
 
+	private String campaignOid;
+
 	CertDecisionHelper helper = new CertDecisionHelper();
 
 	public PageCertCampaign(PageParameters parameters) {
-		this(parameters, null);
-	}
-
-	public PageCertCampaign(PageParameters parameters, PageTemplate previousPage) {
-		setPreviousPage(previousPage);
-		getPageParameters().overwriteWith(parameters);
+		StringValue campaignOidValue = parameters.get(OnePageParameterEncoder.PARAMETER);
+		if (campaignOidValue != null) {
+			campaignOid = campaignOidValue.toString();
+		}
 		initModels();
 		initLayout();
 	}
@@ -167,15 +153,15 @@ public class PageCertCampaign extends PageAdminCertification {
 		AccessCertificationCasesStatisticsType stat = null;
 		try {
 			Task task = createSimpleTask("dummy");  // todo
-			stat = getCertificationManager().getCampaignStatistics(getCampaignOid(), false, task, result);
+			stat = getCertificationService().getCampaignStatistics(campaignOid, false, task, result);
 			result.recordSuccessIfUnknown();
 		} catch (Exception ex) {
-			LoggingUtils.logException(LOGGER, "Couldn't get campaign statistics", ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get campaign statistics", ex);
 			result.recordFatalError("Couldn't get campaign statistics.", ex);
 		}
 		result.recomputeStatus();
 
-		if (!WebMiscUtil.isSuccessOrHandledError(result)) {
+		if (!WebComponentUtil.isSuccessOrHandledError(result)) {
 			showResult(result);
 		}
 		return stat;
@@ -187,21 +173,25 @@ public class PageCertCampaign extends PageAdminCertification {
 		AccessCertificationCampaignType campaign = null;
 		try {
 			PrismObject<AccessCertificationCampaignType> campaignObject =
-					WebModelUtils.loadObject(AccessCertificationCampaignType.class, getCampaignOid(), PageCertCampaign.this, task, result);
+					WebModelServiceUtils.loadObject(AccessCertificationCampaignType.class, campaignOid, PageCertCampaign.this, task, result);
 			if (campaignObject != null) {
 				campaign = campaignObject.asObjectable();
 			}
 			result.recordSuccessIfUnknown();
 		} catch (Exception ex) {
-			LoggingUtils.logException(LOGGER, "Couldn't get campaign", ex);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't get campaign", ex);
 			result.recordFatalError("Couldn't get campaign.", ex);
 		}
 		result.recomputeStatus();
 
-		if (!WebMiscUtil.isSuccessOrHandledError(result)) {
+		if (!WebComponentUtil.isSuccessOrHandledError(result)) {
 			showResult(result);
 		}
-		return new CertCampaignDto(campaign, this, task, result);
+		if (campaign != null) {
+			return new CertCampaignDto(campaign, this, task, result);
+		} else {
+			throw redirectBackViaRestartResponseException();
+		}
 	}
 
 	private void initLayout() {
@@ -231,9 +221,15 @@ public class PageCertCampaign extends PageAdminCertification {
 			@Override
 			public String getObject() {
 				CertCampaignDto dto = campaignModel.getObject();
-				return formatDuration(dto.getStageStart(), dto.getStageEnd());
+				return formatStageDuration(dto.getStageStart(), dto.getStageDeadline(), dto.getStageEnd());
 			}
 		}));
+	}
+
+	// TODO implement seriously
+	private String formatStageDuration(String start, String deadline, String end) {
+		final String showAsEnd = end != null ? end : deadline;
+		return formatDuration(start, showAsEnd);
 	}
 
 	// TODO implement seriously
@@ -252,10 +248,14 @@ public class PageCertCampaign extends PageAdminCertification {
 	private void initTableLayout(Form mainForm) {
 		CertCaseDtoProvider provider = new CertCaseDtoProvider(PageCertCampaign.this);
 		provider.setQuery(createCaseQuery());
-		provider.setCampaignOid(getCampaignOid());
-		BoxedTablePanel table = new BoxedTablePanel<>(ID_DECISIONS_TABLE, provider, initColumns());
+		provider.setCampaignOid(campaignOid);
+		provider.setSort(AccessCertificationCaseType.F_OBJECT_REF.getLocalPart(), SortOrder.ASCENDING);        // default sorting
+		int itemsPerPage = (int) getItemsPerPage(UserProfileStorage.TableId.PAGE_CERT_CAMPAIGN_OUTCOMES_PANEL);
+		BoxedTablePanel table = new BoxedTablePanel<>(ID_OUTCOMES_TABLE, provider, initColumns(),
+				UserProfileStorage.TableId.PAGE_CERT_CAMPAIGN_OUTCOMES_PANEL, itemsPerPage);
 		table.setShowPaging(true);
 		table.setOutputMarkupId(true);
+		table.setItemsPerPage(itemsPerPage);
 		mainForm.add(table);
 	}
 
@@ -264,16 +264,22 @@ public class PageCertCampaign extends PageAdminCertification {
 		
 		IColumn column;
 
+		column = helper.createObjectOrTargetTypeColumn(true, this);
+		columns.add(column);
+
 		column = helper.createObjectNameColumn(this, "PageCertCampaign.table.objectName");
 		columns.add(column);
 
-		column = helper.createTargetTypeColumn(this);
+		column = helper.createObjectOrTargetTypeColumn(false, this);
 		columns.add(column);
 
 		column = helper.createTargetNameColumn(this, "PageCertCampaign.table.targetName");
 		columns.add(column);
 
 		column = helper.createDetailedInfoColumn(this);
+		columns.add(column);
+
+		column = new PropertyColumn(createStringResource("PageCertCampaign.table.reviewers"), CertCaseDto.F_REVIEWERS);
 		columns.add(column);
 
 		column = new PropertyColumn(createStringResource("PageCertCampaign.table.reviewedAt"), CertCaseDto.F_REVIEWED_AT);
@@ -285,24 +291,14 @@ public class PageCertCampaign extends PageAdminCertification {
 		column = new PropertyColumn(createStringResource("PageCertCampaign.table.reviewedInStage"), CertCaseDto.F_CURRENT_RESPONSE_STAGE_NUMBER);
 		columns.add(column);
 
-		column = new MultiButtonColumn<CertCaseDto>(new Model(), 6) {
+		final AvailableResponses availableResponses = new AvailableResponses(getPage());
+		final int responses = availableResponses.getCount();
 
-			private final String[] captionKeys = {
-					"PageCertCampaign.menu.accept",
-					"PageCertCampaign.menu.revoke",
-					"PageCertCampaign.menu.reduce",
-					"PageCertCampaign.menu.notDecided",
-					"PageCertCampaign.menu.delegate",
-					"PageCertCampaign.menu.noResponse"
-			};
-
-			private final AccessCertificationResponseType[] responses = {
-					ACCEPT, REVOKE, REDUCE, NOT_DECIDED, DELEGATE, NO_RESPONSE
-			};
+		column = new MultiButtonColumn<CertCaseDto>(new Model(), responses+1) {
 
 			@Override
 			public String getCaption(int id) {
-				return PageCertCampaign.this.createStringResource(captionKeys[id]).getString();
+				return availableResponses.getCaption(id);
 			}
 
 			@Override
@@ -311,8 +307,21 @@ public class PageCertCampaign extends PageAdminCertification {
 			}
 
 			@Override
+			public boolean isButtonVisible(int id, IModel<CertCaseDto> model) {
+				if (id < responses) {
+					return true;
+				} else {
+					return !availableResponses.isAvailable(model.getObject().getOverallOutcome());
+				}
+			}
+
+			@Override
 			public String getButtonColorCssClass(int id) {
-				return getDecisionButtonColor(getRowModel(), responses[id]);
+				if (id < responses) {
+					return getDecisionButtonColor(getRowModel(), availableResponses.getResponseValues().get(id));
+				} else {
+					return BUTTON_COLOR_CLASS.DANGER.toString();
+				}
 			}
 		};
 		columns.add(column);
@@ -335,7 +344,7 @@ public class PageCertCampaign extends PageAdminCertification {
 	}
 
 	private boolean decisionEquals(IModel<CertCaseDto> model, AccessCertificationResponseType response) {
-		return model.getObject().getCurrentResponse() == response;
+		return model.getObject().getOverallOutcome() == response;
 	}
 
 	private void initStatisticsLayout(Form mainForm) {
@@ -358,7 +367,7 @@ public class PageCertCampaign extends PageAdminCertification {
 
 			@Override
 			public void onClick(AjaxRequestTarget target) {
-				goBack(PageCertCampaigns.class);
+				redirectBack();
 			}
 		};
 		mainForm.add(backButton);
@@ -447,26 +456,26 @@ public class PageCertCampaign extends PageAdminCertification {
 	private void executeCampaignStateOperation(AjaxRequestTarget target, String action) {
 		OperationResult result = new OperationResult(OPERATION_ADVANCE_LIFECYCLE);
 		try {
-			CertificationManager cm = getCertificationManager();
+			AccessCertificationService acs = getCertificationService();
 			int currentStage = campaignModel.getObject().getCurrentStageNumber();
 			Task task;
 			switch (action) {
 				case OP_START_CAMPAIGN:
 				case OP_OPEN_NEXT_STAGE:
 					task = createSimpleTask(OPERATION_OPEN_NEXT_STAGE);
-					cm.openNextStage(getCampaignOid(), currentStage + 1, task, result);
+					acs.openNextStage(campaignOid, currentStage + 1, task, result);
 					break;
 				case OP_CLOSE_STAGE:
 					task = createSimpleTask(OPERATION_CLOSE_STAGE);
-					cm.closeCurrentStage(getCampaignOid(), currentStage, task, result);
+					acs.closeCurrentStage(campaignOid, currentStage, task, result);
 					break;
 				case OP_START_REMEDIATION:
 					task = createSimpleTask(OPERATION_START_REMEDIATION);
-					cm.startRemediation(getCampaignOid(), task, result);
+					acs.startRemediation(campaignOid, task, result);
 					break;
 				case OP_CLOSE_CAMPAIGN:
 					task = createSimpleTask(OPERATION_CLOSE_CAMPAIGN);
-					cm.closeCampaign(getCampaignOid(), task, result);
+					acs.closeCampaign(campaignOid, task, result);
 					break;
 				default:
 					throw new IllegalStateException("Unknown action: " + action);
@@ -481,7 +490,7 @@ public class PageCertCampaign extends PageAdminCertification {
 		statModel.reset();
 		campaignModel.reset();
 		target.add(get(createComponentPath(ID_MAIN_FORM)));
-		target.add((Component) getDecisionsTable());		// ???
+		target.add((Component) getOutcomesTable());		// ???
 		target.add(getFeedbackPanel());
 	}
 
@@ -491,16 +500,11 @@ public class PageCertCampaign extends PageAdminCertification {
 		return query;
 	}
 
-	private Table getDecisionsTable() {
-		return (Table) get(createComponentPath(ID_MAIN_FORM, ID_DECISIONS_TABLE));
+	private Table getOutcomesTable() {
+		return (Table) get(createComponentPath(ID_MAIN_FORM, ID_OUTCOMES_TABLE));
 	}
 
-	private String getCampaignOid() {
-		StringValue campaignOid = getPageParameters().get(OnePageParameterEncoder.PARAMETER);
-		return campaignOid != null ? campaignOid.toString() : null;
-	}
-
-	public String getCampaignHandlerUri() {
+	String getCampaignHandlerUri() {
 		return campaignModel.getObject().getHandlerUri();
 	}
 }

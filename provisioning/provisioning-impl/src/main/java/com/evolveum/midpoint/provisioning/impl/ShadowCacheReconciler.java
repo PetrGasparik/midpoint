@@ -21,15 +21,14 @@ import java.util.Collection;
 
 import org.springframework.stereotype.Component;
 
-import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.delta.ContainerDelta;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.provisioning.api.ProvisioningOperationOptions;
 import com.evolveum.midpoint.provisioning.util.ProvisioningUtil;
 import com.evolveum.midpoint.schema.DeltaConvertor;
-import com.evolveum.midpoint.schema.processor.ObjectClassComplexTypeDefinition;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
@@ -38,7 +37,8 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowAssociationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
@@ -129,6 +129,21 @@ public class ShadowCacheReconciler extends ShadowCache{
 		modifications = DeltaConvertor.toModifications(
 				shadowDelta.getItemDelta(), shadow.getDefinition());
 		
+		}
+		
+		// for the older versions
+		ObjectDelta<? extends ObjectType> objectDelta = ObjectDelta.createModifyDelta(shadow.getOid(),
+				modifications, ShadowType.class, getPrismContext());
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Storing delta to shadow:\n{}", objectDelta.debugDump());
+		}
+		
+		ContainerDelta<ShadowAssociationType> associationDelta = objectDelta.findContainerDelta(ShadowType.F_ASSOCIATION);
+		if (associationDelta != null) {
+			normalizeAssociationDeltasBeforeSave(associationDelta.getValuesToAdd());
+			normalizeAssociationDeltasBeforeSave(associationDelta.getValuesToReplace());
+			normalizeAssociationDeltasBeforeSave(associationDelta.getValuesToDelete());
+			
 		}
 		
 		if (modifications == null){

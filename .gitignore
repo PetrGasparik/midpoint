@@ -4,6 +4,7 @@
 .settings
 .idea
 *.iml
+*.log
 *.versionsBackup
 target
 rebel.xml
@@ -13,3 +14,4 @@ velocity.log
 
 dependency-reduced-pom.xml
 /nb-configuration.xml
+/nbactions.xml

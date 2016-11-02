@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,13 @@
 
 package com.evolveum.midpoint.web.component.form;
 
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.behavior.AttributeAppender;
-import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
+import org.apache.wicket.feedback.ContainerFeedbackMessageFilter;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.form.TextField;
@@ -33,28 +34,30 @@ import org.apache.wicket.model.Model;
 /**
  * @author lazyman
  */
-public class TextFormGroup extends SimplePanel<String> {
+public class TextFormGroup extends BasePanel<String> {
 
     private static final String ID_TEXT = "text";
     private static final String ID_TEXT_WRAPPER = "textWrapper";
     private static final String ID_LABEL_CONTAINER = "labelContainer";
     private static final String ID_LABEL = "label";
     private static final String ID_TOOLTIP = "tooltip";
+	private static final String ID_REQUIRED = "required";
     private static final String ID_FEEDBACK = "feedback";
 
     public TextFormGroup(String id, IModel<String> value, IModel<String> label, String labelSize, String textSize,
                          boolean required) {
-        this(id, value, label, null, false, labelSize, textSize, required);
+        this(id, value, label, null, false, labelSize, textSize, required, required);
     }
 
     public TextFormGroup(String id, IModel<String> value, IModel<String> label, String tooltipKey, boolean isTooltipInModel, String labelSize,
-                         String textSize, boolean required) {
+                         String textSize, boolean required, boolean markAsRequired) {
         super(id, value);
 
-        initLayout(label, tooltipKey, isTooltipInModel, labelSize, textSize, required);
+        initLayout(label, tooltipKey, isTooltipInModel, labelSize, textSize, required, markAsRequired);
     }
 
-    private void initLayout(IModel<String> label, final String tooltipKey, boolean isTooltipInModal, String labelSize, String textSize, boolean required) {
+    private void initLayout(IModel<String> label, final String tooltipKey, boolean isTooltipInModal, String labelSize, String textSize, final boolean required,
+			final boolean markAsRequired) {
         WebMarkupContainer labelContainer = new WebMarkupContainer(ID_LABEL_CONTAINER);
         add(labelContainer);
 
@@ -84,7 +87,16 @@ public class TextFormGroup extends SimplePanel<String> {
         tooltipLabel.setOutputMarkupPlaceholderTag(true);
         labelContainer.add(tooltipLabel);
 
-        WebMarkupContainer textWrapper = new WebMarkupContainer(ID_TEXT_WRAPPER);
+		WebMarkupContainer requiredContainer = new WebMarkupContainer(ID_REQUIRED);
+		requiredContainer.add(new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				return markAsRequired;
+			}
+		});
+		labelContainer.add(requiredContainer);
+
+		WebMarkupContainer textWrapper = new WebMarkupContainer(ID_TEXT_WRAPPER);
         if (StringUtils.isNotEmpty(textSize)) {
             textWrapper.add(AttributeAppender.prepend("class", textSize));
         }
@@ -94,7 +106,7 @@ public class TextFormGroup extends SimplePanel<String> {
         text.setLabel(label);
         textWrapper.add(text);
 
-        FeedbackPanel feedback = new FeedbackPanel(ID_FEEDBACK, new ComponentFeedbackMessageFilter(text));
+        FeedbackPanel feedback = new FeedbackPanel(ID_FEEDBACK, new ContainerFeedbackMessageFilter(this));
         feedback.setOutputMarkupId(true);
         textWrapper.add(feedback);
     }

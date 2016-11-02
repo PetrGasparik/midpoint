@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,18 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource;
 
+import com.evolveum.midpoint.gui.api.model.NonEmptyLoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.model.api.util.ResourceUtils;
 import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.schema.SchemaConstantsGenerated;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.CommonException;
 import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.AceEditor;
@@ -31,18 +36,14 @@ import com.evolveum.midpoint.web.component.TabbedPanel;
 import com.evolveum.midpoint.web.component.wizard.WizardStep;
 import com.evolveum.midpoint.web.component.wizard.resource.component.SchemaListPanel;
 import com.evolveum.midpoint.web.component.wizard.resource.component.XmlEditorPanel;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.XmlSchemaType;
-
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.markup.html.tabs.AbstractTab;
 import org.apache.wicket.extensions.markup.html.tabs.ITab;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.StringResourceModel;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,11 +60,14 @@ public class SchemaStep extends WizardStep {
     private static final String ID_TAB_PANEL = "tabPanel";
     private static final String ID_RELOAD = "reload";
     private static final String ID_ACE_EDITOR = "aceEditor";
-    private IModel<PrismObject<ResourceType>> model;
 
-    public SchemaStep(IModel<PrismObject<ResourceType>> model, PageBase pageBase) {
-        super(pageBase);
+    @NotNull private final NonEmptyLoadableModel<PrismObject<ResourceType>> model;
+	@NotNull private final PageResourceWizard parentPage;
+
+    public SchemaStep(@NotNull NonEmptyLoadableModel<PrismObject<ResourceType>> model, @NotNull PageResourceWizard parentPage) {
+        super(parentPage);
         this.model = model;
+		this.parentPage = parentPage;
         setOutputMarkupId(true);
 
         initLayout();
@@ -74,7 +78,7 @@ public class SchemaStep extends WizardStep {
         tabs.add(createSimpleSchemaView());
         tabs.add(createSchemaEditor());
 
-        TabbedPanel tabPanel = new TabbedPanel(ID_TAB_PANEL, tabs);
+        TabbedPanel<ITab> tabPanel = new TabbedPanel<>(ID_TAB_PANEL, tabs);
         tabPanel.setOutputMarkupId(true);
         add(tabPanel);
 
@@ -89,13 +93,16 @@ public class SchemaStep extends WizardStep {
     }
 
     private IModel<String> createStringModel(String resourceKey) {
-        return new StringResourceModel(resourceKey, this, null, resourceKey);
+    	return PageBase.createStringResourceStatic(this, resourceKey);
     }
 
     private IModel<String> createXmlEditorModel() {
         return new IModel<String>() {
+			@Override
+			public void detach() {
+			}
 
-            @Override
+			@Override
             public String getObject() {
                 PrismObject<ResourceType> resource = model.getObject();
                 PrismContainer xmlSchema = resource.findContainer(ResourceType.F_SCHEMA);
@@ -106,64 +113,40 @@ public class SchemaStep extends WizardStep {
                 PageBase page = (PageBase) SchemaStep.this.getPage();
 
                 try {
-                    // probably not correct... test and fix [pm]
-                    return page.getPrismContext().serializeContainerValueToString(xmlSchema.getValue(), SchemaConstantsGenerated.C_SCHEMA, PrismContext.LANG_XML);
-//                    Element root = page.getPrismContext().getParserDom().serializeToDom(xmlSchema.getValue(),
-//                            DOMUtil.createElement(SchemaConstantsGenerated.C_SCHEMA));
-//
-//                    Element schema = root != null ? DOMUtil.getFirstChildElement(root) : null;
-//                    if (schema == null) {
-//                        return null;
-//                    }
-//
-//                    return DOMUtil.serializeDOMToString(schema);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                    //todo error handling
+                    return page.getPrismContext().xmlSerializer().serialize(xmlSchema.getValue(), SchemaConstantsGenerated.C_SCHEMA);
+                } catch (SchemaException|RuntimeException ex) {
+					LoggingUtils.logUnexpectedException(LOGGER, "Couldn't serialize resource schema", ex);
+					return WebComponentUtil.exceptionToString("Couldn't serialize resource schema", ex);
                 }
-
-                return null;
             }
 
-            @Override
-            public void setObject(String object) {
-                //To change body of implemented methods use File | Settings | File Templates.
-            }
-
-            @Override
-            public void detach() {
-            }
-        };
+			@Override
+			public void setObject(String object) {
+				// ignore (it's interesting that this is called sometimes, even when the ACE is set to be read only)
+			}
+		};
     }
 
     private void reloadPerformed(AjaxRequestTarget target) {
-        if(model == null || model.getObject() == null){
-            return;
-        }
-
-        PrismObject<ResourceType> resource = model.getObject();
-        resource.asObjectable().setSchema(new XmlSchemaType());
         Task task = getPageBase().createSimpleTask(OPERATION_RELOAD_RESOURCE_SCHEMA);
         OperationResult result = task.getResult();
 
-        try {
-            resource = WebModelUtils.loadObject(ResourceType.class, resource.getOid(), getPageBase(), task, result);
-            getPageBase().getPrismContext().adopt(resource);
+		try {
+			ResourceUtils.deleteSchema(model.getObject(), parentPage.getModelService(), parentPage.getPrismContext(), task, result);
+			parentPage.resetModels();
+			result.computeStatusIfUnknown();
+		} catch (CommonException|RuntimeException e) {
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't reload the schema", e);
+			result.recordFatalError("Couldn't reload the schema: " + e.getMessage(), e);
+		}
 
-            model.getObject().asObjectable().setSchema(resource.asObjectable().getSchema());
-        } catch (SchemaException e) {
-            LOGGER.error(getString("SchemaStep.message.reload.fail", WebMiscUtil.getName(resource)));
-            result.recordFatalError(getString("SchemaStep.message.reload.fail", WebMiscUtil.getName(resource)));
-        }
-
-        result.computeStatusIfUnknown();
-        if(result.isSuccess()){
-            LOGGER.info(getString("SchemaStep.message.reload.ok", WebMiscUtil.getName(resource)));
-            result.recordSuccess();
-        } else {
-            LOGGER.error(getString("SchemaStep.message.reload.fail", WebMiscUtil.getName(resource)));
-            result.recordFatalError(getString("SchemaStep.message.reload.fail", WebMiscUtil.getName(resource)));
-        }
+//		if (result.isSuccess()) {
+//			LOGGER.info(getString("SchemaStep.message.reload.ok", WebComponentUtil.getName(resource)));
+//            result.recordSuccess();
+//        } else {
+//            LOGGER.error(getString("SchemaStep.message.reload.fail", WebComponentUtil.getName(resource)));
+//            result.recordFatalError(getString("SchemaStep.message.reload.fail", WebComponentUtil.getName(resource)));
+//        }
 
         getPageBase().showResult(result);
         target.add(getPageBase().getFeedbackPanel(), this);
@@ -190,7 +173,7 @@ public class SchemaStep extends WizardStep {
 
             @Override
             public WebMarkupContainer getPanel(String panelId) {
-                return new SchemaListPanel(panelId, model);
+                return new SchemaListPanel(panelId, model, parentPage);
             }
         };
     }

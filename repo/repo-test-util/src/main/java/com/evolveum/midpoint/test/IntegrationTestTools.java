@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,8 @@ package com.evolveum.midpoint.test;
 import com.evolveum.icf.dummy.resource.DummyGroup;
 import com.evolveum.icf.dummy.resource.ScriptHistoryEntry;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
-import com.evolveum.midpoint.prism.ConsistencyCheckScope;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.PrismReferenceDefinition;
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.match.MatchingRule;
 import com.evolveum.midpoint.prism.path.ItemPath;
@@ -36,6 +29,7 @@ import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.RefFilter;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.prism.util.PrismUtil;
@@ -283,11 +277,14 @@ public class IntegrationTestTools {
 	}
 	
 	public static void assertAttributeDefinition(ResourceAttribute<?> attr, QName expectedType, int minOccurs, int maxOccurs,
-			boolean canRead, boolean canCreate, boolean canUpdate, Class<?> expetcedAttributeDefinitionClass) {
+			boolean canRead, boolean canCreate, boolean canUpdate, Class<?> expectedAttributeDefinitionClass) {
 		ResourceAttributeDefinition definition = attr.getDefinition();
 		QName attrName = attr.getElementName();
 		assertNotNull("No definition for attribute "+attrName, definition);
-		assertEquals("Wrong class of definition for attribute"+attrName, expetcedAttributeDefinitionClass, definition.getClass());
+		//assertEquals("Wrong class of definition for attribute"+attrName, expetcedAttributeDefinitionClass, definition.getClass());
+		assertTrue("Wrong class of definition for attribute"+attrName+" (expected: " + expectedAttributeDefinitionClass
+				+ ", real: " + definition.getClass() + ")",
+				expectedAttributeDefinitionClass.isAssignableFrom(definition.getClass()));
 		assertEquals("Wrong type in definition for attribute"+attrName, expectedType, definition.getTypeName());
 		assertEquals("Wrong minOccurs in definition for attribute"+attrName, minOccurs, definition.getMinOccurs());
 		assertEquals("Wrong maxOccurs in definition for attribute"+attrName, maxOccurs, definition.getMaxOccurs());
@@ -316,7 +313,7 @@ public class IntegrationTestTools {
         ObjectClassComplexTypeDefinition objectClassDef = rAttrsDef.getComplexTypeDefinition();
         assertNotNull("No object class definition in attributes definition", objectClassDef);
         assertEquals("Wrong object class in attributes definition", objectClass, objectClassDef.getTypeName());
-        ResourceAttributeDefinition primaryIdDef = objectClassDef.getIdentifiers().iterator().next();
+        ResourceAttributeDefinition primaryIdDef = objectClassDef.getPrimaryIdentifiers().iterator().next();
         ResourceAttribute<?> primaryIdAttr = rAttributesContainer.findAttribute(primaryIdDef.getName());
         assertNotNull("No primary ID "+primaryIdDef.getName()+" in "+account, primaryIdAttr);
         assertAttributeDefinition(primaryIdAttr, DOMUtil.XSD_STRING, 0, 1, true, false, false, expetcedAttributeDefinitionClass);
@@ -358,11 +355,11 @@ public class IntegrationTestTools {
 		return values.iterator().next();
 	}
 
-	public static void waitFor(String message, Checker checker, int timeoutInterval) throws Exception {
+	public static void waitFor(String message, Checker checker, int timeoutInterval) throws CommonException {
         waitFor(message, checker, timeoutInterval, WAIT_FOR_LOOP_SLEEP_MILIS);
     }
 
-	public static void waitFor(String message, Checker checker, int timeoutInterval, long sleepInterval) throws Exception {
+	public static void waitFor(String message, Checker checker, int timeoutInterval, long sleepInterval) throws CommonException {
 		System.out.println(message);
 		LOGGER.debug(LOG_MESSAGE_PREFIX + message);
 		long startTime = System.currentTimeMillis();
@@ -373,7 +370,11 @@ public class IntegrationTestTools {
 				LOGGER.trace(LOG_MESSAGE_PREFIX + "... done " + message);
 				return;
 			}
-			Thread.sleep(sleepInterval);
+			try {
+				Thread.sleep(sleepInterval);
+			} catch (InterruptedException e) {
+				LOGGER.warn("Sleep interrupted: {}", e.getMessage(), e);
+			}
 		}
 		// we have timeout
 		System.out.println("Timeout while "+message);
@@ -500,6 +501,13 @@ public class IntegrationTestTools {
 		LOGGER.debug(OBJECT_TITLE_LOG_PREFIX + title + "\n" 
 				+ SchemaDebugUtil.prettyPrint(value));
 	}
+
+	public static void display(String title, Containerable value) {
+		System.out.println(OBJECT_TITLE_OUT_PREFIX + title);
+		System.out.println(SchemaDebugUtil.prettyPrint(value.asPrismContainerValue().debugDump()));
+		LOGGER.debug(OBJECT_TITLE_LOG_PREFIX + title + "\n"
+				+ SchemaDebugUtil.prettyPrint(value.asPrismContainerValue().debugDump()));
+	}
 	
 	public static void display(String title, Throwable e) {
 		String stackTrace = ExceptionUtils.getStackTrace(e);
@@ -541,17 +549,16 @@ public class IntegrationTestTools {
 	}
 	
 	public static ObjectQuery createAllShadowsQuery(ResourceType resourceType, PrismContext prismContext) throws SchemaException {
-		RefFilter equal = RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class, prismContext, resourceType.getOid());
-		ObjectQuery query = ObjectQuery.createObjectQuery(equal);
-		return query;
+		return QueryBuilder.queryFor(ShadowType.class, prismContext)
+				.item(ShadowType.F_RESOURCE_REF).ref(resourceType.getOid())
+				.build();
 	}
 	
 	public static ObjectQuery createAllShadowsQuery(ResourceType resourceType, QName objectClass, PrismContext prismContext) throws SchemaException {
-		AndFilter and = AndFilter.createAnd(
-				RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class, prismContext, resourceType.getOid()),
-				EqualFilter.createEqual(ShadowType.F_OBJECT_CLASS, ShadowType.class, prismContext, null, objectClass));
-		ObjectQuery query = ObjectQuery.createObjectQuery(and);
-		return query;
+		return QueryBuilder.queryFor(ShadowType.class, prismContext)
+				.item(ShadowType.F_RESOURCE_REF).ref(resourceType.getOid())
+				.and().item(ShadowType.F_OBJECT_CLASS).eq(objectClass)
+				.build();
 	}
 
 	public static ObjectQuery createAllShadowsQuery(ResourceType resourceType, String objectClassLocalName, PrismContext prismContext) throws SchemaException {
@@ -599,13 +606,13 @@ public class IntegrationTestTools {
 		assertNotNull("no attributes",attrs);
 		assertFalse("empty attributes",attrs.isEmpty());
 		
-		RefinedResourceSchema rschema = RefinedResourceSchema.getRefinedSchema(resourceType);
+		RefinedResourceSchema rschema = RefinedResourceSchemaImpl.getRefinedSchema(resourceType);
 		ObjectClassComplexTypeDefinition objectClassDef = rschema.findObjectClassDefinition(shadowType);
 		assertNotNull("cannot determine object class for "+shadowType, objectClassDef);
 		
 		String icfUid = ShadowUtil.getSingleStringAttributeValue(shadowType, SchemaTestConstants.ICFS_UID);
 		if (icfUid == null) {
-			Collection<? extends ResourceAttributeDefinition> identifierDefs = objectClassDef.getIdentifiers();
+			Collection<? extends ResourceAttributeDefinition> identifierDefs = objectClassDef.getPrimaryIdentifiers();
 			assertFalse("No identifiers for "+objectClassDef, identifierDefs == null || identifierDefs.isEmpty());
 			for (ResourceAttributeDefinition idDef: identifierDefs) {
 				String id = ShadowUtil.getSingleStringAttributeValue(shadowType, idDef.getName());
@@ -674,7 +681,7 @@ public class IntegrationTestTools {
 	private static ObjectQuery createShadowQuery(ShadowType resourceShadow, ObjectClassComplexTypeDefinition objectClassDef, MatchingRule<String> uidMatchingRule, PrismContext prismContext) throws SchemaException {
 		
 		PrismContainer<?> attributesContainer = resourceShadow.asPrismObject().findContainer(ShadowType.F_ATTRIBUTES);
-		QName identifierName = objectClassDef.getIdentifiers().iterator().next().getName();
+		QName identifierName = objectClassDef.getPrimaryIdentifiers().iterator().next().getName();
 		PrismProperty<String> identifier = attributesContainer.findProperty(identifierName);
 		if (identifier == null) {
 			throw new SchemaException("No identifier in "+resourceShadow);
@@ -684,20 +691,15 @@ public class IntegrationTestTools {
 			identifierValue = uidMatchingRule.normalize(identifierValue);
 		}
 
-		ObjectFilter filter;
 		PrismPropertyDefinition<String> identifierDef = identifier.getDefinition();
-		filter = AndFilter.createAnd(
-					RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class, prismContext, ShadowUtil.getResourceOid(resourceShadow)),
-					EqualFilter.createEqual(new ItemPath(ShadowType.F_ATTRIBUTES, identifierDef.getName()), identifierDef, new PrismPropertyValue<String>(identifierValue)));
-			
-		ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-
-		return query;
-		
+		return QueryBuilder.queryFor(ShadowType.class, prismContext)
+				.item(ShadowType.F_RESOURCE_REF).ref(ShadowUtil.getResourceOid(resourceShadow))
+				.and().item(new ItemPath(ShadowType.F_ATTRIBUTES, identifierDef.getName()), identifierDef).eq(identifierValue)
+				.build();
 	}
 	
     public static void applyResourceSchema(ShadowType accountType, ResourceType resourceType, PrismContext prismContext) throws SchemaException {
-    	ResourceSchema resourceSchema = RefinedResourceSchema.getResourceSchema(resourceType, prismContext);
+    	ResourceSchema resourceSchema = RefinedResourceSchemaImpl.getResourceSchema(resourceType, prismContext);
     	ShadowUtil.applyResourceSchema(accountType.asPrismObject(), resourceSchema);
     }
     
@@ -779,7 +781,7 @@ public class IntegrationTestTools {
 		assertFalse("Object class " + objectClassQname + " is empty", accountDefinition.isEmpty());
 		assertFalse("Object class " + objectClassQname + " is empty", accountDefinition.isIgnored());
 		
-		Collection<? extends ResourceAttributeDefinition> identifiers = accountDefinition.getIdentifiers();
+		Collection<? extends ResourceAttributeDefinition> identifiers = accountDefinition.getPrimaryIdentifiers();
 		assertNotNull("Null identifiers for " + objectClassQname, identifiers);
 		assertFalse("Empty identifiers for " + objectClassQname, identifiers.isEmpty());
 
@@ -802,8 +804,8 @@ public class IntegrationTestTools {
 		assertEquals("Wrong displayName for attribute "+SchemaTestConstants.ICFS_NAME, "ConnId Name", nameAttributeDefinition.getDisplayName());
 		assertEquals("Wrong displayOrder for attribute "+SchemaTestConstants.ICFS_NAME, (Integer)110, nameAttributeDefinition.getDisplayOrder());
 
-		assertNotNull("Null identifiers in account", accountDef.getIdentifiers());
-		assertFalse("Empty identifiers in account", accountDef.getIdentifiers().isEmpty());
+		assertNotNull("Null identifiers in account", accountDef.getPrimaryIdentifiers());
+		assertFalse("Empty identifiers in account", accountDef.getPrimaryIdentifiers().isEmpty());
 		assertNotNull("Null secondary identifiers in account", accountDef.getSecondaryIdentifiers());
 		assertFalse("Empty secondary identifiers in account", accountDef.getSecondaryIdentifiers().isEmpty());
 		assertNotNull("No naming attribute in account", accountDef.getNamingAttribute());
@@ -817,7 +819,7 @@ public class IntegrationTestTools {
 		assertFalse("UID has create", uidDef.canAdd());
 		assertFalse("UID has update",uidDef.canModify());
 		assertTrue("No UID read",uidDef.canRead());
-		assertTrue("UID definition not in identifiers", accountDef.getIdentifiers().contains(uidDef));
+		assertTrue("UID definition not in identifiers", accountDef.getPrimaryIdentifiers().contains(uidDef));
 		assertEquals("Wrong refined displayName for attribute "+SchemaTestConstants.ICFS_UID, "ConnId UID", uidDef.getDisplayName());
 		assertEquals("Wrong refined displayOrder for attribute "+SchemaTestConstants.ICFS_UID, (Integer)100, uidDef.getDisplayOrder());
 
@@ -900,18 +902,20 @@ public class IntegrationTestTools {
 		assertTrue("Group "+group.getName()+" has members while not expecting it, members: "+members, members == null || members.isEmpty());
 	}
 	
-	public static void assertAssociation(PrismObject<ShadowType> shadow, QName associationName, String entitlementOid) {
+	public static ShadowAssociationType assertAssociation(PrismObject<ShadowType> shadow, QName associationName, String entitlementOid) {
 		ShadowType accountType = shadow.asObjectable();
 		List<ShadowAssociationType> associations = accountType.getAssociation();
 		assertNotNull("Null associations in "+shadow, associations);
 		assertFalse("Empty associations in "+shadow, associations.isEmpty());
 		for (ShadowAssociationType association: associations) {
 			if (associationName.equals(association.getName()) &&
+					association.getShadowRef() != null &&
 					entitlementOid.equals(association.getShadowRef().getOid())) {
-				return;
+				return association;
 			}
 		}
 		AssertJUnit.fail("No association for entitlement "+entitlementOid+" in "+shadow);
+		throw new IllegalStateException("not reached");
 	}
 	
 	public static void assertNoAssociation(PrismObject<ShadowType> shadow, QName associationName, String entitlementOid) {
@@ -926,5 +930,14 @@ public class IntegrationTestTools {
 				AssertJUnit.fail("Unexpected association for entitlement "+entitlementOid+" in "+shadow);
 			}
 		}
+	}
+
+	public static void assertNoSchema(ResourceType resourceType) {
+		assertNoSchema("Found schema in resource "+resourceType+" while not expecting it", resourceType);
+	}
+	
+	public static void assertNoSchema(String message, ResourceType resourceType) {
+		Element resourceXsdSchema = ResourceTypeUtil.getResourceXsdSchema(resourceType);
+		AssertJUnit.assertNull(message, resourceXsdSchema);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import static org.testng.AssertJUnit.assertEquals;
 import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertNull;
 import static org.testng.AssertJUnit.assertTrue;
-import static com.evolveum.midpoint.test.util.TestUtil.assertFailure;
 import static com.evolveum.midpoint.test.IntegrationTestTools.assertNoRepoCache;
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
 import static org.testng.AssertJUnit.assertNotNull;
@@ -30,6 +29,7 @@ import java.util.Iterator;
 
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
@@ -43,7 +43,6 @@ import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
 import com.evolveum.midpoint.model.intest.AbstractInitializedModelIntegrationTest;
-import com.evolveum.midpoint.model.intest.TestModelServiceContract;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
@@ -114,13 +113,13 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 
 		// WHEN
 		PrismObject<ResourceType> resourceWhite = getObject(ResourceType.class, RESOURCE_DUMMY_WHITE_OID);
-		RefinedResourceSchema refinedSchema = RefinedResourceSchema.getRefinedSchema(resourceWhite, prismContext);
+		RefinedResourceSchema refinedSchema = RefinedResourceSchemaImpl.getRefinedSchema(resourceWhite, prismContext);
 		display("Refined schema", refinedSchema);
 		
 		RefinedObjectClassDefinition accountDef = refinedSchema.getDefaultRefinedDefinition(ShadowKindType.ACCOUNT);
 		assertNotNull("Account definition is missing", accountDef);
-		assertNotNull("Null identifiers in account", accountDef.getIdentifiers());
-		assertFalse("Empty identifiers in account", accountDef.getIdentifiers().isEmpty());
+		assertNotNull("Null identifiers in account", accountDef.getPrimaryIdentifiers());
+		assertFalse("Empty identifiers in account", accountDef.getPrimaryIdentifiers().isEmpty());
 		assertNotNull("Null secondary identifiers in account", accountDef.getSecondaryIdentifiers());
 		assertFalse("Empty secondary identifiers in account", accountDef.getSecondaryIdentifiers().isEmpty());
 		assertNotNull("No naming attribute in account", accountDef.getNamingAttribute());
@@ -139,7 +138,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 		assertFalse("UID has create", uidDef.canAdd());
 		assertFalse("UID has update", uidDef.canModify());
 		assertTrue("No UID read", uidDef.canRead());
-		assertTrue("UID definition not in identifiers", accountDef.getIdentifiers().contains(uidDef));
+		assertTrue("UID definition not in identifiers", accountDef.getPrimaryIdentifiers().contains(uidDef));
 
 		RefinedAttributeDefinition nameDef = accountDef.findAttributeDefinition(ConnectorFactoryIcfImpl.ICFS_NAME);
 		assertEquals(1, nameDef.getMaxOccurs());
@@ -172,7 +171,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
 
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
@@ -215,7 +214,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         dummyAuditService.clear();
@@ -257,7 +256,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -301,7 +300,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 //        TestUtil.displayTestTile(this, TEST_NAME);
 //
 //        // GIVEN
-//        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+//        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
 //        OperationResult result = task.getResult();
 //        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
 //                
@@ -335,7 +334,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -400,7 +399,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 		PrismObject<UserType> user = setupUserAssignAccountDeletedShadowRecompute(TEST_NAME, RESOURCE_DUMMY_OID, null,
 				USER_AFET_NAME, USER_AFET_FULLNAME);
 		String shadowOidBefore = getSingleLinkOid(user);
-		Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+		Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
 		
 		// WHEN
@@ -422,7 +421,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         
         // ... and again ...
         
-        task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         result = task.getResult();
 		
 		// WHEN
@@ -455,7 +454,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 		//GIVEN
 		PrismObject<UserType> user = setupUserAssignAccountDeletedShadowRecompute(TEST_NAME, RESOURCE_DUMMY_RED_OID, RESOURCE_DUMMY_RED_NAME,
 				USER_BFET_NAME, USER_BFET_FULLNAME);
-		Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+		Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         
         try {
@@ -475,7 +474,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         
         // and again ...
         
-        task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         result = task.getResult();
         
         try {
@@ -511,7 +510,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 				RESOURCE_DUMMY_YELLOW_OID, RESOURCE_DUMMY_YELLOW_NAME,
 				USER_CFET_NAME, USER_CFET_FULLNAME);
 		String shadowOidBefore = getSingleLinkOid(user);
-		Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+		Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
 		
 		// WHEN
@@ -533,7 +532,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
         
         // ... and again ...
         
-        task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         result = task.getResult();
 		
 		// WHEN
@@ -557,7 +556,7 @@ public class TestAssignmentErrors extends AbstractInitializedModelIntegrationTes
 			String dummyResourceName, String userName, String userFullName) throws Exception {
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestAssignmentErrors.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         dummyResource.resetBreakMode();

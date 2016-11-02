@@ -31,11 +31,6 @@ import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.*;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensContextStatsType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensContextType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensFocusContextType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensObjectDeltaOperationType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensProjectionContextType;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
@@ -143,6 +138,12 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
     transient private Collection<ProgressListener> progressListeners;
     
     private Map<String,Long> sequences = new HashMap<>();
+
+	/**
+	 * Moved from ProjectionValuesProcessor
+	 * TODO consider if necessary to serialize to XML
+	 */
+	private List<LensProjectionContext> conflictingProjectionContexts = new ArrayList<>();
 
     public LensContext(Class<F> focusClass, PrismContext prismContext, ProvisioningService provisioningService) {
 		Validate.notNull(prismContext, "No prismContext");
@@ -497,6 +498,20 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
         }
         return allChanges;
     }
+
+	public boolean hasAnyPrimaryChange() throws SchemaException {
+		if (focusContext != null) {
+			if (!ObjectDelta.isNullOrEmpty(focusContext.getPrimaryDelta())) {
+				return true;
+			}
+		}
+		for (LensProjectionContext projCtx: getProjectionContexts()) {
+			if (!ObjectDelta.isNullOrEmpty(projCtx.getPrimaryDelta())) {
+				return true;
+			}
+		}
+		return false;
+	}
     
     public Collection<ObjectDelta<? extends ObjectType>> getPrimaryChanges() throws SchemaException {
         Collection<ObjectDelta<? extends ObjectType>> allChanges = new ArrayList<ObjectDelta<? extends ObjectType>>();
@@ -592,6 +607,12 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
 		for (LensProjectionContext projCtx: getProjectionContexts()) {
 			projCtx.recompute();
 		}
+	}
+	
+	public void refreshAuxiliaryObjectClassDefinitions() throws SchemaException {
+		for (LensProjectionContext projCtx: getProjectionContexts()) {
+			projCtx.refreshAuxiliaryObjectClassDefinitions();
+		}		
 	}
 
     public void checkAbortRequested() {
@@ -799,6 +820,9 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
 		}
         sb.append(" changes, ");
         sb.append("fresh=").append(isFresh);
+        if (systemConfiguration == null) {
+        	sb.append(" null-system-configuration");
+        }
         sb.append("\n");
 
         DebugUtil.debugDumpLabel(sb, "Channel", indent + 1);
@@ -836,6 +860,11 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
 
         return sb.toString();
     }
+
+	public LensContextType toLensContextType() throws SchemaException {
+		PrismContainer<LensContextType> pc = toPrismContainer();
+		return pc.getValue().asContainerable();
+	}
 
     public PrismContainer<LensContextType> toPrismContainer() throws SchemaException {
 
@@ -994,5 +1023,17 @@ public class LensContext<F extends ObjectType> implements ModelContext<F> {
 	
 	public void setSequenceCounter(String sequenceOid, long counter) {
 		sequences.put(sequenceOid, counter);
+	}
+
+	public List<LensProjectionContext> getConflictingProjectionContexts() {
+		return conflictingProjectionContexts;
+	}
+
+	public void addConflictingProjectionContext(LensProjectionContext conflictingContext) {
+		conflictingProjectionContexts.add(conflictingContext);
+	}
+
+	public void clearConflictingProjectionContexts() {
+		conflictingProjectionContexts.clear();
 	}
 }

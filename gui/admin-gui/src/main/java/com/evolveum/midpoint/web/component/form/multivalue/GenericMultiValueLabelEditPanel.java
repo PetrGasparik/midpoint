@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,17 @@
 
 package com.evolveum.midpoint.web.component.form.multivalue;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.dialog.Popupable;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
 import org.apache.wicket.behavior.AttributeAppender;
-import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
 import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
@@ -48,7 +49,7 @@ import java.util.List;
  *
  *  @author shood
  * */
-public class GenericMultiValueLabelEditPanel <T extends Serializable> extends SimplePanel<List<T>>{
+public class GenericMultiValueLabelEditPanel <T extends Serializable> extends BasePanel<List<T>> {
 
     private static final Trace LOGGER = TraceManager.getTrace(GenericMultiValueLabelEditPanel.class);
 
@@ -64,13 +65,16 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
     private static final String ID_BUTTON_GROUP = "buttonGroup";
     private static final String ID_EDIT = "edit";
 
-    protected static final String ID_MODAL_EDITOR = "modalEditor";
+//    protected static final String ID_MODAL_EDITOR = "modalEditor";
 
     private static final String CLASS_MULTI_VALUE = "multivalue-form";
 
+    private boolean isMultiple;
+
     public GenericMultiValueLabelEditPanel(String id, IModel<List<T>> value, IModel<String> label,
-                                           String labelSize, String textSize){
+                                           String labelSize, String textSize, boolean isMultiple){
         super(id, value);
+        this.isMultiple = isMultiple;
         setOutputMarkupId(true);
 
         initLayout(label, labelSize, textSize);
@@ -79,7 +83,7 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
     private void initLayout(final IModel<String> label, final String labelSize, final String textSize){
 
         Label l = new Label(ID_LABEL, label);
-
+        l.setVisible(getLabelVisibility());
         if(StringUtils.isNotEmpty(labelSize)){
             l.add(AttributeAppender.prepend("class", labelSize));
         }
@@ -129,7 +133,7 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
                 listItem.add(textWrapper);
 
                 TextField text = new TextField<>(ID_TEXT, createTextModel(listItem.getModel()));
-                text.add(new AjaxFormComponentUpdatingBehavior("onblur") {
+                text.add(new AjaxFormComponentUpdatingBehavior("blur") {
                     @Override
                     protected void onUpdate(AjaxRequestTarget ajaxRequestTarget) {}
                 });
@@ -169,15 +173,13 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
             }
         };
 
-        initDialog();
         add(repeater);
     }
 
-    /**
-     *  Override to provide a dialog that serves to edit
-     *  the object
-     * */
-    protected void initDialog(){}
+    protected void showDialog(Popupable dialogContent, AjaxRequestTarget target){
+        getPageBase().showMainPopup(dialogContent, target);
+    }
+
 
     /**
      * @return css class for off-setting other values (not first, left to the first there is a label)
@@ -238,14 +240,15 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
     }
 
     protected boolean isAddButtonVisible(ListItem<T> item) {
-        int size = getModelObject().size();
-        if (size <= 1) {
-            return true;
+        if (isMultiple) {
+            int size = getModelObject().size();
+            if (size <= 1) {
+                return true;
+            }
+            if (item.getIndex() == size - 1) {
+                return true;
+            }
         }
-        if (item.getIndex() == size - 1) {
-            return true;
-        }
-
         return false;
     }
 
@@ -304,7 +307,15 @@ public class GenericMultiValueLabelEditPanel <T extends Serializable> extends Si
     }
 
     public void closeModalWindow(AjaxRequestTarget target){
-        ModalWindow window = (ModalWindow) get(ID_MODAL_EDITOR);
-        window.close(target);
+        getPageBase().hideMainPopup(target);
     }
+
+    protected boolean getLabelVisibility(){
+        return true;
+    }
+
+    protected boolean getAddButtonVisibility(){
+        return true;
+    }
+
 }

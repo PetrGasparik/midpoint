@@ -16,14 +16,22 @@
 
 package com.evolveum.midpoint.web.component.input;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.model.NonEmptyModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.xnode.MapXNode;
+import com.evolveum.midpoint.prism.xnode.RootXNode;
+import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.input.dto.SearchFilterTypeDto;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.AceEditor;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
+import com.evolveum.midpoint.web.util.WebXmlUtil;
 import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
+import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.markup.html.form.AjaxSubmitLink;
 import org.apache.wicket.markup.html.basic.Label;
@@ -31,11 +39,12 @@ import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.markup.html.form.TextArea;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.PropertyModel;
+import org.jetbrains.annotations.NotNull;
 
 /**
  *  @author shood
  * */
-public class SearchFilterPanel<T extends SearchFilterType> extends SimplePanel<T>{
+public class SearchFilterPanel<T extends SearchFilterType> extends BasePanel<T> {
 
     private static final Trace LOGGER = TraceManager.getTrace(SearchFilterPanel.class);
 
@@ -44,35 +53,47 @@ public class SearchFilterPanel<T extends SearchFilterType> extends SimplePanel<T
     private static final String ID_BUTTON_UPDATE = "update";
     private static final String ID_T_CLAUSE = "filterClauseTooltip";
 
-    protected IModel<SearchFilterTypeDto> model;
+    @NotNull private final IModel<String> clauseStringModel;
 
-    public SearchFilterPanel(String id, IModel<T> model){
-        super(id, model);
+    public SearchFilterPanel(String id, @NotNull final NonEmptyModel<T> filterModel, @NotNull NonEmptyModel<Boolean> readOnlyModel) {
+        super(id, filterModel);
+		clauseStringModel = new LoadableModel<String>(false) {
+			@Override
+			protected String load() {
+				return loadFilterClause(getPageBase().getPrismContext());
+			}
+		};
+		initLayout(readOnlyModel);
     }
 
-    private void loadModel(){
-        if(model == null){
-            model = new LoadableModel<SearchFilterTypeDto>() {
+	private String loadFilterClause(PrismContext prismContext) {
+		try {
+			T filter = getModelObject();
+			if (filter.containsFilterClause()) {
+				RootXNode clause = filter.getFilterClauseAsRootXNode();
+				String xml = prismContext.xmlSerializer().serialize(clause);
+				return WebXmlUtil.stripNamespaceDeclarations(xml);
+			} else {
+				return null;
+			}
+		} catch (SchemaException e) {
+			LoggingUtils.logUnexpectedException(LOGGER, "Could not load filterClause from SearchFilterType object.", e);
+			// TODO - find better solution to inform user about fail in filterClause loading
+			return e.getMessage();
+		}
+	}
 
-                @Override
-                protected SearchFilterTypeDto load() {
-                    return new SearchFilterTypeDto(getModel().getObject(), getPageBase().getPrismContext());
-                }
-            };
-        }
-    }
 
-    @Override
-    protected void initLayout(){
-        loadModel();
+	protected void initLayout(NonEmptyModel<Boolean> readOnlyModel) {
 
-        TextArea description = new TextArea<>(ID_DESCRIPTION,
-                new PropertyModel<String>(model, SearchFilterTypeDto.F_FILTER_OBJECT + ".description"));
-        add(description);
+		TextArea<String> description = new TextArea<>(ID_DESCRIPTION,
+				new PropertyModel<String>(getModel(), SearchFilterType.F_DESCRIPTION.getLocalPart()));
+		description.add(WebComponentUtil.enabledIfFalse(readOnlyModel));
+		add(description);
 
-        TextArea filterClause = new TextArea<>(ID_FILTER_CLAUSE,
-                new PropertyModel<String>(model, SearchFilterTypeDto.F_FILTER_CLAUSE));
-        add(filterClause);
+		AceEditor clause = new AceEditor(ID_FILTER_CLAUSE, clauseStringModel);
+		clause.add(WebComponentUtil.enabledIfFalse(readOnlyModel));
+		add(clause);
 
         AjaxSubmitLink update = new AjaxSubmitLink(ID_BUTTON_UPDATE) {
 
@@ -81,6 +102,7 @@ public class SearchFilterPanel<T extends SearchFilterType> extends SimplePanel<T
                 updateClausePerformed(target);
             }
         };
+		update.add(WebComponentUtil.visibleIfFalse(readOnlyModel));
         add(update);
 
         Label clauseTooltip = new Label(ID_T_CLAUSE);
@@ -89,21 +111,29 @@ public class SearchFilterPanel<T extends SearchFilterType> extends SimplePanel<T
     }
 
     private void updateClausePerformed(AjaxRequestTarget target){
-        try{
-            model.getObject().updateFilterClause(getPageBase().getPrismContext());
-
+        try {
+            updateFilterClause(getPageBase().getPrismContext());
             success(getString("SearchFilterPanel.message.expressionSuccess"));
         } catch (Exception e){
-            LoggingUtils.logException(LOGGER, "Could not create MapXNode from provided XML filterClause.", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Could not create MapXNode from provided XML filterClause.", e);
             error(getString("SearchFilterPanel.message.cantSerialize"));
         }
 
-        performFilterClauseHook(target);
+//        performFilterClauseHook(target);
         target.add(getPageBase().getFeedbackPanel());
     }
 
-    /**
-     *  Override this in component with SearchFilterPanel to provide additional functionality when filterClause is updated
-     * */
-    public void performFilterClauseHook(AjaxRequestTarget target){}
+	private void updateFilterClause(PrismContext context) throws SchemaException {
+		final String clauseString = clauseStringModel.getObject();
+		if (StringUtils.isNotEmpty(clauseString)) {
+			LOGGER.trace("Filter Clause to serialize: {}", clauseString);
+			RootXNode filterClauseNode = (RootXNode) context.parserFor(clauseString).xml().parseToXNode();
+			getModelObject().setFilterClauseXNode(filterClauseNode);
+		} else {
+			if (getModelObject() != null) {
+				getModelObject().setFilterClauseXNode((MapXNode) null);
+			}
+		}
+	}
+
 }

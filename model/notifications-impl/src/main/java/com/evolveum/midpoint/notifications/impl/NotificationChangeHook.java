@@ -32,7 +32,6 @@ import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,7 +68,7 @@ public class NotificationChangeHook implements ChangeHook {
     private transient RepositoryService cacheRepositoryService;
 
     @Autowired
-    private NotificationsUtil notificationsUtil;
+    private NotificationFuctionsImpl notificationsUtil;
 
     @PostConstruct
     public void init() {
@@ -137,8 +136,12 @@ public class NotificationChangeHook implements ChangeHook {
 
         ModelEvent event = new ModelEvent(lightweightIdentifierGenerator);
         event.setModelContext(modelContext);
-        // TODO or take channel from modelContext?
-        event.setChannel(task.getChannel());
+		// TODO is this correct? it's not quite clear how we work with channel info in task / modelContext
+		String channel = task.getChannel();
+		if (channel == null) {
+			channel = modelContext.getChannel();
+		}
+        event.setChannel(channel);
 
         if (task.getOwner() != null) {
             event.setRequester(new SimpleObjectRefImpl(notificationsUtil, task.getOwner().asObjectable()));

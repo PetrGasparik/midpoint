@@ -43,6 +43,7 @@ public class ExpressionConstants {
 	public static final QName VAR_PRISM_CONTEXT = new QName(SchemaConstants.NS_C, "prismContext");
 	public static final QName VAR_CONFIGURATION = new QName(SchemaConstants.NS_C, "configuration");
     public static final QName VAR_ACTOR = new QName(SchemaConstants.NS_C, "actor");
+	public static final QName VAR_VALUE = new QName(SchemaConstants.NS_C, "value");
 
 	public static final QName VAR_LEGAL = new QName(SchemaConstants.NS_C, "legal");
     public static final QName VAR_ASSIGNED = new QName(SchemaConstants.NS_C, "assigned");
@@ -63,6 +64,11 @@ public class ExpressionConstants {
 	 * value is determined by the iteration settings.
 	 */
 	public static final QName VAR_ITERATION_TOKEN = new QName(SchemaConstants.NS_C, "iterationToken");
+	
+	// Variables used in object mergign expressions
+	public static final QName VAR_SIDE = new QName(SchemaConstants.NS_C, "side");
+	public static final QName VAR_OBJECT_LEFT = new QName(SchemaConstants.NS_C, "objectLeft");
+	public static final QName VAR_OBJECT_RIGHT = new QName(SchemaConstants.NS_C, "objectRight");
 	
 	public static final QName OUTPUT_ELMENT_NAME = new QName(SchemaConstants.NS_C, "output");
 	

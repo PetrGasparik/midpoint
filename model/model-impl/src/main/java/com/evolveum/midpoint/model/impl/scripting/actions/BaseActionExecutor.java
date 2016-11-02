@@ -28,6 +28,7 @@ import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
 
 import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.security.api.SecurityEnforcer;
 import com.evolveum.midpoint.xml.ns._public.model.scripting_3.ActionExpressionType;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -37,6 +38,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 public abstract class BaseActionExecutor implements ActionExecutor {
 
     private static final String PARAM_RAW = "raw";
+    private static final String PARAM_DRY_RUN = "dryRun";
 
     @Autowired
     protected ScriptingExpressionEvaluator scriptingExpressionEvaluator;
@@ -56,15 +58,28 @@ public abstract class BaseActionExecutor implements ActionExecutor {
     @Autowired
     protected ModelService modelService;
 
-    //protected Data getArgumentValue(ActionExpressionType actionExpression, String parameterName, boolean required) throws ScriptExecutionException {
+	@Autowired
+	protected SecurityEnforcer securityEnforcer;
 
     // todo move to some helper?
     protected boolean getParamRaw(ActionExpressionType expression, Data input, ExecutionContext context, OperationResult result) throws ScriptExecutionException {
         return expressionHelper.getArgumentAsBoolean(expression.getParameter(), PARAM_RAW, input, context, false, PARAM_RAW, result);
     }
 
+    protected boolean getParamDryRun(ActionExpressionType expression, Data input, ExecutionContext context, OperationResult result) throws ScriptExecutionException {
+        return expressionHelper.getArgumentAsBoolean(expression.getParameter(), PARAM_DRY_RUN, input, context, false, PARAM_DRY_RUN, result);
+    }
+
     protected String rawSuffix(boolean raw) {
         return raw ? " (raw)" : "";
+    }
+
+    protected String drySuffix(boolean dry) {
+        return dry ? " (dry run)" : "";
+    }
+
+    protected String rawDrySuffix(boolean raw, boolean dry) {
+        return rawSuffix(raw) + drySuffix(dry);
     }
 
 }

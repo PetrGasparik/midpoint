@@ -17,32 +17,26 @@ package com.evolveum.midpoint.model.intest.importer;
 
 import com.evolveum.icf.dummy.resource.DummyResource;
 import com.evolveum.midpoint.common.Clock;
-import com.evolveum.midpoint.common.InternalsConfig;
-import com.evolveum.midpoint.model.api.ModelService;
 import com.evolveum.midpoint.model.intest.AbstractConfiguredModelIntegrationTest;
 import com.evolveum.midpoint.prism.*;
 import com.evolveum.midpoint.prism.delta.ChangeType;
-import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
-import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.prism.xnode.MapXNode;
-import com.evolveum.midpoint.prism.xnode.XNode;
 import com.evolveum.midpoint.schema.MidPointPrismContextFactory;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.schema.internals.InternalsConfig;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.schema.util.SchemaTestConstants;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.task.quartzimpl.handlers.NoOpTaskHandler;
 import com.evolveum.midpoint.test.DummyResourceContoller;
 import com.evolveum.midpoint.test.IntegrationTestTools;
 import com.evolveum.midpoint.test.util.MidPointAsserts;
 import com.evolveum.midpoint.test.util.TestUtil;
-import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -57,7 +51,6 @@ import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
 import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
-import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -94,6 +87,9 @@ public class ImportTest extends AbstractConfiguredModelIntegrationTest {
 	private static final File RESOURCE_DERBY_FILE = new File(TEST_FILE_DIRECTORY, "resource-derby.xml");
 	private static final String RESOURCE_DERBY_OID = "ef2bc95b-76e0-59e2-86d6-9119011311ab";
 	private static final String RESOURCE_DERBY_NAMESPACE = "http://midpoint.evolveum.com/xml/ns/public/resource/instance/ef2bc95b-76e0-59e2-86d6-9119011311ab";
+	
+	private static final File RESOURCE_DUMMY_RUNTIME_FILE = new File(TEST_FILE_DIRECTORY, "resource-dummy-runtime-resolution.xml");
+	private static final String RESOURCE_DUMMY_RUNTIME_OID = "78fc521e-69f0-11e6-9ec5-130eb0c6fb6d";
 	
 	private static final File IMPORT_TASK_FILE = new File(TEST_FILE_DIRECTORY, "import-task.xml");
 	private static final String TASK1_OID = "00000000-0000-0000-0000-123450000001";
@@ -435,7 +431,7 @@ public class ImportTest extends AbstractConfiguredModelIntegrationTest {
 //		assertEquals("Task name not imported correctly", "Task1: basic single-run task (takes 180x1 sec)", task1AsType.getName());
 		
 		Task task1 = taskManager.createTaskInstance(task1AsPrism, result);
-        PrismProperty<Integer> delayProp = task1.getExtensionProperty(new QName(NoOpTaskHandler.EXT_SCHEMA_URI, "delay"));
+        PrismProperty<Integer> delayProp = task1.getExtensionProperty(SchemaConstants.NOOP_DELAY_QNAME);
         assertEquals("xsi:type'd property has incorrect type", Integer.class, delayProp.getValues().get(0).getValue().getClass());
         assertEquals("xsi:type'd property not imported correctly", Integer.valueOf(1000), delayProp.getValues().get(0).getValue());
         
@@ -605,7 +601,49 @@ public class ImportTest extends AbstractConfiguredModelIntegrationTest {
         dummyAuditService.assertHasDelta(ChangeType.ADD, ResourceType.class);
         dummyAuditService.assertExecutionSuccess();
 	}
-	
+
+	/**
+	 * MID-3365
+	 */
+	@Test
+	public void test033ImportResourceDummyRuntime() throws Exception {
+		final String TEST_NAME = "test033ImportResourceDummyRuntime";
+		TestUtil.displayTestTile(this,TEST_NAME);
+		// GIVEN
+		Task task = taskManager.createTaskInstance(ImportTest.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		FileInputStream stream = new FileInputStream(RESOURCE_DUMMY_RUNTIME_FILE);
+		
+		IntegrationTestTools.assertNoRepoCache();
+		dummyAuditService.clear();
+
+		// WHEN
+		modelService.importObjectsFromStream(stream, getDefaultImportOptions(), task, result);
+
+		// THEN
+		result.computeStatus();
+		display("Result after import", result);
+		TestUtil.assertSuccess("Import of "+RESOURCE_DUMMY_RUNTIME_FILE+" has failed (result)", result, 2);
+
+		IntegrationTestTools.assertNoRepoCache();
+		
+		importedRepoResource = repositoryService.getObject(ResourceType.class, RESOURCE_DUMMY_RUNTIME_OID, null, result);
+		display("Imported resource (repo)", importedRepoResource);
+		IntegrationTestTools.assertNoRepoCache();
+		assertResource(importedRepoResource, "Dummy Resource (runtime)", MidPointConstants.NS_RI, null, true);
+		
+		importedResource = modelService.getObject(ResourceType.class, RESOURCE_DUMMY_RUNTIME_OID, null, task, result);
+		display("Imported resource (model)", importedResource);
+		IntegrationTestTools.assertNoRepoCache();
+		assertResource(importedRepoResource, "Dummy Resource (runtime)", MidPointConstants.NS_RI, null,false);
+		
+		// Read it from repo again. The read from model triggers schema fetch which increases version
+		importedRepoResource = repositoryService.getObject(ResourceType.class, RESOURCE_DUMMY_RUNTIME_OID, null, result);
+		display("Imported resource (repo2)", importedRepoResource);
+		IntegrationTestTools.assertNoRepoCache();
+		assertResource(importedRepoResource, "Dummy Resource (runtime)", MidPointConstants.NS_RI, null, true);
+	}
+
 	@Test
 	public void test040ImportUserHermanNoEncryption() throws Exception {
 		final String TEST_NAME = "test040ImportUserHermanNoEncryption";

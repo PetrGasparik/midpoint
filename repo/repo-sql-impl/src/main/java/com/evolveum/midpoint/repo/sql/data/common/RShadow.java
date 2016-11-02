@@ -16,10 +16,8 @@
 
 package com.evolveum.midpoint.repo.sql.data.common;
 
-import com.evolveum.midpoint.prism.Definition;
 import com.evolveum.midpoint.prism.ItemDefinition;
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.repo.sql.data.common.embedded.REmbeddedReference;
 import com.evolveum.midpoint.repo.sql.data.common.embedded.RPolyString;
 import com.evolveum.midpoint.repo.sql.data.common.enums.RFailedOperationType;
@@ -27,8 +25,11 @@ import com.evolveum.midpoint.repo.sql.data.common.enums.ROperationResultStatus;
 import com.evolveum.midpoint.repo.sql.data.common.enums.RShadowKind;
 import com.evolveum.midpoint.repo.sql.data.common.enums.RSynchronizationSituation;
 import com.evolveum.midpoint.repo.sql.data.common.type.RObjectExtensionType;
+import com.evolveum.midpoint.repo.sql.query.definition.QueryEntity;
+import com.evolveum.midpoint.repo.sql.query.definition.VirtualAny;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
@@ -38,6 +39,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 
 import org.hibernate.annotations.ForeignKey;
 import org.hibernate.annotations.Index;
+import org.hibernate.annotations.Persister;
 
 import javax.persistence.*;
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -54,6 +56,9 @@ import java.util.Collection;
         indexes = {@Index(name = "iShadowResourceRef", columnNames = "resourceRef_targetOid"),
                 @Index(name = "iShadowDead", columnNames = "dead")})
 @ForeignKey(name = "fk_shadow")
+@QueryEntity(anyElements = {
+        @VirtualAny(jaxbNameLocalPart = "attributes", ownerType = RObjectExtensionType.ATTRIBUTES)})
+@Persister(impl = MidPointJoinedPersister.class)
 public class RShadow<T extends ShadowType> extends RObject<T> implements OperationResult {
 
     private static final Trace LOGGER = TraceManager.getTrace(RShadow.class);

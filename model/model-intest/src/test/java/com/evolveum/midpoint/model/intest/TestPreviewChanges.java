@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package com.evolveum.midpoint.model.intest;
 
-import static com.evolveum.midpoint.test.util.TestUtil.assertFailure;
-import static com.evolveum.midpoint.test.util.TestUtil.assertSuccess;
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
 import static org.testng.AssertJUnit.assertEquals;
 import static org.testng.AssertJUnit.assertNotNull;
@@ -24,16 +22,13 @@ import static org.testng.AssertJUnit.assertNull;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collection;
 
-import javax.xml.bind.JAXBException;
 import javax.xml.namespace.QName;
 
 import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
 
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
@@ -82,7 +77,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AdminGuiConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationPhaseType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.MappingType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.RichHyperlinkType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
@@ -464,11 +458,13 @@ public class TestPreviewChanges extends AbstractInitializedModelIntegrationTest 
 		result.computeStatus();
 		TestUtil.assertSuccess(result);
 		
-		assertNotNull("Null config", adminGuiConfiguration);
-		assertEquals("Unexpected number of links", 1, adminGuiConfiguration.getUserDashboardLink().size());
+		assertAdminGuiConfigurations(adminGuiConfiguration, 0, 1, 1);
+		
 		RichHyperlinkType link = adminGuiConfiguration.getUserDashboardLink().get(0);
 		assertEquals("Bad link label", "Foo", link.getLabel());
 		assertEquals("Bad link targetUrl", "/foo", link.getTargetUrl());
+		
+		assertEquals("Bad timezone targetUrl", "Jamaica", adminGuiConfiguration.getDefaultTimezone());
 	}
 	
 	@Test
@@ -1058,7 +1054,7 @@ public class TestPreviewChanges extends AbstractInitializedModelIntegrationTest 
 		assertNull("Unexpected account primary delta (blue)", accountPrimaryDelta);
 		
         accountSecondaryDelta = accContext.getSecondaryDelta();
-        PrismAsserts.assertModifications(accountSecondaryDelta, 2);
+        PrismAsserts.assertModifications(accountSecondaryDelta, 3);
         PrismAsserts.assertPropertyAdd(accountSecondaryDelta, 
 				getAttributePath(resourceDummyBlue, DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_GOSSIP_NAME),
 				"SystemConfiguration");
@@ -1170,7 +1166,7 @@ public class TestPreviewChanges extends AbstractInitializedModelIntegrationTest 
 				"Elaine LeChuck");
 		
         accountSecondaryDelta = accContext.getSecondaryDelta();
-        assertNull("Unexpected account secondary delta (blue)", accountSecondaryDelta);
+        PrismAsserts.assertModifications("account secondary delta (blue)", accountSecondaryDelta, 3);
 		
 	}
 	
@@ -1256,7 +1252,7 @@ public class TestPreviewChanges extends AbstractInitializedModelIntegrationTest 
 
         accountSecondaryDelta = accContext.getSecondaryDelta();
         assertNotNull("No account secondary delta (default)", accountSecondaryDelta);
-		PrismAsserts.assertModifications(accountSecondaryDelta, 7);
+		PrismAsserts.assertModifications(accountSecondaryDelta, 8);
 		PrismAsserts.assertNoItemDelta(accountSecondaryDelta,
 				getAttributePath(resourceDummyBlue, DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME));
 		

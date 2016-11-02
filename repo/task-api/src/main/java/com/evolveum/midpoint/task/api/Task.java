@@ -518,6 +518,13 @@ public interface Task extends DebugDumpable, StatisticsCollector {
     public <T> PrismProperty<T> getExtensionProperty(QName propertyName);
 
     /**
+     * Returns specified single-valued property real value from the extension
+     * @param propertyName
+     * @return null if extension or property does not exist.
+     */
+    <T> T getExtensionPropertyRealValue(QName propertyName);
+
+    /**
      * Returns specified reference from the extension.
      * @param name
      * @return null if extension or reference does not exist.
@@ -883,6 +890,10 @@ public interface Task extends DebugDumpable, StatisticsCollector {
      */
     public void setChannel(String channelUri);
 
+    /**
+     * Sets change channel URI.
+     */
+    public void setChannelImmediate(String channelUri, OperationResult parentResult) throws ObjectNotFoundException, SchemaException;
 
     /**
      * Gets the requestee OID - typically an identification of account owner (for notifications).
@@ -898,7 +909,15 @@ public interface Task extends DebugDumpable, StatisticsCollector {
      */
     public void setRequesteeTransient(PrismObject<UserType> user);
 
-    // ====================================================================================== Other methods
+	LensContextType getModelOperationContext();
+
+	void setModelOperationContext(LensContextType modelOperationContext) throws SchemaException;
+
+	// temporary!
+	void initializeWorkflowContextImmediate(String processInstanceId, OperationResult result)
+			throws SchemaException, ObjectNotFoundException;
+
+	// ====================================================================================== Other methods
 
     /**
      * Returns backing task prism object.
@@ -918,6 +937,22 @@ public interface Task extends DebugDumpable, StatisticsCollector {
 	 * @throws ObjectNotFoundException 
 	 */
 	public void refresh(OperationResult parentResult) throws ObjectNotFoundException, SchemaException;
+
+	/**
+	 * Changes in-memory representation immediately and schedules a corresponding batched modification.
+	 * @param delta
+	 * @throws SchemaException
+	 */
+	void addModification(ItemDelta<?, ?> delta) throws SchemaException;
+	void addModifications(Collection<ItemDelta<?, ?>> deltas) throws SchemaException;
+
+    /**
+     * Changes in-memory and in-repo representations immediately.
+     * @param delta
+     * @param parentResult
+     * @throws SchemaException
+     */
+    void addModificationImmediate(ItemDelta<?, ?> delta, OperationResult parentResult) throws SchemaException, ObjectAlreadyExistsException, ObjectNotFoundException;
 
     /**
      * Saves modifications done against the in-memory version of the task into the repository.
@@ -953,4 +988,8 @@ public interface Task extends DebugDumpable, StatisticsCollector {
     void startCollectingOperationStatsFromStoredValues(boolean enableIterationStatistics, boolean enableSynchronizationStatistics, boolean enableActionsExecutedStatistics);
 
     void storeOperationStats();
+
+    WfContextType getWorkflowContext();
+
+	void setWorkflowContext(WfContextType context) throws SchemaException;
 }

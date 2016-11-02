@@ -64,6 +64,7 @@ public final class ClassMapper {
         types.put(ObjectTypes.ACCESS_CERTIFICATION_DEFINITION, RObjectType.ACCESS_CERTIFICATION_DEFINITION);
         types.put(ObjectTypes.ACCESS_CERTIFICATION_CAMPAIGN, RObjectType.ACCESS_CERTIFICATION_CAMPAIGN);
         types.put(ObjectTypes.SEQUENCE, RObjectType.SEQUENCE);
+        types.put(ObjectTypes.SERVICE, RObjectType.SERVICE);
 
         for (ObjectTypes type : ObjectTypes.values()) {
             if (!types.containsKey(type)) {
@@ -101,6 +102,18 @@ public final class ClassMapper {
         }
 
         throw new IllegalArgumentException("Couldn't find hql type for qname " + qname);
+    }
+
+    public static Class<? extends RObject> getHqlClassForHqlName(String hqlName) {
+        if (hqlName == null) {
+            return null;
+        }
+        for (RObjectType entry : types.values()) {
+            if (entry.getClazz().getSimpleName().equals(hqlName)) {
+                return entry.getClazz();
+            }
+        }
+        throw new IllegalArgumentException("Couldn't find hql type for hql name " + hqlName);
     }
 
     public static ObjectTypes getObjectTypeForHQLType(RObjectType type) {

@@ -18,25 +18,16 @@ package com.evolveum.midpoint.repo.api;
 import java.util.Collection;
 import java.util.List;
 
-import javax.xml.namespace.QName;
-
+import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
-import com.evolveum.midpoint.prism.query.ObjectPaging;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
-import com.evolveum.midpoint.schema.GetOperationOptions;
-import com.evolveum.midpoint.schema.RelationalValueSearchType;
-import com.evolveum.midpoint.schema.RepositoryDiag;
-import com.evolveum.midpoint.schema.ResultHandler;
-import com.evolveum.midpoint.schema.SearchResultList;
-import com.evolveum.midpoint.schema.SearchResultMetadata;
-import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.schema.*;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.LookupTableType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
@@ -137,6 +128,7 @@ public interface RepositoryService {
     @Deprecated
     String RELEASE_TASK = CLASS_NAME_WITH_DOT + "releaseTask";
     String SEARCH_OBJECTS = CLASS_NAME_WITH_DOT + "searchObjects";
+	String SEARCH_CONTAINERS = CLASS_NAME_WITH_DOT + "searchContainers";
     String LIST_RESOURCE_OBJECT_SHADOWS = CLASS_NAME_WITH_DOT + "listResourceObjectShadows";
     String MODIFY_OBJECT = CLASS_NAME_WITH_DOT + "modifyObject";
     String COUNT_OBJECTS = CLASS_NAME_WITH_DOT + "countObjects";
@@ -146,6 +138,7 @@ public interface RepositoryService {
     String SEARCH_SHADOW_OWNER = CLASS_NAME_WITH_DOT + "searchShadowOwner";
 	String ADVANCE_SEQUENCE = CLASS_NAME_WITH_DOT + "advanceSequence";
 	String RETURN_UNUSED_VALUES_TO_SEQUENCE = CLASS_NAME_WITH_DOT + "returnUnusedValuesToSequence";
+	String EXECUTE_QUERY_DIAGNOSTICS = CLASS_NAME_WITH_DOT + "executeQueryDiagnostics";
 
 	/**
 	 * Returns object for provided OID.
@@ -165,9 +158,14 @@ public interface RepositoryService {
 	 * @throws IllegalArgumentException
 	 *             wrong OID format, etc.
 	 */
-	<T extends ObjectType> PrismObject<T> getObject(Class<T> type,String oid, Collection<SelectorOptions<GetOperationOptions>> options,
+	<T extends ObjectType> PrismObject<T> getObject(Class<T> type, String oid, Collection<SelectorOptions<GetOperationOptions>> options,
 			OperationResult parentResult)
 			throws ObjectNotFoundException, SchemaException;
+
+//	<T extends ObjectType> PrismObject<T> getContainerValue(Class<T> type, String oid, long id,
+//															Collection<SelectorOptions<GetOperationOptions>> options,
+//															OperationResult parentResult)
+//			throws ObjectNotFoundException, SchemaException;
 
 	/**
 	 * Returns object version for provided OID.
@@ -269,6 +267,22 @@ public interface RepositoryService {
 			throws SchemaException;
 
 	/**
+	 * Search for "sub-object" structures, i.e. containers.
+	 * Currently, only one type of search is available: certification case search.
+	 *
+	 * @param type
+	 * @param query
+	 * @param options
+	 * @param parentResult
+	 * @param <T>
+	 * @return
+	 * @throws SchemaException
+	 */
+	<T extends Containerable> SearchResultList<T> searchContainers(Class<T> type, ObjectQuery query,
+																   Collection<SelectorOptions<GetOperationOptions>> options, OperationResult parentResult)
+			throws SchemaException;
+
+	/**
 	 * <p>Search for objects in the repository in an iterative fashion.</p>
 	 * <p>Searches through all object types. Calls a specified handler for each object found.
 	 * If no search criteria specified, list of all objects of specified type is returned.</p>
@@ -365,6 +379,9 @@ public interface RepositoryService {
 	 *             wrong OID format, described change is not applicable
 	 */
 	<T extends ObjectType> void modifyObject(Class<T> type, String oid, Collection<? extends ItemDelta> modifications, OperationResult parentResult)
+			throws ObjectNotFoundException, SchemaException, ObjectAlreadyExistsException;
+
+	<T extends ObjectType> void modifyObject(Class<T> type, String oid, Collection<? extends ItemDelta> modifications, RepoModifyOptions options, OperationResult parentResult)
 			throws ObjectNotFoundException, SchemaException, ObjectAlreadyExistsException;
 
 	/**
@@ -543,4 +560,15 @@ public interface RepositoryService {
      * TODO this method is SQL service specific; it should be generalized/fixed somehow.
      */
     void testOrgClosureConsistency(boolean repairIfNecessary, OperationResult testResult);
+
+	/**
+	 * A bit of hack - execute arbitrary query, e.g. hibernate query in case of SQL repository.
+	 * Use with all the care!
+	 *
+	 * @param request
+	 * @param result
+	 * @return
+	 */
+	RepositoryQueryDiagResponse executeQueryDiagnostics(RepositoryQueryDiagRequest request, OperationResult result);
+
 }

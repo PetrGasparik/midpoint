@@ -15,15 +15,13 @@
  */
 package com.evolveum.midpoint.model.impl.controller;
 
-import com.evolveum.midpoint.model.impl.controller.ModelController;
+import com.evolveum.midpoint.model.api.ModelService;
 import com.evolveum.midpoint.prism.query.ObjectPaging;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.OrderDirection;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
 import com.evolveum.midpoint.repo.api.RepositoryService;
-import com.evolveum.midpoint.schema.PagingTypeFactory;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.prism.xml.ns._public.query_3.QueryType;
 
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,7 +40,7 @@ import org.testng.annotations.Test;
 public class ControllerSearchObjectsTest extends AbstractTestNGSpringContextTests {
 
 	@Autowired(required = true)
-	private ModelController controller;
+	private ModelService controller;
 	@Autowired(required = true)
 	@Qualifier("cacheRepositoryService")
 	private RepositoryService repository;

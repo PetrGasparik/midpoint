@@ -16,12 +16,17 @@
 
 package com.evolveum.midpoint.web.page.admin.configuration.component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
+import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.form.OnChangeAjaxBehavior;
 import org.apache.wicket.behavior.AttributeAppender;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.DataTable;
@@ -29,13 +34,15 @@ import org.apache.wicket.extensions.markup.html.repeater.data.table.IColumn;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.ISortableDataProvider;
 import org.apache.wicket.markup.html.form.CheckBox;
 import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
 import org.apache.wicket.markup.html.form.FormComponent;
-import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.apache.wicket.model.PropertyModel;
 
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.data.TablePanel;
 import com.evolveum.midpoint.web.component.data.column.CheckBoxColumn;
@@ -45,25 +52,22 @@ import com.evolveum.midpoint.web.component.data.column.EditableLinkColumn;
 import com.evolveum.midpoint.web.component.data.column.EditablePropertyColumn;
 import com.evolveum.midpoint.web.component.input.DropDownChoicePanel;
 import com.evolveum.midpoint.web.component.input.ListMultipleChoicePanel;
+import com.evolveum.midpoint.web.component.input.StringChoiceRenderer;
 import com.evolveum.midpoint.web.component.input.TextPanel;
+import com.evolveum.midpoint.web.component.input.validator.NotNullValidator;
 import com.evolveum.midpoint.web.component.prism.InputPanel;
 import com.evolveum.midpoint.web.component.util.Editable;
 import com.evolveum.midpoint.web.component.util.ListDataProvider;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
 import com.evolveum.midpoint.web.component.util.SimplePanel;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.AppenderConfiguration;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.ClassLogger;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.ComponentLogger;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.FileAppenderConfig;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.FilterConfiguration;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.InputStringValidator;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.LevelValidator;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.LoggerConfiguration;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.LoggerValidator;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.LoggingDto;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.StandardLogger;
 import com.evolveum.midpoint.web.page.admin.configuration.dto.StandardLoggerType;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AppenderConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ClassLoggerConfigurationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FileAppenderConfigurationType;
@@ -154,7 +158,7 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
     private void initRoot() {
         DropDownChoice<LoggingLevelType> rootLevel = new DropDownChoice<>(ID_ROOT_LEVEL,
                 new PropertyModel<LoggingLevelType>(getModel(), LoggingDto.F_ROOT_LEVEL),
-                WebMiscUtil.createReadonlyModelFromEnum(LoggingLevelType.class));
+                WebComponentUtil.createReadonlyModelFromEnum(LoggingLevelType.class));
         rootLevel.add(new EmptyOnChangeAjaxFormUpdatingBehavior());
         add(rootLevel);
 
@@ -173,10 +177,10 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
     }
 
     private void initAudit(){
-        CheckBox auditLog = WebMiscUtil.createAjaxCheckBox("auditLog", new PropertyModel<Boolean>(getModel(), "auditLog"));
+        CheckBox auditLog = WebComponentUtil.createAjaxCheckBox("auditLog", new PropertyModel<Boolean>(getModel(), "auditLog"));
         add(auditLog);
 
-        CheckBox auditDetails = WebMiscUtil.createAjaxCheckBox("auditDetails", new PropertyModel<Boolean>(getModel(), "auditDetails"));
+        CheckBox auditDetails = WebComponentUtil.createAjaxCheckBox("auditDetails", new PropertyModel<Boolean>(getModel(), "auditDetails"));
         add(auditDetails);
 
         DropDownChoice<String> auditAppender = new DropDownChoice<>("auditAppender", new PropertyModel<String>(
@@ -253,55 +257,36 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
                 if(model.getObject() instanceof StandardLogger){
                     DropDownChoicePanel dropDownChoicePanel = new DropDownChoicePanel(componentId,
                             new PropertyModel(model, "logger"),
-                            WebMiscUtil.createReadonlyModelFromEnum(StandardLoggerType.class),
-                            new IChoiceRenderer<StandardLoggerType>() {
-
-                                @Override
-                                public Object getDisplayValue(StandardLoggerType item) {
-                                    return createStringResource("StandardLoggerType." + item).getString();
-                                }
-
-                                @Override
-                                public String getIdValue(StandardLoggerType item, int index) {
-                                    return Integer.toString(index);
-                                }
-                            });
+                            WebComponentUtil.createReadonlyModelFromEnum(StandardLoggerType.class),
+                            new EnumChoiceRenderer<StandardLoggerType>());
 
                     FormComponent<StandardLoggerType> input = dropDownChoicePanel.getBaseFormComponent();
-                    input.add(new LoggerValidator());
+                    input.add(new NotNullValidator<StandardLoggerType>("logger.emptyLogger"));
                     input.add(new AttributeAppender("style", "width: 100%"));
                     input.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+                    addAjaxFormComponentUpdatingBehavior(input);
                     return dropDownChoicePanel;
 
                 } else if (model.getObject() instanceof ComponentLogger) {
                     DropDownChoicePanel dropDownChoicePanel = new DropDownChoicePanel(componentId,
                             new PropertyModel(model, "component"),
-                            WebMiscUtil.createReadonlyModelFromEnum(LoggingComponentType.class),
-                            new IChoiceRenderer<LoggingComponentType>() {
-
-                                @Override
-                                public Object getDisplayValue(LoggingComponentType item) {
-                                    return getComponenLoggerDisplayValue(item);
-                                }
-
-                                @Override
-                                public String getIdValue(LoggingComponentType item, int index) {
-                                    return Integer.toString(index);
-                                }
-                            });
+                            WebComponentUtil.createReadonlyModelFromEnum(LoggingComponentType.class),
+                            new EnumChoiceRenderer<LoggingComponentType>());
 
                     FormComponent<LoggingComponentType> input = dropDownChoicePanel.getBaseFormComponent();
-                    input.add(new LoggerValidator());
+                    input.add(new NotNullValidator<LoggingComponentType>("logger.emptyLogger"));
                     input.add(new AttributeAppender("style", "width: 100%"));
                     input.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+                    addAjaxFormComponentUpdatingBehavior(input);
                     return dropDownChoicePanel;
 
                 } else {
                     TextPanel textPanel = new TextPanel<>(componentId, new PropertyModel<String>(model, getPropertyExpression()));
                     FormComponent input = textPanel.getBaseFormComponent();
+                    addAjaxFormComponentUpdatingBehavior(input);
                     input.add(new AttributeAppender("style", "width: 100%"));
                     input.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                    input.add(new InputStringValidator());
+                    input.add(new NotNullValidator<StandardLoggerType>("message.emptyString"));
                     return textPanel;
                 }
             }
@@ -319,10 +304,11 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
             protected Component createInputPanel(String componentId, IModel<LoggerConfiguration> model) {
                 DropDownChoicePanel dropDownChoicePanel = new DropDownChoicePanel(componentId,
                         new PropertyModel(model, getPropertyExpression()),
-                        WebMiscUtil.createReadonlyModelFromEnum(LoggingLevelType.class));
+                        WebComponentUtil.createReadonlyModelFromEnum(LoggingLevelType.class));
                 FormComponent<LoggingLevelType> input = dropDownChoicePanel.getBaseFormComponent();
                 input.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                input.add(new LevelValidator());
+                input.add(new NotNullValidator<LoggingLevelType>("message.emptyLevel"));
+                addAjaxFormComponentUpdatingBehavior(input);
                 return dropDownChoicePanel;
             }
 
@@ -334,7 +320,7 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
             @Override
             protected IModel<String> createLinkModel(IModel<LoggerConfiguration> rowModel) {
                 LoggerConfiguration configuration = rowModel.getObject();
-                return WebMiscUtil.createLocalizedModelForEnum(configuration.getLevel(), getPageBase());
+                return WebComponentUtil.createLocalizedModelForEnum(configuration.getLevel(), getPageBase());
             }
         });
 
@@ -375,22 +361,11 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
                 options.setObject(optionsMap);
                 ListMultipleChoicePanel panel = new ListMultipleChoicePanel<>(componentId,
                         new PropertyModel<List<String>>(model, getPropertyExpression()),
-                        createNewLoggerAppendersListModel(), new IChoiceRenderer<String>() {
-
-                    @Override
-                    public String getDisplayValue(String o) {
-                        return o;
-                    }
-
-                    @Override
-                    public String getIdValue(String o, int index) {
-                        return Integer.toString(index);
-                    }
-                }, options);
+                        createNewLoggerAppendersListModel(), new StringChoiceRenderer(null), options);
 
                 FormComponent<AppenderConfigurationType> input = panel.getBaseFormComponent();
                 input.add(new EmptyOnChangeAjaxFormUpdatingBehavior());
-
+                addAjaxFormComponentUpdatingBehavior(input);
                 return panel;
             }
 
@@ -510,7 +485,8 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
             protected Component createInputPanel(String componentId, IModel<AppenderConfiguration> model){
                 TextPanel<String> panel = new TextPanel<String>(componentId, new PropertyModel(model, getPropertyExpression()));
                 panel.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                panel.add(new InputStringValidator());
+                panel.getBaseFormComponent().add(new NotNullValidator<String>("message.emptyString"));
+                addAjaxFormComponentUpdatingBehavior(panel.getBaseFormComponent());
                 return panel;
             }
 
@@ -525,7 +501,8 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
             protected InputPanel createInputPanel(String componentId, IModel model) {
                 InputPanel panel = super.createInputPanel(componentId, model);
                 panel.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                panel.add(new InputStringValidator());
+                panel.getBaseFormComponent().add(new NotNullValidator<String>("message.emptyString"));
+                addAjaxFormComponentUpdatingBehavior(panel.getBaseFormComponent());
                 return panel;
             }
         };
@@ -550,6 +527,7 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
                 FormComponent component = panel.getBaseFormComponent();
                 component.add(new AttributeModifier("size", 5));
                 component.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+                addAjaxFormComponentUpdatingBehavior(component);
                 return panel;
             }
         };
@@ -566,7 +544,8 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
                 FormComponent component = panel.getBaseFormComponent();
                 component.add(new AttributeModifier("size", 5));
                 component.add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                component.add(new InputStringValidator());
+                component.add(new NotNullValidator<String>("message.emptyString"));
+                addAjaxFormComponentUpdatingBehavior(component);
                 return panel;
             }
         };
@@ -579,7 +558,8 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
             protected InputPanel createInputPanel(String componentId, IModel model) {
                 InputPanel panel = super.createInputPanel(componentId, model);
                 panel.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-                panel.add(new InputStringValidator());
+                panel.getBaseFormComponent().add(new NotNullValidator<String>("message.emptyString"));
+                addAjaxFormComponentUpdatingBehavior(panel.getBaseFormComponent());
                 return panel;
             }
         };
@@ -632,7 +612,12 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
         protected InputPanel createInputPanel(String componentId, IModel iModel) {
             InputPanel panel = super.createInputPanel(componentId, iModel);
             panel.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-            panel.add(new InputStringValidator());
+            panel.getBaseFormComponent().add(new NotNullValidator<String>("message.emptyString"));
+            panel.getBaseFormComponent().add(new AjaxFormComponentUpdatingBehavior("change") {
+                @Override
+                protected void onUpdate(AjaxRequestTarget target) {
+                }
+            });
             return panel;
         }
     }
@@ -674,5 +659,12 @@ public class LoggingConfigPanel extends SimplePanel<LoggingDto> {
         AppenderConfiguration config = model.getObject();
         config.setEditing(true);
         target.add(getAppendersTable());
+    }
+
+    private void addAjaxFormComponentUpdatingBehavior(FormComponent component){
+        component.add(new AjaxFormComponentUpdatingBehavior("change") {
+            @Override
+            protected void onUpdate(AjaxRequestTarget target) {}
+        });
     }
 }

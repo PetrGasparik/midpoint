@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,12 @@
 package com.evolveum.midpoint.web.component;
 
 import com.evolveum.midpoint.web.resource.img.ImgResources;
-import com.evolveum.midpoint.web.component.util.BaseSimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.util.FutureUpdateBehavior;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+
 import org.apache.wicket.Component;
 import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.markup.html.image.Image;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
@@ -32,13 +32,13 @@ import org.apache.wicket.util.time.Duration;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.concurrent.Callable;
+import java.io.Serializable;
 import java.util.concurrent.Future;
 
 /**
  * @author lazyman
  */
-public abstract class AsyncUpdatePanel<V, T> extends BaseSimplePanel {
+public abstract class AsyncUpdatePanel<V, T extends Serializable> extends BasePanel<T> {
 
     private static final ResourceReference PRELOADER =
             new PackageResourceReference(ImgResources.class, "ajax-loader.gif");
@@ -48,9 +48,6 @@ public abstract class AsyncUpdatePanel<V, T> extends BaseSimplePanel {
      */
     public static final int DEFAULT_TIMER_DURATION = 2;
 
-    private static final String ID_LOADING = "loading";
-    private static final String ID_BODY = "body";
-
     protected transient Future<T> future;
     private boolean loadingVisible = true;
 
@@ -59,7 +56,7 @@ public abstract class AsyncUpdatePanel<V, T> extends BaseSimplePanel {
     }
 
     public AsyncUpdatePanel(String id, IModel<V> callableParameterModel, Duration durationSecs) {
-        super(id, new Model());
+        super(id, new Model<T>());
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         future = GuiComponents.submitCallable(createCallable(auth, callableParameterModel));
@@ -82,24 +79,9 @@ public abstract class AsyncUpdatePanel<V, T> extends BaseSimplePanel {
         add(behaviour);
     }
 
-    protected void initLayout() {
-        add(getLoadingComponent(ID_LOADING));
-        add(new Label(ID_BODY));
-    }
+    protected abstract void onPostSuccess(AjaxRequestTarget target);
 
-    protected void onPostSuccess(AjaxRequestTarget target) {
-        replace(getMainComponent(ID_BODY));
-
-        target.add(this);
-    }
-
-    protected void onUpdateError(AjaxRequestTarget target, Exception ex) {
-        String message = "Error occurred while fetching data: " + ex.getMessage();
-        Label errorLabel = new Label(ID_BODY, message);
-        replace(errorLabel);
-
-        target.add(this);
-    }
+    protected abstract void onUpdateError(AjaxRequestTarget target, Exception ex);
 
     protected boolean isLoadingVisible() {
         return loadingVisible;

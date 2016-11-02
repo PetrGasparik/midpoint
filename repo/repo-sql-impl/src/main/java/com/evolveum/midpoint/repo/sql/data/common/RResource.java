@@ -24,6 +24,7 @@ import com.evolveum.midpoint.repo.sql.data.common.enums.RResourceAdministrativeS
 import com.evolveum.midpoint.repo.sql.data.common.other.RReferenceOwner;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
@@ -33,6 +34,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceBusinessConf
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import org.hibernate.annotations.Cascade;
 import org.hibernate.annotations.ForeignKey;
+import org.hibernate.annotations.Persister;
 import org.hibernate.annotations.Where;
 
 import javax.persistence.*;
@@ -46,6 +48,7 @@ import java.util.Set;
 @Entity
 @ForeignKey(name = "fk_resource")
 @Table(uniqueConstraints = @UniqueConstraint(name = "uc_resource_name", columnNames = {"name_norm"}))
+@Persister(impl = MidPointJoinedPersister.class)
 public class RResource extends RObject<ResourceType> {
 
     private static final Trace LOGGER = TraceManager.getTrace(RResource.class);
@@ -55,7 +58,7 @@ public class RResource extends RObject<ResourceType> {
     //resource business configuration, embedded component can't be used, because then it couldn't use
     //non embedded approverRef relationship
     private RResourceAdministrativeState administrativeState;
-    private Set<RObjectReference> approverRef;
+    private Set<RObjectReference<RFocus>> approverRef;
     //end of resource business configuration
 
     @Enumerated(EnumType.ORDINAL)
@@ -68,9 +71,9 @@ public class RResource extends RObject<ResourceType> {
     @OneToMany(mappedBy = "owner", orphanRemoval = true)
     @ForeignKey(name = "none")
     @Cascade({org.hibernate.annotations.CascadeType.ALL})
-    public Set<RObjectReference> getApproverRef() {
+    public Set<RObjectReference<RFocus>> getApproverRef() {
         if (approverRef == null) {
-            approverRef = new HashSet<RObjectReference>();
+            approverRef = new HashSet<>();
         }
         return approverRef;
     }
@@ -94,7 +97,7 @@ public class RResource extends RObject<ResourceType> {
         this.administrativeState = administrativeState;
     }
 
-    public void setApproverRef(Set<RObjectReference> approverRef) {
+    public void setApproverRef(Set<RObjectReference<RFocus>> approverRef) {
         this.approverRef = approverRef;
     }
 

@@ -15,12 +15,9 @@
  */
 package com.evolveum.midpoint.model.intest;
 
+import static org.testng.AssertJUnit.assertEquals;
 import static org.testng.AssertJUnit.assertNull;
 import static org.testng.AssertJUnit.assertNotNull;
-import static com.evolveum.midpoint.test.IntegrationTestTools.display;
-
-import java.util.ArrayList;
-import java.util.Collection;
 
 import javax.xml.datatype.XMLGregorianCalendar;
 
@@ -30,43 +27,20 @@ import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
 import org.testng.annotations.Test;
 
-import com.evolveum.midpoint.model.impl.ModelConstants;
-import com.evolveum.midpoint.model.impl.trigger.RecomputeTriggerHandler;
 import com.evolveum.midpoint.model.impl.trigger.TriggerHandlerRegistry;
 import com.evolveum.midpoint.model.intest.AbstractInitializedModelIntegrationTest;
 import com.evolveum.midpoint.model.intest.util.MockTriggerHandler;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.delta.ChangeType;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
-import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.test.IntegrationTestTools;
 import com.evolveum.midpoint.test.util.TestUtil;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 /**
  * @author Radovan Semancik
+ *
+ * PMed: In theory, the assertions counting # of invocations could fail even if trigger task handler works well
+ * - if the scanner task would run more than once. If that occurs in reality, we'll deal with it.
  *
  */
 @ContextConfiguration(locations = {"classpath:ctx-model-intest-test-main.xml"})
@@ -121,6 +95,7 @@ public class TestTriggerTask extends AbstractInitializedModelIntegrationTest {
         assertLastRecomputeTimestamp(TASK_TRIGGER_SCANNER_OID, startCal, endCal);
         
         assertNotNull("Trigger was not called", testTriggerHandler.getLastObject());
+		assertEquals("Trigger was called incorrect number of times", 1, testTriggerHandler.getInvocationCount());
         assertNoTrigger(UserType.class, USER_JACK_OID);
         
         assertLastRecomputeTimestamp(TASK_TRIGGER_SCANNER_OID, startCal, endCal);
@@ -179,13 +154,49 @@ public class TestTriggerTask extends AbstractInitializedModelIntegrationTest {
         XMLGregorianCalendar endCal = clock.currentTimeXMLGregorianCalendar();
 
         assertNotNull("Trigger was not called", testTriggerHandler.getLastObject());
+		assertEquals("Trigger was called incorrect number of times", 1, testTriggerHandler.getInvocationCount());
         assertNoTrigger(UserType.class, USER_JACK_OID);
 
         assertLastRecomputeTimestamp(TASK_TRIGGER_SCANNER_OID, startCal, endCal);
 	}
-	
+
 	@Test
-    public void test115NoTriggerAgain() throws Exception {
+	public void test120TwoTriggers() throws Exception {
+		final String TEST_NAME = "test120TwoTriggers";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = createTask(TestTriggerTask.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+		testTriggerHandler.reset();
+
+		XMLGregorianCalendar startCal = clock.currentTimeXMLGregorianCalendar();
+		addTrigger(USER_JACK_OID, startCal, MockTriggerHandler.HANDLER_URI);
+
+		XMLGregorianCalendar startCalPlus5ms = XmlTypeConverter.createXMLGregorianCalendar(startCal);
+		startCalPlus5ms.add(XmlTypeConverter.createDuration(5L));
+		addTrigger(USER_JACK_OID, startCalPlus5ms, MockTriggerHandler.HANDLER_URI);
+
+		/// WHEN
+		TestUtil.displayWhen(TEST_NAME);
+		waitForTaskNextRunAssertSuccess(TASK_TRIGGER_SCANNER_OID, true);
+
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+
+		// THEN
+		XMLGregorianCalendar endCal = clock.currentTimeXMLGregorianCalendar();
+
+		assertNotNull("Trigger was not called", testTriggerHandler.getLastObject());
+		assertEquals("Trigger was called wrong number of times", 1, testTriggerHandler.getInvocationCount());
+		assertNoTrigger(UserType.class, USER_JACK_OID);
+
+		assertLastRecomputeTimestamp(TASK_TRIGGER_SCANNER_OID, startCal, endCal);
+	}
+
+
+	@Test
+    public void test150NoTriggerAgain() throws Exception {
 		final String TEST_NAME = "test115NoTriggerAgain";
         TestUtil.displayTestTile(this, TEST_NAME);
 

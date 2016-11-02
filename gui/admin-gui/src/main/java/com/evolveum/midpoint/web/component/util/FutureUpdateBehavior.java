@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.evolveum.midpoint.web.component.util;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
@@ -52,8 +53,8 @@ public abstract class FutureUpdateBehavior<T> extends AbstractAjaxTimerBehavior 
         try {
             T data = future.get();
             Component component = getComponent();
-            if (component instanceof BaseSimplePanel) {
-                BaseSimplePanel<T> panel = (BaseSimplePanel<T>) component;
+            if (component instanceof BasePanel) {
+            	BasePanel<T> panel = (BasePanel<T>) component;
                 panel.getModel().setObject(data);
             } else {
                 if (component.getDefaultModel() == null) {

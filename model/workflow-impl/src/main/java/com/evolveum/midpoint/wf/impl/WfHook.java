@@ -24,8 +24,10 @@ import com.evolveum.midpoint.model.api.hooks.HookOperationMode;
 import com.evolveum.midpoint.model.api.hooks.HookRegistry;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
@@ -80,19 +82,25 @@ public class WfHook implements ChangeHook {
     }
 
     @Override
-    public HookOperationMode invoke(ModelContext context, Task task, OperationResult parentResult) {
+    public <O extends ObjectType> HookOperationMode invoke(ModelContext<O> context, Task task, OperationResult parentResult) {
 
         Validate.notNull(context);
         Validate.notNull(task);
         Validate.notNull(parentResult);
 
-        OperationResult result = parentResult.createSubresult(OPERATION_INVOKE);
+        OperationResult result = parentResult.createMinorSubresult(OPERATION_INVOKE);
         result.addParam("taskFromModel", task.toString());
         result.addContext("model state", context.getState());
 
         WfConfigurationType wfConfigurationType = baseConfigurationHelper.getWorkflowConfiguration(context, result);
         if (wfConfigurationType != null && Boolean.FALSE.equals(wfConfigurationType.isModelHookEnabled())) {
             LOGGER.info("Workflow model hook is disabled. Proceeding with operation execution as if everything is approved.");
+            result.recordSuccess();
+            return HookOperationMode.FOREGROUND;
+        }
+
+        if (SchemaConstants.CHANNEL_GUI_INIT_URI.equals(context.getChannel())) {
+            LOGGER.debug("Skipping workflow processing because the channel is '" + SchemaConstants.CHANNEL_GUI_INIT_URI + "'.");
             result.recordSuccess();
             return HookOperationMode.FOREGROUND;
         }
@@ -151,20 +159,16 @@ public class WfHook implements ChangeHook {
 
             for (ChangeProcessor changeProcessor : wfConfiguration.getChangeProcessors()) {
                 if (LOGGER.isTraceEnabled()) {
-                    LOGGER.trace("Trying change processor: " + changeProcessor.getClass().getName());
+                    LOGGER.trace("Trying change processor: {}", changeProcessor.getClass().getName());
                 }
                 try {
                     HookOperationMode hookOperationMode = changeProcessor.processModelInvocation(context, wfConfigurationType, taskFromModel, result);
                     if (hookOperationMode != null) {
                         return hookOperationMode;
                     }
-                } catch (SchemaException e) {
-                    LoggingUtils.logException(LOGGER, "Schema exception while running change processor {}", e, changeProcessor.getClass().getName());   // todo message
-                    result.recordFatalError("Schema exception while running change processor " + changeProcessor.getClass(), e);
-                    return HookOperationMode.ERROR;
-                } catch (RuntimeException e) {
-                    LoggingUtils.logException(LOGGER, "Runtime exception while running change processor {}", e, changeProcessor.getClass().getName());   // todo message
-                    result.recordFatalError("Runtime exception while running change processor " + changeProcessor.getClass(), e);
+                } catch (ObjectNotFoundException|SchemaException|RuntimeException e) {
+                    LoggingUtils.logException(LOGGER, "Exception while running change processor {}", e, changeProcessor.getClass().getName());   // todo message
+                    result.recordFatalError("Exception while running change processor " + changeProcessor.getClass(), e);
                     return HookOperationMode.ERROR;
                 }
             }

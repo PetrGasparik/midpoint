@@ -16,333 +16,138 @@
 
 package com.evolveum.midpoint.prism.query;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 import javax.xml.namespace.QName;
 
-import com.evolveum.midpoint.prism.PrismContainerValue;
+import com.evolveum.midpoint.prism.*;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
-import org.w3c.dom.Element;
 
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Item;
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.Itemable;
-import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismConstants;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.PrismValue;
-import com.evolveum.midpoint.prism.match.MatchingRule;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.util.PrismUtil;
-import com.evolveum.midpoint.prism.xnode.MapXNode;
-import com.evolveum.midpoint.prism.xnode.XNode;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.exception.SystemException;
-import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public abstract class PropertyValueFilter<T extends PrismValue> extends ValueFilter implements Itemable {
+public abstract class PropertyValueFilter<T> extends ValueFilter<PrismPropertyValue<T>, PrismPropertyDefinition<T>> implements Itemable {
 
-	private ExpressionWrapper expression;
-	private List<T> values;
+	PropertyValueFilter(@NotNull ItemPath path, @Nullable PrismPropertyDefinition<T> definition, @Nullable QName matchingRule,
+			@Nullable List<PrismPropertyValue<T>> values, @Nullable ExpressionWrapper expression,
+			@Nullable ItemPath rightHandSidePath, @Nullable ItemDefinition rightHandSideDefinition) {
+		super(path, definition, matchingRule, values, expression, rightHandSidePath, rightHandSideDefinition);
+	}
 
-	PropertyValueFilter() {
-		super();
-	}
-	
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, QName matchingRule, List<T> values) {
-		super(path, definition, matchingRule);
-		this.values = values;
-	}
-	
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, T value){
-		super(path, definition);
-		setValue(value);
-	}
-	
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, QName matchingRule) { 
-		super(path, definition, matchingRule);
-		this.values = null;
-	}
-	
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, ExpressionWrapper expression) {
-		super(path, definition);
-		this.expression = expression;
-	}
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, ExpressionWrapper expression, List<T> values) {
-		super(path, definition);
-		this.values = values;
-		this.expression = expression;
-	}
-	
-	PropertyValueFilter(ItemPath path, ItemDefinition definition, QName matchingRule, ExpressionWrapper expression) {
-		super(path, definition, matchingRule);
-		this.expression = expression;
-	}
-	
-	static <T> List<PrismPropertyValue<T>> createPropertyList(PrismPropertyDefinition itemDefinition, PrismPropertyValue<T> values) {
-		Validate.notNull(itemDefinition, "Item definition in substring filter must not be null.");
-		
-		List<PrismPropertyValue<T>> pValues = new ArrayList<PrismPropertyValue<T>>();
-		PrismUtil.recomputePrismPropertyValue(values, itemDefinition.getPrismContext());
-		pValues.add(values);
-		
-		return pValues;
-	}
-	
-	static <T> List<PrismPropertyValue<T>> createPropertyList(PrismPropertyDefinition itemDefinition, PrismPropertyValue<T>[] values) {
-		Validate.notNull(itemDefinition, "Item definition in substring filter must not be null.");
-		
-		List<PrismPropertyValue<T>> pValues = new ArrayList<PrismPropertyValue<T>>();
-		
-		for (PrismPropertyValue<T> val : values){
-			PrismUtil.recomputePrismPropertyValue(val, itemDefinition.getPrismContext());
-			pValues.add(val);
-		}
-		
-		return pValues;
-	}
-	
-	 static <T> List<PrismPropertyValue<T>> createPropertyList(PrismPropertyDefinition itemDefinition, T realValue){
-		List<PrismPropertyValue<T>> pVals = new ArrayList<PrismPropertyValue<T>>();
+//	static protected <T> List<PrismPropertyValue<T>> createPropertyList(@NotNull PrismPropertyDefinition itemDefinition, @Nullable PrismPropertyValue<T> pValue) {
+//		List<PrismPropertyValue<T>> pValues = new ArrayList<>();
+//		if (pValue == null) {
+//			return pValues;
+//		} else {
+//			PrismUtil.recomputePrismPropertyValue(pValue, itemDefinition.getPrismContext());
+//			pValues.add(pValue);
+//			return pValues;
+//		}
+//	}
+//
+//	static <T> List<PrismPropertyValue<T>> createPropertyList(PrismPropertyDefinition itemDefinition, PrismPropertyValue<T>[] values) {
+//		Validate.notNull(itemDefinition, "Item definition in substring filter must not be null.");
+//
+//		List<PrismPropertyValue<T>> pValues = new ArrayList<PrismPropertyValue<T>>();
+//
+//		for (PrismPropertyValue<T> val : values){
+//			PrismUtil.recomputePrismPropertyValue(val, itemDefinition.getPrismContext());
+//			pValues.add(val);
+//		}
+//
+//		return pValues;
+//	}
 
-		if (realValue.getClass() != null && Collection.class.isAssignableFrom(realValue.getClass())) {
-			for (Object o : (Iterable)realValue){
-				if (o instanceof PrismPropertyValue){
-					PrismPropertyValue pVal = (PrismPropertyValue) o;
-					PrismUtil.recomputePrismPropertyValue(pVal, itemDefinition.getPrismContext());
-					pVals.add(pVal);
-				}else{
-					pVals.addAll(PrismPropertyValue.createCollection((Collection<T>) realValue));
-				}
+	@NotNull
+	static <T> List<PrismPropertyValue<T>> anyArrayToPropertyValueList(PrismContext prismContext, Object[] values) {
+		List<PrismPropertyValue<T>> pVals = new ArrayList<>();
+		if (values != null) {
+			for (Object value : values) {
+				addToPrismValues((List) pVals, prismContext, value);
 			}
-			
-		} else {
-			PrismUtil.recomputeRealValue(realValue, itemDefinition.getPrismContext());
-			pVals.add(new PrismPropertyValue<T>(realValue));
 		}
 		return pVals;
 	}
-	
-	public List<T> getValues() {
-		return values;
-	}
-	
-	public void setValues(List<T> values) {
-		this.values = values;
-	}
-	
-	public void setValue(T value) {
-		List<T> values = new ArrayList<T>();
+
+	@NotNull
+	static <T> List<PrismPropertyValue<T>> anyValueToPropertyValueList(PrismContext prismContext, Object value) {
+		List<PrismPropertyValue<T>> pVals = new ArrayList<>();
 		if (value != null) {
-			values.add(value);
+			addToPrismValues((List) pVals, prismContext, value);
 		}
-		this.values = values;
+		return pVals;
 	}
-	
-	protected void cloneValues(PropertyValueFilter clone) {
-		super.cloneValues(clone);
-		clone.values = getCloneValuesList();
-	}
-	private List<T> getCloneValuesList() {
-		if (values == null) {
-			return null;
-		}
-		List<T> clonedValues = new ArrayList<T>(values.size());
-		for(T value: values) {
-			clonedValues.add((T) value.clone());
-		}
-		return clonedValues;
-	}
-	
-	public Item getObjectItem(PrismContainerValue value){
-		ItemPath path = getFullPath();
-		return value.findItem(path);
-	}
-	
-	public Item getFilterItem() throws SchemaException{
 
-		if (getDefinition() == null){
-			throw new SchemaException("Could not find definition for item " + getPath());
+	private static void addToPrismValues(List<PrismPropertyValue<?>> pVals, PrismContext prismContext, Object value) {
+		if (value == null) {
+			return;
 		}
-		Item filterItem = getDefinition().instantiate();
-		if (getValues() != null && !getValues().isEmpty()) {
-			try {
-				for (PrismValue v : getValues()){
-					filterItem.add(v.clone());
-				}
-			} catch (SchemaException e) {
-				throw new IllegalArgumentException(e.getMessage(), e);
+		if (value instanceof Collection) {
+			for (Object o : (Collection) value) {
+				addToPrismValues(pVals, prismContext, o);
 			}
+			return;
 		}
-		
-		return filterItem;
-	}
-	
-	public ExpressionWrapper getExpression() {
-		return expression;
-	}
+		if (value.getClass().isArray()) {
+			throw new IllegalStateException("Array within array in filter creation: " + value);
+		}
 
-	public void setExpression(ExpressionWrapper expression) {
-		this.expression = expression;
-	}
-	
-	@Override
-	public void checkConsistence() {
-		if (values == null) {
-			return; // this is OK, searching for item with no value
-		}
-		for (T value: values) {
-			if (value == null) {
-				throw new IllegalArgumentException("Null value in "+this);
+		PrismPropertyValue<?> pVal;
+		if (value instanceof PrismPropertyValue) {
+			pVal = (PrismPropertyValue<?>) value;
+			if (pVal.getParent() != null) {
+				pVal = pVal.clone();
 			}
-			if (value.isEmpty() && !value.isRaw()) {
-				throw new IllegalArgumentException("Empty value in "+this);
-			}
-		}
-	}
-
-	@Override
-	public boolean isRaw() {
-		if (values != null) {
-			for (T value: values) {
-				if (value.isRaw()) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	@Override
-	public boolean match(PrismContainerValue cvalue, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
-
-		Item item = getObjectItem(cvalue);
-
-		boolean filterItemIsEmpty = getValues() == null || getValues().isEmpty();
-		boolean objectItemIsEmpty = item == null || item.isEmpty();
-
-		if (filterItemIsEmpty && !objectItemIsEmpty) {
-			return false;
-		}
-
-		if (!filterItemIsEmpty && objectItemIsEmpty) {
-			return false;
-		}
-		
-		return true;
-	}
-	
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + ((expression == null) ? 0 : expression.hashCode());
-		result = prime * result + ((values == null) ? 0 : values.hashCode());
-		return result;
-	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		PropertyValueFilter other = (PropertyValueFilter) obj;
-		if (expression == null) {
-			if (other.expression != null)
-				return false;
-		} else if (!expression.equals(other.expression))
-			return false;
-		if (values == null) {
-			if (other.values != null)
-				return false;
-		} else if (!values.equals(other.values))
-			return false;
-		return true;
-	}
-
-	public String debugDump(int indent, StringBuilder sb){
-		if (getFullPath() != null){
-			sb.append("\n");
-			DebugUtil.indentDebugDump(sb, indent+1);
-			sb.append("PATH: ");
-			sb.append(getFullPath().toString());
-		} 
-		
-		sb.append("\n");
-		DebugUtil.indentDebugDump(sb, indent+1);
-		sb.append("DEF: ");
-		if (getDefinition() != null) {
-			sb.append(getDefinition().toString());
 		} else {
-			sb.append("null");
+			pVal = new PrismPropertyValue<>(value);
 		}
-		
-		List<T> values = getValues();
-		if (values != null) {
-			sb.append("\n");
-			DebugUtil.indentDebugDump(sb, indent+1);
-			sb.append("VALUE:");
-			sb.append("\n");
-			for (PrismValue val : getValues()) {
-				sb.append(DebugUtil.debugDump(val, indent + 2));
-			}
-		}
-
-        ExpressionWrapper expression = getExpression();
-		if (expression != null && expression.getExpression() != null) {
-			sb.append("\n");
-			DebugUtil.indentDebugDump(sb, indent+1);
-			sb.append("EXPRESSION:");
-			sb.append("\n");
-			sb.append(DebugUtil.debugDump(expression.getExpression(), indent + 2));
-		}
-
-		QName matchingRule = getMatchingRule();
-		if (matchingRule != null) {
-			sb.append("\n");
-			DebugUtil.indentDebugDump(sb, indent+1);
-			sb.append("MATCHING: ");
-			sb.append(matchingRule);
-		}
-		
-		return sb.toString();
+		PrismUtil.recomputePrismPropertyValue(pVal, prismContext);
+		pVals.add(pVal);
 	}
+
+//	static <T> List<PrismPropertyValue<T>> realValueToPropertyList(PrismPropertyDefinition itemDefinition, Object realValue) {
+//		List<PrismPropertyValue<T>> pVals = new ArrayList<>();
+//		if (realValue == null) {
+//			return pVals;
+//		}
+//
+//		if (realValue.getClass() != null && Collection.class.isAssignableFrom(realValue.getClass())) {
+//			for (Object o : (Iterable)realValue){
+//				if (o instanceof PrismPropertyValue){
+//					PrismPropertyValue pVal = (PrismPropertyValue) o;
+//					PrismUtil.recomputePrismPropertyValue(pVal, itemDefinition.getPrismContext());
+//					pVals.add(pVal);
+//				}else{
+//					// TODO what's this???
+//					pVals.addAll(PrismPropertyValue.createCollection((Collection<T>) realValue));
+//				}
+//			}
+//
+//		} else {
+//			PrismUtil.recomputeRealValue(realValue, itemDefinition.getPrismContext());
+//			pVals.add(new PrismPropertyValue<T>(realValue));
+//		}
+//		return pVals;
+//	}
 	
-	public String toString(StringBuilder sb){
-		if (getFullPath() != null){
-			sb.append(getFullPath().toString());
-			sb.append(",");
-		}
-		if (getValues() != null){
-			for (int i = 0; i< getValues().size() ; i++){
-				PrismValue value = getValues().get(i);
-				if (value == null) {
-					sb.append("null");
-				} else {
-					sb.append(value.toString());
-				}
-				if ( i != getValues().size() -1){
-					sb.append(",");
-				}
-			}
-		}
-		return sb.toString();
-	}
-	
+
+//	protected void cloneValues(PropertyValueFilter<V> clone) {
+//		clone.values = getCloneValuesList();
+//		if (clone.values != null) {
+//			for (V clonedValue: clone.values) {
+//				clonedValue.setParent(clone);
+//			}
+//		}
+//	}
+
+	// TODO cleanup this mess - how values are cloned, that expression is not cloned in LT/GT filter etc
+
+	public abstract PropertyValueFilter clone();
+
 }

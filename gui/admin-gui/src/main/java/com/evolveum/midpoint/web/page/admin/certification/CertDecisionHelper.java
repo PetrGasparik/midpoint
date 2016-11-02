@@ -16,27 +16,17 @@
 
 package com.evolveum.midpoint.web.page.admin.certification;
 
+import com.evolveum.midpoint.gui.api.page.PageBase;
 import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.web.component.data.column.IconColumn;
 import com.evolveum.midpoint.web.component.data.column.LinkColumn;
-import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.web.page.admin.certification.dto.CertCaseOrDecisionDto;
 import com.evolveum.midpoint.web.page.admin.certification.dto.CertDecisionDto;
 import com.evolveum.midpoint.web.page.admin.certification.handlers.CertGuiHandler;
 import com.evolveum.midpoint.web.page.admin.certification.handlers.CertGuiHandlerRegistry;
-import com.evolveum.midpoint.web.page.admin.resources.PageResource;
-import com.evolveum.midpoint.web.page.admin.roles.PageRole;
-import com.evolveum.midpoint.web.page.admin.users.PageOrgUnit;
-import com.evolveum.midpoint.web.page.admin.users.PageUser;
 import com.evolveum.midpoint.web.util.ObjectTypeGuiDescriptor;
-import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
 import com.evolveum.midpoint.web.util.TooltipBehavior;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCaseType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 import org.apache.wicket.AttributeModifier;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.extensions.markup.html.repeater.data.grid.ICellPopulator;
@@ -45,10 +35,11 @@ import org.apache.wicket.markup.repeater.Item;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
-import org.apache.wicket.request.mapper.parameter.PageParameters;
 
 import javax.xml.namespace.QName;
 import java.io.Serializable;
+
+import static com.evolveum.midpoint.gui.api.util.WebComponentUtil.dispatchToObjectDetailsPage;
 
 /**
  * Some common functionality used from PageCertCampaign and PageCertDecisions.
@@ -66,31 +57,31 @@ public class CertDecisionHelper implements Serializable {
             @Override
             public void onClick(AjaxRequestTarget target, IModel<CertCaseOrDecisionDto> rowModel) {
                 CertCaseOrDecisionDto dto = rowModel.getObject();
-                dispatchToObjectDetailsPage(dto.getCertCase().getObjectRef(), page);
+                dispatchToObjectDetailsPage(dto.getCertCase().getObjectRef(), page, false);
             }
         };
         return column;
     }
 
-    public IColumn createTargetTypeColumn(final PageBase page) {
+    public IColumn createObjectOrTargetTypeColumn(final boolean isObject, final PageBase page) {		// isObject = true for object, false for target
         IColumn column;
         column = new IconColumn<CertCaseOrDecisionDto>(page.createStringResource("")) {
             @Override
             protected IModel<String> createIconModel(IModel<CertCaseOrDecisionDto> rowModel) {
-                ObjectTypeGuiDescriptor guiDescriptor = getObjectTypeDescriptor(rowModel);
-                String icon = guiDescriptor != null ? guiDescriptor.getIcon() : ObjectTypeGuiDescriptor.ERROR_ICON;
+                ObjectTypeGuiDescriptor guiDescriptor = getObjectTypeDescriptor(isObject, rowModel);
+                String icon = guiDescriptor != null ? guiDescriptor.getBlackIcon() : ObjectTypeGuiDescriptor.ERROR_ICON;
                 return new Model<>(icon);
             }
 
-            private ObjectTypeGuiDescriptor getObjectTypeDescriptor(IModel<CertCaseOrDecisionDto> rowModel) {
-                QName targetType = rowModel.getObject().getTargetType();
+            private ObjectTypeGuiDescriptor getObjectTypeDescriptor(boolean isObject, IModel<CertCaseOrDecisionDto> rowModel) {
+                QName targetType = isObject ? rowModel.getObject().getObjectType() : rowModel.getObject().getTargetType();
                 return ObjectTypeGuiDescriptor.getDescriptor(ObjectTypes.getObjectTypeFromTypeQName(targetType));
             }
 
             @Override
             public void populateItem(Item<ICellPopulator<CertCaseOrDecisionDto>> item, String componentId, IModel<CertCaseOrDecisionDto> rowModel) {
                 super.populateItem(item, componentId, rowModel);
-                ObjectTypeGuiDescriptor guiDescriptor = getObjectTypeDescriptor(rowModel);
+                ObjectTypeGuiDescriptor guiDescriptor = getObjectTypeDescriptor(isObject, rowModel);
                 if (guiDescriptor != null) {
                     item.add(AttributeModifier.replace("title", page.createStringResource(guiDescriptor.getLocalizationKey())));
                     item.add(new TooltipBehavior());
@@ -108,30 +99,10 @@ public class CertDecisionHelper implements Serializable {
             @Override
             public void onClick(AjaxRequestTarget target, IModel<CertCaseOrDecisionDto> rowModel) {
                 CertCaseOrDecisionDto dto = rowModel.getObject();
-                dispatchToObjectDetailsPage(dto.getCertCase().getTargetRef(), page);
+                dispatchToObjectDetailsPage(dto.getCertCase().getTargetRef(), page, false);
             }
         };
         return column;
-    }
-
-    public void dispatchToObjectDetailsPage(ObjectReferenceType objectRef, PageBase page) {
-        if (objectRef == null) {
-            return;		// should not occur
-        }
-        QName type = objectRef.getType();
-        PageParameters parameters = new PageParameters();
-        parameters.add(OnePageParameterEncoder.PARAMETER, objectRef.getOid());
-        if (RoleType.COMPLEX_TYPE.equals(type)) {
-            page.setResponsePage(new PageRole(parameters, page));
-        } else if (OrgType.COMPLEX_TYPE.equals(type)) {
-            page.setResponsePage(new PageOrgUnit(parameters, page));
-        } else if (UserType.COMPLEX_TYPE.equals(type)) {
-            page.setResponsePage(new PageUser(parameters, page));
-        } else if (ResourceType.COMPLEX_TYPE.equals(type)) {
-            page.setResponsePage(new PageResource(parameters, page));
-        } else {
-            // nothing to do
-        }
     }
 
     public IColumn createDetailedInfoColumn(final PageBase page) {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2010-2015 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -23,23 +23,27 @@
         <classes>
         	<class name="com.evolveum.midpoint.model.intest.TestModelServiceContract"/>
         	<class name="com.evolveum.midpoint.model.intest.TestModelServiceContractDeprecated"/>
+        	<class name="com.evolveum.midpoint.model.intest.TestModelServiceContractCaching"/>
         	<class name="com.evolveum.midpoint.model.intest.TestModelCrudService"/>
         	<class name="com.evolveum.midpoint.model.intest.TestPreviewChanges"/>
         	<class name="com.evolveum.midpoint.model.intest.TestRbac"/>
             <class name="com.evolveum.midpoint.model.intest.TestSegregationOfDuties"/>
             <class name="com.evolveum.midpoint.model.intest.TestMultiResource"/>
             <class name="com.evolveum.midpoint.model.intest.TestUserTemplate"/>
-            <class name="com.evolveum.midpoint.model.intest.TestOrgStruct"/>
-            <class name="com.evolveum.midpoint.model.intest.TestOrgStructMeta"/>
+            <class name="com.evolveum.midpoint.model.intest.TestUserTemplateWithRanges"/>
+            <class name="com.evolveum.midpoint.model.intest.orgstruct.TestOrgStruct"/>
+            <class name="com.evolveum.midpoint.model.intest.orgstruct.TestOrgStructMeta"/>
+            <class name="com.evolveum.midpoint.model.intest.orgstruct.TestOrgStructCaribbean"/>
             <class name="com.evolveum.midpoint.model.intest.TestSchemalessResource"/>
             <class name="com.evolveum.midpoint.model.intest.TestPassword"/>
             <class name="com.evolveum.midpoint.model.intest.TestActivation"/>
-            <class name="com.evolveum.midpoint.model.intest.TestMultiConnector"/>
+            <class name="com.evolveum.midpoint.model.intest.TestConnectorDummyFake"/>
             <class name="com.evolveum.midpoint.model.intest.TestStrangeCases"/>
             <class name="com.evolveum.midpoint.model.intest.TestMisc"/>
             <class name="com.evolveum.midpoint.model.intest.TestResources"/>
             <class name="com.evolveum.midpoint.model.intest.TestMapping"/>
             <class name="com.evolveum.midpoint.model.intest.TestMappingInbound"/>
+            <class name="com.evolveum.midpoint.model.intest.TestInbounds"/>
             <class name="com.evolveum.midpoint.model.intest.TestVolatility"/>
             <class name="com.evolveum.midpoint.model.intest.TestSecurity"/>
             <class name="com.evolveum.midpoint.model.intest.TestTriggerTask"/>
@@ -51,6 +55,10 @@
             <class name="com.evolveum.midpoint.model.intest.TestIntent"/>
             <class name="com.evolveum.midpoint.model.intest.gensync.TestEditSchema"/>
             <class name="com.evolveum.midpoint.model.intest.gensync.TestRoleEntitlement"/>
+            <class name="com.evolveum.midpoint.model.intest.TestConsistencySimple"/>
+            <class name="com.evolveum.midpoint.model.intest.TestConnectorMultiInstance"/>
+            <class name="com.evolveum.midpoint.model.intest.TestMerge"/>
+            <class name="com.evolveum.midpoint.model.intest.TestAudit"/>
         </classes>
     </test>
     <test name="Synchronization" preserve-order="true" parallel="false" verbose="10">

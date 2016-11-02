@@ -18,6 +18,7 @@ package com.evolveum.midpoint.model.impl.expr;
 import com.evolveum.midpoint.common.refinery.RefinedAttributeDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
 import com.evolveum.midpoint.model.api.context.ModelContext;
 import com.evolveum.midpoint.model.api.context.SynchronizationPolicyDecision;
 import com.evolveum.midpoint.model.api.expr.MidpointFunctions;
@@ -27,13 +28,15 @@ import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.match.DefaultMatchingRule;
-import com.evolveum.midpoint.prism.parser.XPathHolder;
+import com.evolveum.midpoint.prism.match.PolyStringOrigMatchingRule;
+import com.evolveum.midpoint.prism.marshaller.XPathHolder;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.AndFilter;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.query.RefFilter;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.provisioning.api.ProvisioningService;
 import com.evolveum.midpoint.repo.api.RepositoryService;
 import com.evolveum.midpoint.schema.DeltaConvertor;
@@ -41,7 +44,6 @@ import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.ResourceShadowDiscriminator;
 import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.schema.SelectorOptions;
-import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
 import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
@@ -49,7 +51,6 @@ import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.Holder;
-import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
@@ -57,11 +58,9 @@ import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensContextType;
 
 import org.apache.commons.lang.Validate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -113,6 +112,9 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     @Autowired(required = true)
     private transient Protector protector;
 
+    @Autowired
+    private OrgStructFunctionsImpl orgStructFunctions;
+    
     public String hello(String name) {
         return "Hello "+name;
     }
@@ -126,276 +128,11 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
         return Arrays.asList(s);
     }
 
-    /**
-     * Returns a list of user's managers. Formally, for each Org O which this user has (any) relation to,
-     * all managers of O are added to the result.
-     *
-     * Some customizations are probably necessary here, e.g. filter out project managers (keep only line managers),
-     * or defining who is a manager of a user who is itself a manager in its org.unit. (A parent org unit manager,
-     * perhaps.)
-     *
-     * @param user
-     * @return list of oids of the respective managers
-     * @throws SchemaException
-     * @throws ObjectNotFoundException
-     */
-    @Override
-    public Collection<String> getManagersOids(UserType user) throws SchemaException, ObjectNotFoundException {
-        Set<String> retval = new HashSet<String>();
-        for (UserType u : getManagers(user)) {
-            retval.add(u.getOid());
-        }
-        return retval;
-    }
-
-    @Override
-    public Collection<String> getManagersOidsExceptUser(UserType user) throws SchemaException, ObjectNotFoundException {
-        Set<String> retval = new HashSet<String>();
-        for (UserType u : getManagers(user)) {
-            if (!u.getOid().equals(user.getOid())) {
-                retval.add(u.getOid());
-            }
-        }
-        return retval;
-    }
-
-    @Override
-    public Collection<UserType> getManagers(UserType user) throws SchemaException, ObjectNotFoundException {
-        return getManagers(user, null, false);
-    }
-    
-    @Override
-    public Collection<UserType> getManagersByOrgType(UserType user, String orgType) throws SchemaException, ObjectNotFoundException {
-    	return getManagers(user, orgType, false);
-    }
-    
-    @Override
-    public Collection<UserType> getManagers(UserType user, String orgType, boolean allowSelf) throws SchemaException, ObjectNotFoundException {
-        Set<UserType> retval = new HashSet<UserType>();
-        Collection<String> orgOids = getOrgUnits(user, null);
-        while (!orgOids.isEmpty()) {
-        	LOGGER.trace("orgOids: {}", orgOids);
-	        Collection<OrgType> thisLevelOrgs = new ArrayList<OrgType>();
-	        for (String orgOid : orgOids) {
-	        	if (orgType != null) {
-		        	OrgType org = getOrgByOid(orgOid);
-		        	if (!org.getOrgType().contains(orgType)) {
-		        		continue;
-		        	} else {
-		        		thisLevelOrgs.add(org);
-		        	}
-	        	}
-	        	Collection<UserType> managersOfOrg = getManagersOfOrg(orgOid);
-	        	for (UserType managerOfOrg: managersOfOrg) {
-	        		if (allowSelf || !managerOfOrg.getOid().equals(user.getOid())) {
-	        			retval.add(managerOfOrg);
-	        		}
-	        	}
-	        }
-	        LOGGER.trace("retval: {}", retval);
-	        if (!retval.isEmpty()) {
-	        	return retval;
-	        }
-	        Collection<String> nextLevelOids = new ArrayList<String>();
-	        if (orgType == null) {
-	        	for (String orgOid : orgOids) {
-		        	OrgType org = getOrgByOid(orgOid);
-	        		thisLevelOrgs.add(org);
-	        	}
-	        }
-	        for (OrgType org: thisLevelOrgs) {
-	        	for (ObjectReferenceType parentOrgRef: org.getParentOrgRef()) {
-	        		if (!nextLevelOids.contains(parentOrgRef.getOid())) {
-	        			nextLevelOids.add(parentOrgRef.getOid());
-	        		}
-	        	}
-	        }
-	        LOGGER.trace("nextLevelOids: {}",nextLevelOids);
-	        orgOids = nextLevelOids;
-        }
-        return retval;
-    }
 
     @Override
     public UserType getUserByOid(String oid) throws ObjectNotFoundException, SchemaException {
         return repositoryService.getObject(UserType.class, oid, null, new OperationResult("getUserByOid")).asObjectable();
     }
-
-    // todo here we could select "functional" org.units in order to filter out e.g. project managers from the list of managers
-    // however, the syntax of orgType attribute is not standardized
-    @Override
-    public Collection<String> getOrgUnits(UserType user) {
-        Set<String> retval = new HashSet<String>();
-        if (user == null){
-        	return retval;
-        }
-        for (ObjectReferenceType orgRef : user.getParentOrgRef()) {
-            retval.add(orgRef.getOid());
-        }
-        return retval;
-    }
-
-    @Override
-    public Collection<String> getOrgUnits(UserType user, QName relation) {
-        Set<String> retval = new HashSet<>();
-        if (user == null) {
-            return retval;
-        }
-        for (ObjectReferenceType orgRef : user.getParentOrgRef()) {
-            if (QNameUtil.match(relation, orgRef.getRelation())) {
-                retval.add(orgRef.getOid());
-            }
-        }
-        return retval;
-    }
-
-    @Override
-    public OrgType getOrgByOid(String oid) throws SchemaException {
-    	try {
-    		return repositoryService.getObject(OrgType.class, oid, null, new OperationResult("getOrgByOid")).asObjectable();
-    	} catch (ObjectNotFoundException e) {
-    		return null;
-    	}
-    }
-
-    @Override
-    public OrgType getOrgByName(String name) throws SchemaException {
-        PolyString polyName = new PolyString(name);
-        ObjectQuery q = ObjectQueryUtil.createNameQuery(polyName, prismContext);
-        List<PrismObject<OrgType>> result = repositoryService.searchObjects(OrgType.class, q, null, new OperationResult("getOrgByName"));
-        if (result.isEmpty()) {
-            return null;
-        }
-        if (result.size() > 1) {
-            throw new IllegalStateException("More than one organizational unit with the name '" + name + "' (there are " + result.size() + " of them)");
-        }
-        return result.get(0).asObjectable();
-    }
-
-    @Override
-	public OrgType getParentOrgByOrgType(ObjectType object, String orgType) throws SchemaException, SecurityViolationException {
-    	Collection<OrgType> parentOrgs = getParentOrgs(object, PrismConstants.Q_ANY, orgType);
-    	if (parentOrgs.isEmpty()) {
-    		return null;
-    	}
-    	if (parentOrgs.size() > 1) {
-    		throw new IllegalArgumentException("Expected that there will be just one parent org of type "+orgType+" for "+object+", but there were "+parentOrgs.size()); 
-    	}
-    	return parentOrgs.iterator().next();
-    }
-    
-    @Override
-	public Collection<OrgType> getParentOrgsByRelation(ObjectType object, QName relation) throws SchemaException, SecurityViolationException {
-    	return getParentOrgs(object, relation, null);
-    }
-
-    @Override
-	public Collection<OrgType> getParentOrgsByRelation(ObjectType object, String relation) throws SchemaException, SecurityViolationException {
-    	return getParentOrgs(object, relation, null);
-    }
-
-    @Override
-	public Collection<OrgType> getParentOrgs(ObjectType object) throws SchemaException, SecurityViolationException {
-    	return getParentOrgs(object, PrismConstants.Q_ANY, null);
-    }
-    
-    @Override
-	public Collection<OrgType> getParentOrgs(ObjectType object, String relation, String orgType) throws SchemaException, SecurityViolationException {
-    	return getParentOrgs(object, new QName(null, relation), orgType);
-    }
-    
-    @Override
-	public Collection<OrgType> getParentOrgs(ObjectType object, QName relation, String orgType) throws SchemaException, SecurityViolationException {
-    	List<ObjectReferenceType> parentOrgRefs = object.getParentOrgRef();
-    	List<OrgType> parentOrgs = new ArrayList<OrgType>(parentOrgRefs.size());
-    	for (ObjectReferenceType parentOrgRef: parentOrgRefs) {
-    		if (relation == null) {
-    			if (parentOrgRef.getRelation() != null) {
-    				continue;
-    			}
-    		} else if (!relation.equals(PrismConstants.Q_ANY)) {
-    			if (!QNameUtil.match(parentOrgRef.getRelation(), relation)) {
-    				continue;
-    			}
-    		}
-    		OrgType parentOrg;
-			try {
-				parentOrg = getObject(OrgType.class, parentOrgRef.getOid());
-			} catch (ObjectNotFoundException e) {
-				LOGGER.warn("Org "+parentOrgRef.getOid()+" specified in parentOrgRef in "+object+" was not found: "+e.getMessage(), e);
-				// but do not rethrow, just skip this
-				continue;
-			} catch (CommunicationException | ConfigurationException e) {
-				// This should not happen.
-				throw new SystemException(e.getMessage(), e);
-			}
-    		if (orgType == null || parentOrg.getOrgType().contains(orgType)) {
-    			parentOrgs.add(parentOrg);
-    		}
-    	}
-    	return parentOrgs;
-	}
-
-	@Override
-    public Collection<UserType> getManagersOfOrg(String orgOid) throws SchemaException {
-        Set<UserType> retval = new HashSet<UserType>();
-        OperationResult result = new OperationResult("getManagerOfOrg");
-        
-        PrismObjectDefinition<UserType> userDef = prismContext.getSchemaRegistry().findObjectDefinitionByCompileTimeClass(UserType.class);
-        PrismReferenceDefinition parentOrgRefDef = userDef.findReferenceDefinition(ObjectType.F_PARENT_ORG_REF);
-        PrismReference parentOrgRef = parentOrgRefDef.instantiate();
-        PrismReferenceValue parentOrgRefVal = new PrismReferenceValue(orgOid, OrgType.COMPLEX_TYPE);
-        parentOrgRefVal.setRelation(SchemaConstants.ORG_MANAGER);
-		parentOrgRef.add(parentOrgRefVal);
-        ObjectQuery objectQuery = ObjectQuery.createObjectQuery(RefFilter.createReferenceEqual(
-        		new ItemPath(ObjectType.F_PARENT_ORG_REF), parentOrgRef));
-
-        //        ObjectQuery objectQuery = ObjectQuery.createObjectQuery(OrgFilter.createOrg(orgOid, OrgFilter.Scope.ONE_LEVEL));
-
-        List<PrismObject<ObjectType>> members = repositoryService.searchObjects(ObjectType.class, objectQuery, null, result);
-        for (PrismObject<ObjectType> member : members) {
-            if (member.asObjectable() instanceof UserType) {
-                UserType user = (UserType) member.asObjectable();
-//                if (isManagerOf(user, orgOid)) {
-                    retval.add(user);
-//                }
-            }
-        }
-        return retval;
-    }
-
-    @Override
-    public boolean isManagerOf(UserType user, String orgOid) {
-        for (ObjectReferenceType objectReferenceType : user.getParentOrgRef()) {
-            if (orgOid.equals(objectReferenceType.getOid()) && SchemaConstants.ORG_MANAGER.equals(objectReferenceType.getRelation())) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    @Override
-    public boolean isManager(UserType user) {
-        for (ObjectReferenceType objectReferenceType : user.getParentOrgRef()) {
-            if (SchemaConstants.ORG_MANAGER.equals(objectReferenceType.getRelation())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-	public boolean isManagerOfOrgType(UserType user, String orgType) throws SchemaException {
-        for (ObjectReferenceType objectReferenceType : user.getParentOrgRef()) {
-            if (SchemaConstants.ORG_MANAGER.equals(objectReferenceType.getRelation())) {
-            	OrgType org = getOrgByOid(objectReferenceType.getOid());
-            	if (org.getOrgType().contains(orgType)) {
-            		return true;
-            	}
-            }
-        }
-        return false;
-	}
 
 	@Override
     public boolean isMemberOf(UserType user, String orgOid) {
@@ -665,8 +402,20 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
 		return getLinkedShadow(focus, resource.getOid());
 	}
 
-	@Override
+    @Override
+	public ShadowType getLinkedShadow(FocusType focus, ResourceType resource, boolean repositoryObjectOnly) throws SchemaException,
+			SecurityViolationException, CommunicationException, ConfigurationException {
+		return getLinkedShadow(focus, resource.getOid(), repositoryObjectOnly);
+	}
+
+    
+    @Override
 	public ShadowType getLinkedShadow(FocusType focus, String resourceOid) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException {
+    	return getLinkedShadow(focus, resourceOid, false);
+    }
+    
+	@Override
+	public ShadowType getLinkedShadow(FocusType focus, String resourceOid, boolean repositoryObjectOnly) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException {
 		if (focus == null) {
 			return null;
 		}
@@ -674,34 +423,61 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
 		for (ObjectReferenceType linkRef: linkRefs) {
 			ShadowType shadowType;
 			try {
-				shadowType = getObject(ShadowType.class, linkRef.getOid());
+				shadowType = getObject(ShadowType.class, linkRef.getOid(), SelectorOptions.createCollection(GetOperationOptions.createNoFetch()));
 			} catch (ObjectNotFoundException e) {
 				// Shadow is gone in the meantime. MidPoint will resolve that by itself.
 				// It is safe to ignore this error in this method.
-				LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists");
+				LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists in repository");
 				continue;
 			}
 			if (shadowType.getResourceRef().getOid().equals(resourceOid)) {
+				// We have repo shadow here. Re-read resource shadow if necessary.
+				if (!repositoryObjectOnly) {
+					try {
+						shadowType = getObject(ShadowType.class, shadowType.getOid());
+					} catch (ObjectNotFoundException e) {
+						// Shadow is gone in the meantime. MidPoint will resolve that by itself.
+						// It is safe to ignore this error in this method.
+						LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists on resource");
+						continue;
+					}	
+				}
 				return shadowType;
 			}
 		}
 		return null;
     }
     
-    @Override
+	@Override
 	public ShadowType getLinkedShadow(FocusType focus, String resourceOid, ShadowKindType kind, String intent) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException {
+		return getLinkedShadow(focus, resourceOid, kind, intent, false);
+	}
+	
+    @Override
+	public ShadowType getLinkedShadow(FocusType focus, String resourceOid, ShadowKindType kind, String intent, boolean repositoryObjectOnly) throws SchemaException, SecurityViolationException, CommunicationException, ConfigurationException {
 		List<ObjectReferenceType> linkRefs = focus.getLinkRef();
 		for (ObjectReferenceType linkRef: linkRefs) {
 			ShadowType shadowType;
 			try {
-				shadowType = getObject(ShadowType.class, linkRef.getOid());
+				shadowType = getObject(ShadowType.class, linkRef.getOid(), SelectorOptions.createCollection(GetOperationOptions.createNoFetch()));
 			} catch (ObjectNotFoundException e) {
 				// Shadow is gone in the meantime. MidPoint will resolve that by itself.
 				// It is safe to ignore this error in this method.
-				LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists");
+				LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists in repository");
 				continue;
 			}
 			if (ShadowUtil.matches(shadowType, resourceOid, kind, intent)) {
+				// We have repo shadow here. Re-read resource shadow if necessary.
+				if (!repositoryObjectOnly) {
+					try {
+						shadowType = getObject(ShadowType.class, shadowType.getOid());
+					} catch (ObjectNotFoundException e) {
+						// Shadow is gone in the meantime. MidPoint will resolve that by itself.
+						// It is safe to ignore this error in this method.
+						LOGGER.trace("Ignoring shadow "+linkRef.getOid()+" linked in "+focus+" because it no longer exists on resource");
+						continue;
+					}	
+				}
 				return shadowType;
 			}
 		}
@@ -728,15 +504,14 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     private <T> Integer countAccounts(ResourceType resourceType, QName attributeName, T attributeValue, Task task, OperationResult result)
     		throws SchemaException, ObjectNotFoundException, CommunicationException, ConfigurationException, 
     		SecurityViolationException {
-    	RefinedResourceSchema rSchema = RefinedResourceSchema.getRefinedSchema(resourceType);
+    	RefinedResourceSchema rSchema = RefinedResourceSchemaImpl.getRefinedSchema(resourceType);
         RefinedObjectClassDefinition rAccountDef = rSchema.getDefaultRefinedDefinition(ShadowKindType.ACCOUNT);
         RefinedAttributeDefinition attrDef = rAccountDef.findAttributeDefinition(attributeName);
-        EqualFilter idFilter = EqualFilter.createEqual(new ItemPath(ShadowType.F_ATTRIBUTES, attrDef.getName()), attrDef, attributeValue);
-        EqualFilter ocFilter = EqualFilter.createEqual(ShadowType.F_OBJECT_CLASS, ShadowType.class, prismContext, null,
-        		rAccountDef.getObjectClassDefinition().getTypeName());
-        RefFilter resourceRefFilter = RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class, resourceType);
-        AndFilter filter = AndFilter.createAnd(idFilter, ocFilter, resourceRefFilter);
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
+		ObjectQuery query = QueryBuilder.queryFor(ShadowType.class, prismContext)
+				.itemWithDef(attrDef, ShadowType.F_ATTRIBUTES, attrDef.getName()).eq(attributeValue)
+				.and().item(ShadowType.F_OBJECT_CLASS).eq(rAccountDef.getObjectClassDefinition().getTypeName())
+				.and().item(ShadowType.F_RESOURCE_REF).ref(resourceType.getOid())
+				.build();
 		return modelObjectResolver.countObjects(ShadowType.class, query, null, task, result);
     }
 
@@ -750,7 +525,7 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     private <T> boolean isUniquePropertyValue(final ObjectType objectType, ItemPath propertyPath, T propertyValue, Task task, OperationResult result)
             throws SchemaException, ObjectNotFoundException, CommunicationException, ConfigurationException,
             SecurityViolationException {
-        List<? extends ObjectType> conflictingObjects = getObjectsInConflictOnPropertyValue(objectType, propertyPath, propertyValue, DefaultMatchingRule.NAME, false, task, result);
+		List<? extends ObjectType> conflictingObjects = getObjectsInConflictOnPropertyValue(objectType, propertyPath, propertyValue, null, false, task, result);
         return conflictingObjects.isEmpty();
     }
 
@@ -773,8 +548,16 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
         Validate.notNull(propertyPath, "Null property path");
         Validate.notNull(propertyValue, "Null property value");
         PrismPropertyDefinition<T> propertyDefinition = objectType.asPrismObject().getDefinition().findPropertyDefinition(propertyPath);
-        EqualFilter<T> filter = EqualFilter.createEqual(propertyPath, propertyDefinition, matchingRule, propertyValue);
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
+        if (matchingRule == null) {
+        	if (propertyDefinition != null && PolyStringType.COMPLEX_TYPE.equals(propertyDefinition.getTypeName())) {
+        		matchingRule = PolyStringOrigMatchingRule.NAME;
+        	} else {
+        		matchingRule = DefaultMatchingRule.NAME;
+        	}
+        }
+        ObjectQuery query = QueryBuilder.queryFor(objectType.getClass(), prismContext)
+				.item(propertyPath, propertyDefinition).eq(propertyValue).matching(matchingRule)
+				.build();
         if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Determining uniqueness of property {} using query:\n{}", propertyPath, query.debugDump());
         }
@@ -820,16 +603,17 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     	Validate.notNull(shadowType, "Null shadow");
     	Validate.notNull(attributeName, "Null attribute name");
     	Validate.notNull(attributeValue, "Null attribute value");
-    	RefinedResourceSchema rSchema = RefinedResourceSchema.getRefinedSchema(resourceType);
+    	RefinedResourceSchema rSchema = RefinedResourceSchemaImpl.getRefinedSchema(resourceType);
         RefinedObjectClassDefinition rAccountDef = rSchema.getDefaultRefinedDefinition(ShadowKindType.ACCOUNT);
         RefinedAttributeDefinition attrDef = rAccountDef.findAttributeDefinition(attributeName);
-        EqualFilter idFilter = EqualFilter.createEqual(new ItemPath(ShadowType.F_ATTRIBUTES, attrDef.getName()), attrDef, attributeValue);
-        EqualFilter ocFilter = EqualFilter.createEqual(ShadowType.F_OBJECT_CLASS, ShadowType.class, prismContext, 
-        		null, rAccountDef.getObjectClassDefinition().getTypeName());
-        RefFilter resourceRefFilter = RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class, resourceType);
-        AndFilter filter = AndFilter.createAnd(idFilter, ocFilter, resourceRefFilter);
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
-        LOGGER.trace("Determining uniqueness of attribute {} using query:\n{}", attributeName, query.debugDump());
+		ObjectQuery query = QueryBuilder.queryFor(ShadowType.class, prismContext)
+				.itemWithDef(attrDef, ShadowType.F_ATTRIBUTES, attrDef.getName()).eq(attributeValue)
+				.and().item(ShadowType.F_OBJECT_CLASS).eq(rAccountDef.getObjectClassDefinition().getTypeName())
+				.and().item(ShadowType.F_RESOURCE_REF).ref(resourceType.getOid())
+				.build();
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Determining uniqueness of attribute {} using query:\n{}", attributeName, query.debugDump());
+		}
         
         final Holder<Boolean> isUniqueHolder = new Holder<Boolean>(true);
         ResultHandler<ShadowType> handler = new ResultHandler<ShadowType>() {
@@ -900,34 +684,34 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     }
 
     public LensContextType wrapModelContext(LensContext<?> lensContext) throws SchemaException {
-        return lensContext.toPrismContainer().getValue().asContainerable();
+        return lensContext.toLensContextType();
     }
     
     // Convenience functions
     
 	@Override
-	public <T extends ObjectType> T createEmptyObject(Class<T> type) {
+	public <T extends ObjectType> T createEmptyObject(Class<T> type) throws SchemaException {
 		PrismObjectDefinition<T> objectDefinition = prismContext.getSchemaRegistry().findObjectDefinitionByCompileTimeClass(type);
 		PrismObject<T> object = objectDefinition.instantiate();
 		return object.asObjectable();
 	}
 
 	@Override
-	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, String name) {
+	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, String name) throws SchemaException {
 		T objectType = createEmptyObject(type);
 		objectType.setName(new PolyStringType(name));
 		return objectType;
 	}
 
 	@Override
-	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyString name) {
+	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyString name) throws SchemaException {
 		T objectType = createEmptyObject(type);
 		objectType.setName(new PolyStringType(name));
 		return objectType;
 	}
 
 	@Override
-	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyStringType name) {
+	public <T extends ObjectType> T createEmptyObjectWithName(Class<T> type, PolyStringType name) throws SchemaException {
 		T objectType = createEmptyObject(type);
 		objectType.setName(name);
 		return objectType;
@@ -965,8 +749,8 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     }
 
     @Override
-	public <T extends ObjectType> T getObject(Class<T> type,
-			String oid, Collection<SelectorOptions<GetOperationOptions>> options)
+	public <T extends ObjectType> T getObject(Class<T> type, String oid, 
+			Collection<SelectorOptions<GetOperationOptions>> options)
 			throws ObjectNotFoundException, SchemaException,
 			CommunicationException, ConfigurationException,
 			SecurityViolationException {
@@ -974,10 +758,8 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
 	}
 
 	@Override
-	public <T extends ObjectType> T getObject(Class<T> type,
-			String oid) throws ObjectNotFoundException, SchemaException,
-			SecurityViolationException, CommunicationException,
-			ConfigurationException, SecurityViolationException {
+	public <T extends ObjectType> T getObject(Class<T> type, String oid) throws ObjectNotFoundException, SchemaException,
+			CommunicationException, ConfigurationException, SecurityViolationException {
 		PrismObject<T> prismObject = modelService.getObject(type, oid, null, getCurrentTask(), getCurrentResult());
 		return prismObject.asObjectable();
 	}
@@ -1233,4 +1015,115 @@ public class MidpointFunctionsImpl implements MidpointFunctions {
     public long getSequenceCounter(String sequenceOid) throws ObjectNotFoundException, SchemaException {
     	return SequentialValueExpressionEvaluator.getSequenceCounter(sequenceOid, repositoryService, getCurrentResult());
     }
+    
+    // orgstruct related methods
+
+    @Override
+    public Collection<String> getManagersOids(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException {
+        return orgStructFunctions.getManagersOids(user, false);
+    }
+
+    @Override
+    public Collection<String> getOrgUnits(UserType user, QName relation) {
+        return orgStructFunctions.getOrgUnits(user, relation, false);
+    }
+
+    @Override
+    public OrgType getParentOrgByOrgType(ObjectType object, String orgType) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgByOrgType(object, orgType, false);
+    }
+
+    @Override
+    public OrgType getOrgByOid(String oid) throws SchemaException {
+        return orgStructFunctions.getOrgByOid(oid, false);
+    }
+
+    @Override
+    public Collection<OrgType> getParentOrgs(ObjectType object) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgs(object, false);
+    }
+
+    @Override
+    public Collection<String> getOrgUnits(UserType user) {
+        return orgStructFunctions.getOrgUnits(user, false);
+    }
+
+    @Override
+    public Collection<UserType> getManagersOfOrg(String orgOid) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getManagersOfOrg(orgOid, false);
+    }
+
+    @Override
+    public boolean isManagerOfOrgType(UserType user, String orgType) throws SchemaException {
+        return orgStructFunctions.isManagerOfOrgType(user, orgType, false);
+    }
+
+    @Override
+    public Collection<UserType> getManagers(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException {
+        return orgStructFunctions.getManagers(user, false);
+    }
+
+    @Override
+    public Collection<UserType> getManagersByOrgType(UserType user, String orgType) throws SchemaException, ObjectNotFoundException, SecurityViolationException {
+        return orgStructFunctions.getManagersByOrgType(user, orgType, false);
+    }
+
+    @Override
+    public boolean isManagerOf(UserType user, String orgOid) {
+        return orgStructFunctions.isManagerOf(user, orgOid, false);
+    }
+
+    @Override
+    public Collection<OrgType> getParentOrgsByRelation(ObjectType object, String relation) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgsByRelation(object, relation, false);
+    }
+
+    @Override
+    public Collection<UserType> getManagers(UserType user, String orgType, boolean allowSelf) throws SchemaException, ObjectNotFoundException, SecurityViolationException {
+        return orgStructFunctions.getManagers(user, orgType, allowSelf, false);
+    }
+
+    @Override
+    public Collection<OrgType> getParentOrgs(ObjectType object, String relation, String orgType) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgs(object, relation, orgType, false);
+    }
+
+    @Override
+    public Collection<String> getManagersOidsExceptUser(UserType user) throws SchemaException, ObjectNotFoundException, SecurityViolationException {
+        return orgStructFunctions.getManagersOidsExceptUser(user, false);
+    }
+
+    @Override
+    public OrgType getOrgByName(String name) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getOrgByName(name, false);
+    }
+
+    @Override
+    public Collection<OrgType> getParentOrgsByRelation(ObjectType object, QName relation) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgsByRelation(object, relation, false);
+    }
+
+    @Override
+    public Collection<OrgType> getParentOrgs(ObjectType object, QName relation, String orgType) throws SchemaException, SecurityViolationException {
+        return orgStructFunctions.getParentOrgs(object, relation, orgType, false);
+    }
+
+    @Override
+    public boolean isManager(UserType user) {
+        return orgStructFunctions.isManager(user);
+    }
+
+	@Override
+	public Protector getProtector() {
+		return protector;
+	}
+
+	@Override
+	public String getPlaintext(ProtectedStringType protectedStringType) throws EncryptionException {
+		    if (protectedStringType != null) {
+	            return protector.decryptString(protectedStringType);
+	        } else {
+	            return null;
+	        }
+	}
 }

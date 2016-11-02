@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.schema.util.SchemaDebugUtil;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 
 /**
  * @author semancik
@@ -57,7 +56,16 @@ public class ConstructionPack implements DebugDumpable {
 	public void setHasValidAssignment(boolean hasValidAssignment) {
 		this.hasValidAssignment = hasValidAssignment;
 	}
-
+	
+	public boolean hasStrongConstruction() {
+    	for (PrismPropertyValue<Construction> construction: constructions) {
+			if (!construction.getValue().isWeak()) {
+				return true;
+			}
+		}
+    	return false;
+    }
+	
 	@Override
 	public String toString() {
 		return "ConstructionPack(" + SchemaDebugUtil.prettyPrint(constructions) + (forceRecon ? ", forceRecon" : "") + ")";
@@ -80,7 +88,5 @@ public class ConstructionPack implements DebugDumpable {
 		DebugUtil.debugDumpWithLabel(sb, "Constructions", constructions, indent + 1);
 		return sb.toString();
 	}
-	
-	
 
 }

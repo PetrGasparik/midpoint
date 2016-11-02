@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertNull;
 import static org.testng.AssertJUnit.assertTrue;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
@@ -33,10 +31,10 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.util.PrismUtil;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
-import com.evolveum.midpoint.util.DOMUtil;
+import com.evolveum.midpoint.schema.internals.InternalMonitor;
 
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
@@ -44,12 +42,10 @@ import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 
-import com.evolveum.midpoint.common.monitor.InternalMonitor;
 import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.api.context.ModelState;
 import com.evolveum.midpoint.model.api.context.SynchronizationPolicyDecision;
 import com.evolveum.midpoint.model.api.hooks.HookOperationMode;
-import com.evolveum.midpoint.model.impl.AbstractInternalModelIntegrationTest;
 import com.evolveum.midpoint.model.impl.lens.Clockwork;
 import com.evolveum.midpoint.model.impl.lens.LensContext;
 import com.evolveum.midpoint.model.impl.lens.LensObjectDeltaOperation;
@@ -77,17 +73,6 @@ import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TriggerType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensContextType;
-
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 
 /**
  * @author semancik
@@ -127,7 +112,7 @@ public class TestClockwork extends AbstractLensTest {
         OperationResult result = task.getResult();
 
         LensContext<UserType> context = createUserAccountContext();
-        PrismObject<UserType> bill = prismContext.parseObject(new File(USER_BARBOSSA_FILENAME));
+        PrismObject<UserType> bill = prismContext.parseObject(USER_BARBOSSA_FILE);
         fillContextWithAddUserDelta(context, bill);
 
         // WHEN
@@ -137,12 +122,12 @@ public class TestClockwork extends AbstractLensTest {
         System.out.println("Context before serialization = " + context.debugDump());
 
         PrismContainer<LensContextType> lensContextType = context.toPrismContainer();
-        String xml = prismContext.serializeContainerValueToString(lensContextType.getValue(), lensContextType.getElementName(), PrismContext.LANG_XML);
+        String xml = prismContext.xmlSerializer().serialize(lensContextType.getValue(), lensContextType.getElementName());
 
         System.out.println("Serialized form = " + xml);
 
-        PrismContainer<LensContextType> unmarshalledContainer = prismContext.parseContainer(xml, LensContextType.class, PrismContext.LANG_XML);
-        LensContext context2 = LensContext.fromLensContextType(unmarshalledContainer.getValue().asContainerable(), context.getPrismContext(), provisioningService, result);
+        LensContextType unmarshalledContainer = prismContext.parserFor(xml).xml().parseRealValue(LensContextType.class);
+        LensContext context2 = LensContext.fromLensContextType(unmarshalledContainer, context.getPrismContext(), provisioningService, result);
 
         System.out.println("Context after deserialization = " + context.debugDump());
 
@@ -319,12 +304,12 @@ public class TestClockwork extends AbstractLensTest {
                 System.out.println("Context before serialization = " + context.debugDump());
 
                 PrismContainer<LensContextType> lensContextType = context.toPrismContainer();
-                String xml = prismContext.serializeContainerValueToString(lensContextType.getValue(), lensContextType.getElementName(), PrismContext.LANG_XML);
+                String xml = prismContext.xmlSerializer().serialize(lensContextType.getValue(), lensContextType.getElementName());
 
                 System.out.println("Serialized form = " + xml);
 
-                PrismContainer<LensContextType> unmarshalledContainer = prismContext.parseContainer(xml, LensContextType.class, PrismContext.LANG_XML);
-                context = LensContext.fromLensContextType(unmarshalledContainer.getValue().asContainerable(), context.getPrismContext(), provisioningService, result);
+                LensContextType unmarshalledContainer = prismContext.parserFor(xml).xml().parseRealValue(LensContextType.class);
+                context = LensContext.fromLensContextType(unmarshalledContainer, context.getPrismContext(), provisioningService, result);
 
                 System.out.println("Context after deserialization = " + context.debugDump());
 

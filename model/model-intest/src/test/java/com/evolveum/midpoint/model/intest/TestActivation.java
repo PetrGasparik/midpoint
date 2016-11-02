@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.evolveum.midpoint.model.intest;
 
+import static com.evolveum.midpoint.schema.util.ObjectTypeUtil.cast;
 import static org.testng.AssertJUnit.assertFalse;
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
 import static org.testng.AssertJUnit.assertEquals;
@@ -30,17 +31,23 @@ import java.util.Date;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 
+import com.evolveum.icf.dummy.resource.DummyObjectClass;
 import com.evolveum.midpoint.model.api.ModelExecuteOptions;
+import com.evolveum.midpoint.prism.delta.builder.DeltaBuilder;
 import com.evolveum.midpoint.prism.path.ItemPath;
 
+import com.evolveum.midpoint.prism.polystring.PolyString;
+import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 
+import com.evolveum.icf.dummy.resource.ConflictException;
 import com.evolveum.icf.dummy.resource.DummyAccount;
 import com.evolveum.icf.dummy.resource.DummyResource;
+import com.evolveum.icf.dummy.resource.SchemaViolationException;
 import com.evolveum.midpoint.model.intest.sync.AbstractSynchronizationStoryTest;
 import com.evolveum.midpoint.model.intest.sync.TestValidityRecomputeTask;
 import com.evolveum.midpoint.prism.PrismObject;
@@ -58,15 +65,18 @@ import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.test.DummyResourceContoller;
 import com.evolveum.midpoint.test.util.TestUtil;
-import com.evolveum.midpoint.util.DOMUtil;
 import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentPolicyEnforcementType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.LockoutStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ServiceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TimeIntervalStatusType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
@@ -82,15 +92,24 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 
 	private static final File TEST_DIR = new File("src/test/resources/activation");
 	
+	// This resource does not support native activation. It has simulated activation instead.
+    // + unusual validTo and validFrom mappings
 	protected static final File RESOURCE_DUMMY_KHAKI_FILE = new File(TEST_DIR, "resource-dummy-khaki.xml");
 	protected static final String RESOURCE_DUMMY_KHAKI_OID = "10000000-0000-0000-0000-0000000a1004";
 	protected static final String RESOURCE_DUMMY_KHAKI_NAME = "khaki";
 	protected static final String RESOURCE_DUMMY_KHAKI_NAMESPACE = MidPointConstants.NS_RI;
-	
+
+	// This resource does not support native activation. It has simulated activation instead.
+    // + unusual validTo and validFrom mappings 
+	protected static final File RESOURCE_DUMMY_CORAL_FILE = new File(TEST_DIR, "resource-dummy-coral.xml");
+	protected static final String RESOURCE_DUMMY_CORAL_OID = "10000000-0000-0000-0000-0000000b1004";
+	protected static final String RESOURCE_DUMMY_CORAL_NAME = "coral";
+
 	protected static final String ACCOUNT_MANCOMB_DUMMY_USERNAME = "mancomb";
 	private static final Date ACCOUNT_MANCOMB_VALID_FROM_DATE = MiscUtil.asDate(2011, 2, 3, 4, 5, 6);
 	private static final Date ACCOUNT_MANCOMB_VALID_TO_DATE = MiscUtil.asDate(2066, 5, 4, 3, 2, 1);
-	
+	private static final String SUSPENDED_ATTRIBUTE_NAME = "suspended";
+
 	private String accountOid;
 	private String accountRedOid;
     private String accountYellowOid;
@@ -103,7 +122,12 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 	protected DummyResourceContoller dummyResourceCtlKhaki;
 	protected ResourceType resourceDummyKhakiType;
 	protected PrismObject<ResourceType> resourceDummyKhaki;
-	
+
+	protected DummyResource dummyResourceCoral;
+	protected DummyResourceContoller dummyResourceCtlCoral;
+	protected ResourceType resourceDummyCoralType;
+	protected PrismObject<ResourceType> resourceDummyCoral;
+
 	@Override
 	public void initSystem(Task initTask, OperationResult initResult)
 			throws Exception {
@@ -115,19 +139,25 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		resourceDummyKhaki = importAndGetObjectFromFile(ResourceType.class, RESOURCE_DUMMY_KHAKI_FILE, RESOURCE_DUMMY_KHAKI_OID, initTask, initResult); 
 		resourceDummyKhakiType = resourceDummyKhaki.asObjectable();
 		dummyResourceCtlKhaki.setResource(resourceDummyKhaki);
+
+		dummyResourceCtlCoral = DummyResourceContoller.create(RESOURCE_DUMMY_CORAL_NAME, resourceDummyCoral);
+		DummyObjectClass accountObjectClass = dummyResourceCtlCoral.getDummyResource().getAccountObjectClass();
+		dummyResourceCtlCoral.addAttrDef(accountObjectClass, SUSPENDED_ATTRIBUTE_NAME, Boolean.class, false, false);
+		dummyResourceCoral = dummyResourceCtlCoral.getDummyResource();
+		resourceDummyCoral = importAndGetObjectFromFile(ResourceType.class, RESOURCE_DUMMY_CORAL_FILE, RESOURCE_DUMMY_CORAL_OID, initTask, initResult);
+		resourceDummyCoralType = resourceDummyCoral.asObjectable();
+		dummyResourceCtlCoral.setResource(resourceDummyCoral);
 	}
 
 	@Test
     public void test050CheckJackEnabled() throws Exception {
-        TestUtil.displayTestTile(this, "test050CheckJackEnabled");
+		final String TEST_NAME = "test050CheckJackEnabled";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN, WHEN
         // this happens during test initialization when user-jack.xml is added
         
         // THEN
-        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + ".test050CheckJackEnabled");
-        OperationResult result = task.getResult();
-        
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
 		assertUserJack(userJack, "Jack Sparrow");
@@ -138,10 +168,11 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 
 	@Test
     public void test051ModifyUserJackDisable() throws Exception {
-        TestUtil.displayTestTile(this, "test051ModifyUserJackDisable");
+		final String TEST_NAME = "test051ModifyUserJackDisable";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + ".test051ModifyUserJackDisable");
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -153,7 +184,7 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		// THEN
         XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
@@ -168,11 +199,43 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 	}
 	
 	@Test
-    public void test052ModifyUserJackEnable() throws Exception {
-        TestUtil.displayTestTile(this, "test052ModifyUserJackEnable");
+    public void test052ModifyUserJackNull() throws Exception {
+		final String TEST_NAME = "test052ModifyUserJackNull";
+        TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + ".test052ModifyUserJackEnable");
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, ACTIVATION_ADMINISTRATIVE_STATUS_PATH, task, result);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatus(userJack, null);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.ENABLED);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test055ModifyUserJackEnable() throws Exception {
+		final String TEST_NAME = "test055ModifyUserJackEnable";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
         
@@ -184,7 +247,7 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		// THEN
         XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
 		result.computeStatus();
-        TestUtil.assertSuccess("executeChanges result", result);
+        TestUtil.assertSuccess(result);
         
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
@@ -194,6 +257,164 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		assertValidity(userJack, null);
 		assertEffectiveStatus(userJack, ActivationStatusType.ENABLED);
 		assertEnableTimestampFocus(userJack, start, end);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test060ModifyUserJackLifecycleActive() throws Exception {
+		final String TEST_NAME = "test060ModifyUserJackLifecycleActive";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, UserType.F_LIFECYCLE_STATE, task, result, SchemaConstants.LIFECYCLE_ACTIVE);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatusEnabled(userJack);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.ENABLED);
+		assertEnableTimestampFocus(userJack, null, start);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test061ModifyUserJackLifecycleDraft() throws Exception {
+		final String TEST_NAME = "test061ModifyUserJackLifecycleDraft";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, UserType.F_LIFECYCLE_STATE, task, result, SchemaConstants.LIFECYCLE_DRAFT);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatusEnabled(userJack);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.DISABLED);
+		assertDisableTimestampFocus(userJack, start, end);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test065ModifyUserJackLifecycleDeprecated() throws Exception {
+		final String TEST_NAME = "test065ModifyUserJackLifecycleDeprecated";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, UserType.F_LIFECYCLE_STATE, task, result, SchemaConstants.LIFECYCLE_DEPRECATED);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatusEnabled(userJack);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.ENABLED);
+		assertEnableTimestampFocus(userJack, start, end);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test068ModifyUserJackLifecycleArchived() throws Exception {
+		final String TEST_NAME = "test068ModifyUserJackLifecycleArchived";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, UserType.F_LIFECYCLE_STATE, task, result, SchemaConstants.LIFECYCLE_ARCHIVED);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatusEnabled(userJack);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.ARCHIVED);
+		
+		TestUtil.assertModifyTimestamp(userJack, start, end);
+	}
+	
+	@Test
+    public void test069ModifyUserJackLifecycleNull() throws Exception {
+		final String TEST_NAME = "test069ModifyUserJackLifecycleNull";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, UserType.F_LIFECYCLE_STATE, task, result);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		assertUserJack(userJack, "Jack Sparrow");
+        
+		assertAdministrativeStatusEnabled(userJack);
+		assertValidity(userJack, null);
+		assertEffectiveStatus(userJack, ActivationStatusType.ENABLED);
 		
 		TestUtil.assertModifyTimestamp(userJack, start, end);
 	}
@@ -407,11 +628,6 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		// Check audit
         display("Audit", dummyAuditService);
         dummyAuditService.assertNoRecord();
-//        dummyAuditService.assertRecords(2);
-//        dummyAuditService.assertSimpleRecordSanity();
-//        dummyAuditService.assertAnyRequestDeltas();
-//        dummyAuditService.assertExecutionDeltas(0);
-//        dummyAuditService.assertExecutionSuccess();
 	}
 	
 	/**
@@ -438,10 +654,10 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
         
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
 		display("User after change execution", userJack);
-		assertUserJack(userJack, "Jack Sparrow");
+		assertUserJack(userJack, USER_JACK_FULL_NAME);
         
 		assertAdministrativeStatusEnabled(userJack);
-		assertDummyEnabled("jack");
+		assertDummyEnabled(ACCOUNT_JACK_DUMMY_USERNAME);
 		assertEnableTimestampFocus(userJack, startTime, endTime);
 		
 		assertAccounts(USER_JACK_OID, 1);
@@ -452,12 +668,52 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 	}
 	
 	/**
+	 * Re-enabling the user should enable the account as well. Even if the user is already enabled.
+	 */
+	@Test
+    public void test115ModifyUserJackAdministrativeStatusNull() throws Exception {
+		final String TEST_NAME = "test115ModifyUserJackAdministrativeStatusNull";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        XMLGregorianCalendar startTime = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyUserReplace(USER_JACK_OID, ACTIVATION_ADMINISTRATIVE_STATUS_PATH, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess("executeChanges result", result);
+        XMLGregorianCalendar endTime = clock.currentTimeXMLGregorianCalendar();
+        
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+		display("User after change execution", userJack);
+		DummyAccount account = getDummyAccount(null, ACCOUNT_JACK_DUMMY_USERNAME);
+		display("Account after change", account);
+		
+		assertUserJack(userJack, USER_JACK_FULL_NAME);
+        
+		assertAdministrativeStatus(userJack, null);
+		// Dummy account should still be enabled. It does not support validity, therefore
+		// the account/administrativeStatus is mapped from user.effectiveStatus
+		assertDummyActivationEnabledState(ACCOUNT_JACK_DUMMY_USERNAME, true);
+		
+		assertAccounts(USER_JACK_OID, 1);
+        PrismObject<ShadowType> shadow = getShadowModel(accountOid);
+        assertAccountShadowModel(shadow, accountOid, ACCOUNT_JACK_DUMMY_USERNAME, resourceDummyType);
+        assertAdministrativeStatus(shadow, ActivationStatusType.ENABLED);
+	}
+	
+	/**
 	 * Modify both user and account activation. As password outbound mapping is weak the user should have its own state
 	 * and account should have its own state.
 	 */
 	@Test
-    public void test115ModifyJackActivationUserAndAccount() throws Exception {
-		final String TEST_NAME = "test115ModifyJackActivationUserAndAccount";
+    public void test118ModifyJackActivationUserAndAccount() throws Exception {
+		final String TEST_NAME = "test118ModifyJackActivationUserAndAccount";
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
@@ -837,7 +1093,7 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
         checkAdminStatusFor15x(userJack, true, true, true);
     }
 
-    private void checkAdminStatusFor15x(PrismObject user, boolean userStatus, boolean accountStatus, boolean accountStatusYellow) throws Exception {
+    private void checkAdminStatusFor15x(PrismObject<UserType> user, boolean userStatus, boolean accountStatus, boolean accountStatusYellow) throws Exception {
         PrismObject<ShadowType> account = getShadowModel(accountOid);
         PrismObject<ShadowType> accountYellow = getShadowModel(accountYellowOid);
         
@@ -1005,6 +1261,41 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
         
         DummyAccount dummyAccount = getDummyAccount(null, ACCOUNT_JACK_DUMMY_USERNAME);
         assertFalse("Dummy account was not unlocked", dummyAccount.isLockout());
+
+        PrismObject<UserType> userJack = getUser(USER_JACK_OID);
+        display("User after change execution", userJack);
+        assertUserJack(userJack);
+        
+        PrismObject<ShadowType> shadow = modelService.getObject(ShadowType.class, accountOid, null, task, result);
+        PrismAsserts.assertPropertyValue(shadow, SchemaConstants.PATH_ACTIVATION_LOCKOUT_STATUS, 
+				LockoutStatusType.NORMAL);
+
+        checkAdminStatusFor15x(userJack, true, true, true);
+    }
+	
+	@Test
+    public void test176ModifyUserUnlock() throws Exception {
+        final String TEST_NAME = "test176ModifyUserUnlock";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        
+        DummyAccount dummyAccount = getDummyAccount(null, ACCOUNT_JACK_DUMMY_USERNAME);
+        dummyAccount.setLockout(true);
+
+        // WHEN
+        modifyUserReplace(USER_JACK_OID, SchemaConstants.PATH_ACTIVATION_LOCKOUT_STATUS, task, result, 
+        		LockoutStatusType.NORMAL);
+
+        // THEN
+        result.computeStatus();
+        TestUtil.assertSuccess("executeChanges result", result);
+        
+        DummyAccount dummyAccountAfter = getDummyAccount(null, ACCOUNT_JACK_DUMMY_USERNAME);
+        assertFalse("Dummy account was not unlocked", dummyAccountAfter.isLockout());
 
         PrismObject<UserType> userJack = getUser(USER_JACK_OID);
         display("User after change execution", userJack);
@@ -1471,7 +1762,7 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         
 		// WHEN
@@ -1490,6 +1781,74 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		assertTrue("mancomb blue account not enabled", mancombBlueAccount.isEnabled());
 		assertEquals("Wrong validFrom in mancomb blue account", ACCOUNT_MANCOMB_VALID_FROM_DATE, mancombBlueAccount.getValidFrom());
 		assertEquals("Wrong validTo in mancomb blue account", ACCOUNT_MANCOMB_VALID_TO_DATE, mancombBlueAccount.getValidTo());
+	}
+	
+	@Test
+    public void test352AssignMancombBlackAccount() throws Exception {
+		final String TEST_NAME = "test352AssignMancombBlackAccount";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+		// WHEN
+        assignAccount(userMancombOid, RESOURCE_DUMMY_BLACK_OID, null, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userMancomb = getUser(userMancombOid);
+		display("User after change execution", userMancomb);
+		assertAccounts(userMancombOid, 3);
+        
+		DummyAccount mancombBlueAccount = getDummyAccount(RESOURCE_DUMMY_BLUE_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME);
+		assertNotNull("No mancomb blue account", mancombBlueAccount);
+		assertTrue("mancomb blue account not enabled", mancombBlueAccount.isEnabled());
+		assertEquals("Wrong validFrom in mancomb blue account", ACCOUNT_MANCOMB_VALID_FROM_DATE, mancombBlueAccount.getValidFrom());
+		assertEquals("Wrong validTo in mancomb blue account", ACCOUNT_MANCOMB_VALID_TO_DATE, mancombBlueAccount.getValidTo());
+		
+		DummyAccount mancombBlackAccount = getDummyAccount(RESOURCE_DUMMY_BLACK_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME);
+		assertNotNull("No mancomb black account", mancombBlackAccount);
+		assertTrue("mancomb black account not enabled", mancombBlackAccount.isEnabled());
+		assertEquals("Wrong validFrom in mancomb black account", ACCOUNT_MANCOMB_VALID_FROM_DATE, mancombBlackAccount.getValidFrom());
+		assertEquals("Wrong validTo in mancomb black account", ACCOUNT_MANCOMB_VALID_TO_DATE, mancombBlackAccount.getValidTo());
+	}
+	
+	@Test
+    public void test355MancombModifyAdministrativeStatusNull() throws Exception {
+		final String TEST_NAME = "test355MancombModifyAdministrativeStatusNull";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+		// WHEN
+        modifyUserReplace(userMancombOid, ACTIVATION_ADMINISTRATIVE_STATUS_PATH, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<UserType> userMancomb = getUser(userMancombOid);
+		display("User after change execution", userMancomb);
+		assertAccounts(userMancombOid, 3);
+        
+		DummyAccount mancombBlueAccount = getDummyAccount(RESOURCE_DUMMY_BLUE_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME);
+		assertNotNull("No mancomb blue account", mancombBlueAccount);
+		// Blue resouce has only weak administrativeStatus mapping. The values is not reset to null.
+		// This does not work now: MID-3418
+//		assertEquals("Wring mancomb blue account enabled flag", Boolean.TRUE, mancombBlueAccount.isEnabled());
+		assertEquals("Wrong validFrom in mancomb blue account", ACCOUNT_MANCOMB_VALID_FROM_DATE, mancombBlueAccount.getValidFrom());
+		assertEquals("Wrong validTo in mancomb blue account", ACCOUNT_MANCOMB_VALID_TO_DATE, mancombBlueAccount.getValidTo());
+		
+		DummyAccount mancombBlackAccount = getDummyAccount(RESOURCE_DUMMY_BLACK_NAME, ACCOUNT_MANCOMB_DUMMY_USERNAME);
+		assertNotNull("No mancomb black account", mancombBlackAccount);
+		assertEquals("Wring mancomb black account enabled flag", null, mancombBlackAccount.isEnabled());
+		assertEquals("Wrong validFrom in mancomb black account", ACCOUNT_MANCOMB_VALID_FROM_DATE, mancombBlackAccount.getValidFrom());
+		assertEquals("Wrong validTo in mancomb black account", ACCOUNT_MANCOMB_VALID_TO_DATE, mancombBlackAccount.getValidTo());
 	}
 	
 	@Test
@@ -1515,7 +1874,7 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
         TestUtil.displayTestTile(this, TEST_NAME);
 
         // GIVEN
-        Task task = taskManager.createTaskInstance(TestModelServiceContract.class.getName() + "." + TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
         OperationResult result = task.getResult();
         
 		// WHEN
@@ -1539,37 +1898,330 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 	}
 	
 	
+	@Test
+    public void test500CheckRolePirateInitial() throws Exception {
+		test5X0CheckInitial("test500CheckRolePirateInitial", RoleType.class, ROLE_PIRATE_OID);
+	}
+	
+	@Test
+    public void test501RolePirateRecompute() throws Exception {
+		test5X1Recompute("test501RolePirateRecompute", RoleType.class, ROLE_PIRATE_OID);
+	}
+	
+	@Test
+    public void test502ModifyRolePirateDisable() throws Exception {
+		test5X2ModifyDisable("test502ModifyRolePirateDisable", RoleType.class, ROLE_PIRATE_OID);
+	}
+	
+	@Test
+    public void test504ModifyRolePirateEnable() throws Exception {
+		test5X4ModifyEnable("test504ModifyRolePirateEnable", RoleType.class, ROLE_PIRATE_OID);
+	}
+	
+	@Test
+    public void test505RolePirateRecompute() throws Exception {
+		test5X5Recompute("test505RolePirateRecompute", RoleType.class, ROLE_PIRATE_OID);
+	}
+	
+	
+	@Test
+    public void test510CheckOrgScummBarInitial() throws Exception {
+		test5X0CheckInitial("test510CheckOrgScummBarInitial", OrgType.class, ORG_SCUMM_BAR_OID);
+	}
+	
+	@Test
+    public void test511OrgScummBarRecompute() throws Exception {
+		test5X1Recompute("test511OrgScummBarRecompute", OrgType.class, ORG_SCUMM_BAR_OID);
+	}
+	
+	@Test
+    public void test512ModifyOrgScummBarDisable() throws Exception {
+		test5X2ModifyDisable("test512ModifyOrgScummBarDisable", OrgType.class, ORG_SCUMM_BAR_OID);
+	}
+	
+	@Test
+    public void test514ModifyOrgScummBarEnable() throws Exception {
+		test5X4ModifyEnable("test514ModifyOrgScummBarEnable", OrgType.class, ORG_SCUMM_BAR_OID);
+	}
+	
+	@Test
+    public void test515OrgScummBarRecompute() throws Exception {
+		test5X5Recompute("test515OrgScummBarRecompute", OrgType.class, ORG_SCUMM_BAR_OID);
+	}
+
+
+	@Test
+    public void test520CheckSerivceSeaMonkeyInitial() throws Exception {
+		test5X0CheckInitial("test520CheckSerivceSeaMonkeyInitial", ServiceType.class, SERVICE_SHIP_SEA_MONKEY_OID);
+	}
+	
+	@Test
+    public void test521SerivceSeaMonkeyRecompute() throws Exception {
+		test5X1Recompute("test521SerivceSeaMonkeyRecompute", ServiceType.class, SERVICE_SHIP_SEA_MONKEY_OID);
+	}
+	
+	@Test
+    public void test522ModifySerivceSeaMonkeyDisable() throws Exception {
+		test5X2ModifyDisable("test522ModifySerivceSeaMonkeyDisable", ServiceType.class, SERVICE_SHIP_SEA_MONKEY_OID);
+	}
+	
+	@Test
+    public void test524ModifySerivceSeaMonkeyEnable() throws Exception {
+		test5X4ModifyEnable("test524ModifySerivceSeaMonkeyEnable", ServiceType.class, SERVICE_SHIP_SEA_MONKEY_OID);
+	}
+	
+	@Test
+    public void test525SerivceSeaMonkeyRecompute() throws Exception {
+		test5X5Recompute("test525SerivceSeaMonkeyRecompute", ServiceType.class, SERVICE_SHIP_SEA_MONKEY_OID);
+	}
+
+    private <F extends FocusType> void test5X0CheckInitial(final String TEST_NAME, Class<F> type, String oid) throws Exception {
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN, WHEN
+        // this happens during test initialization when the role is added
+        
+        // THEN        
+        PrismObject<F> objectAfter = getObject(type, oid);
+		display("Object after", objectAfter);
+        
+		assertAdministrativeStatus(objectAfter, null);
+		// Cannot assert validity or effective status here. The object was added through repo and was not recomputed yet.
+	}
+	
+	/**
+	 * Make sure that recompute properly updates the effective status.
+	 * MID-2877
+	 */
+    private <F extends FocusType> void test5X1Recompute(final String TEST_NAME, Class<F> type, String oid) throws Exception {
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        dummyAuditService.clear();
+        
+		// WHEN
+        modelService.recompute(type, oid, task, result);
 		
-	private void assertDummyActivationEnabledState(String userId, boolean expectedEnabled) {
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<F> objectAfter = getObject(type, oid);
+		display("Object after", objectAfter);
+		        
+		assertAdministrativeStatus(objectAfter, null);
+		assertValidity(objectAfter, null);
+		assertEffectiveStatus(objectAfter, ActivationStatusType.ENABLED);		
+	}
+	
+	/**
+	 * MID-2877
+	 */
+    private <F extends FocusType> void test5X2ModifyDisable(final String TEST_NAME, Class<F> type, String oid) throws Exception {
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyObjectReplaceProperty(type, oid, 
+        		ACTIVATION_ADMINISTRATIVE_STATUS_PATH, task, result, ActivationStatusType.DISABLED);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<F> objectAfter = getObject(type, oid);
+		display("Object after", objectAfter);
+        
+		assertAdministrativeStatusDisabled(objectAfter);
+		assertValidity(objectAfter, null);
+		assertEffectiveStatus(objectAfter, ActivationStatusType.DISABLED);
+		assertDisableTimestampFocus(objectAfter, start, end);
+		
+		TestUtil.assertModifyTimestamp(objectAfter, start, end);
+	}
+	
+	/**
+	 * MID-2877
+	 */
+	private <F extends FocusType> void test5X4ModifyEnable(final String TEST_NAME, Class<F> type, String oid) throws Exception {
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+        XMLGregorianCalendar start = clock.currentTimeXMLGregorianCalendar();
+        
+		// WHEN
+        modifyObjectReplaceProperty(type, oid, 
+        		ACTIVATION_ADMINISTRATIVE_STATUS_PATH, task, result, ActivationStatusType.ENABLED);
+		
+		// THEN
+        XMLGregorianCalendar end = clock.currentTimeXMLGregorianCalendar();
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<F> objectAfter = getObject(type, oid);
+		display("Object after", objectAfter);
+        
+		assertAdministrativeStatusEnabled(objectAfter);
+		assertValidity(objectAfter, null);
+		assertEffectiveStatus(objectAfter, ActivationStatusType.ENABLED);
+		assertEnableTimestampFocus(objectAfter, start, end);
+		
+		TestUtil.assertModifyTimestamp(objectAfter, start, end);
+	}
+	
+	/**
+	 * Make sure that recompute does not destroy anything.
+	 */
+    public <F extends FocusType> void test5X5Recompute(final String TEST_NAME, Class<F> type, String oid) throws Exception {
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        assumeAssignmentPolicy(AssignmentPolicyEnforcementType.FULL);
+        dummyAuditService.clear();
+        
+		// WHEN
+        modelService.recompute(type, oid, task, result);
+		
+		// THEN
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        PrismObject<F> objectAfter = getObject(type, oid);
+		display("Object after", objectAfter);
+		        
+		assertAdministrativeStatusEnabled(objectAfter);
+		assertValidity(objectAfter, null);
+		assertEffectiveStatus(objectAfter, ActivationStatusType.ENABLED);
+		
+		// Check audit
+        display("Audit", dummyAuditService);
+        dummyAuditService.assertNoRecord();
+	}
+
+	// attempt to simulate MID-3348 (unsuccessful for now)
+	@Test
+	public void test600AddUser1() throws Exception {
+		final String TEST_NAME = "test600AddUser1";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+
+		PrismObject<UserType> user1 = prismContext.createObject(UserType.class);
+		DeltaBuilder.deltaFor(UserType.class, prismContext)
+				.item(UserType.F_NAME).replace(new PolyString("user1"))
+				.item(UserType.F_ASSIGNMENT).add(ObjectTypeUtil.createAssignmentTo(resourceDummyCoral).asPrismContainerValue())
+				.item(ACTIVATION_ADMINISTRATIVE_STATUS_PATH).replace(ActivationStatusType.DISABLED)
+				.asObjectDelta(null)
+				.applyTo((PrismObject) user1);
+
+		ObjectDelta<UserType> addDelta = user1.createAddDelta();
+		Collection<ObjectDelta<? extends ObjectType>> deltas = MiscSchemaUtil.createCollection(addDelta);
+
+		// WHEN
+		modelService.executeChanges(deltas, null, task, result);
+
+		// THEN
+		user1 = getUser(user1.getOid());
+		display("User after change execution", user1);
+
+		DummyAccount dummyAccount = dummyResourceCoral.getAccountByUsername("user1");
+		display("Dummy account", dummyAccount);
+		checkSuspendedAttribute(dummyAccount, Boolean.TRUE);
+
+		String accountOid = getSingleLinkOid(user1);
+		PrismObject<ShadowType> shadow = getShadowModel(accountOid);
+		display("Shadow: ", shadow);
+
+		// TODO check real state of the account and shadow
+	}
+
+	private void checkSuspendedAttribute(DummyAccount dummyAccount, Boolean expectedValue) {
+		Object suspendedAttributeValue = dummyAccount.getAttributeValue("suspended", Object.class);
+		System.out.println("\nsuspended: " + suspendedAttributeValue + ", class: " + suspendedAttributeValue.getClass());
+		assertEquals("Wrong type of 'suspended' attribute", Boolean.class, suspendedAttributeValue.getClass());
+		assertEquals("Wrong typed value of 'suspended' attribute", expectedValue, suspendedAttributeValue);
+	}
+
+	@Test
+	public void test610EnableUser1() throws Exception {
+		final String TEST_NAME = "test610EnableUser1";
+		TestUtil.displayTestTile(this, TEST_NAME);
+
+		// GIVEN
+		PrismObject<UserType> user1 = findUserByUsername("user1");
+
+		Task task = taskManager.createTaskInstance(TestActivation.class.getName() + "." + TEST_NAME);
+		OperationResult result = task.getResult();
+
+		Collection<ObjectDelta<? extends ObjectType>> deltas =
+				cast(DeltaBuilder.deltaFor(UserType.class, prismContext)
+						.item(ACTIVATION_ADMINISTRATIVE_STATUS_PATH).replace(ActivationStatusType.ENABLED)
+						.asObjectDeltas(user1.getOid()));
+
+		// WHEN
+		modelService.executeChanges(deltas, null, task, result);
+
+		// THEN
+		user1 = getUser(user1.getOid());
+		display("User after change execution", user1);
+
+		DummyAccount dummyAccount = dummyResourceCoral.getAccountByUsername("user1");
+		display("Dummy account", dummyAccount);
+		checkSuspendedAttribute(dummyAccount, Boolean.FALSE);
+
+		String accountOid = getSingleLinkOid(user1);
+		PrismObject<ShadowType> shadow = getShadowModel(accountOid);
+		display("Shadow: ", shadow);
+
+		// TODO check real state of the account and shadow
+	}
+
+	private void assertDummyActivationEnabledState(String userId, Boolean expectedEnabled) throws SchemaViolationException, ConflictException {
 		assertDummyActivationEnabledState(null, userId, expectedEnabled);
 	}
 	
-	private void assertDummyActivationEnabledState(String instance, String userId, boolean expectedEnabled) {
+	private void assertDummyActivationEnabledState(String instance, String userId, Boolean expectedEnabled) throws SchemaViolationException, ConflictException {
 		DummyAccount account = getDummyAccount(instance, userId);
 		assertNotNull("No dummy account "+userId, account);
 		assertEquals("Wrong enabled flag in dummy '"+instance+"' account "+userId, expectedEnabled, account.isEnabled());
 	}
 	
-	private void assertDummyEnabled(String userId) {
+	private void assertDummyEnabled(String userId) throws SchemaViolationException, ConflictException {
 		assertDummyActivationEnabledState(userId, true);
 	}
 	
-	private void assertDummyDisabled(String userId) {
+	private void assertDummyDisabled(String userId) throws SchemaViolationException, ConflictException {
 		assertDummyActivationEnabledState(userId, false);
 	}
 	
-	private void assertDummyEnabled(String instance, String userId) {
+	private void assertDummyEnabled(String instance, String userId) throws SchemaViolationException, ConflictException {
 		assertDummyActivationEnabledState(instance, userId, true);
 	}
 	
-	private void assertDummyDisabled(String instance, String userId) {
+	private void assertDummyDisabled(String instance, String userId) throws SchemaViolationException, ConflictException {
 		assertDummyActivationEnabledState(instance, userId, false);
 	}
 	
-	private void assertValidity(PrismObject<UserType> user, TimeIntervalStatusType expectedValidityStatus) {
-		ActivationType activation = user.asObjectable().getActivation();
-		assertNotNull("No activation in "+user, activation);
-		assertEquals("Unexpected validity status in "+user, expectedValidityStatus, activation.getValidityStatus());
+	private <F extends FocusType> void assertValidity(PrismObject<F> focus, TimeIntervalStatusType expectedValidityStatus) {
+		ActivationType activation = focus.asObjectable().getActivation();
+		assertNotNull("No activation in "+focus, activation);
+		assertEquals("Unexpected validity status in "+focus, expectedValidityStatus, activation.getValidityStatus());
 	}
 	
 	private void assertValidityTimestamp(PrismObject<UserType> user, long expected) {
@@ -1600,10 +2252,10 @@ public class TestActivation extends AbstractInitializedModelIntegrationTest {
 		AssertJUnit.fail("Expected validityChangeTimestamp to be between "+lowerBound+" and "+upperBound+", but it was "+validityMillis);
 	}
 	
-	private void assertEffectiveStatus(PrismObject<UserType> user, ActivationStatusType expected) {
-		ActivationType activation = user.asObjectable().getActivation();
-		assertNotNull("No activation in "+user, activation);
-		assertEquals("Unexpected effective activation status in "+user, expected, activation.getEffectiveStatus());
+	private <F extends FocusType> void assertEffectiveStatus(PrismObject<F> focus, ActivationStatusType expected) {
+		ActivationType activation = focus.asObjectable().getActivation();
+		assertNotNull("No activation in "+focus, activation);
+		assertEquals("Unexpected effective activation status in "+focus, expected, activation.getEffectiveStatus());
 	}
 	
 	

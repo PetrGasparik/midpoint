@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,42 +16,42 @@
 
 package com.evolveum.midpoint.web.session;
 
-import org.apache.wicket.Page;
-import org.apache.wicket.markup.html.WebPage;
-import org.apache.wicket.request.mapper.parameter.PageParameters;
-
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Stack;
+
+import org.apache.commons.lang.Validate;
+
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.web.component.breadcrumbs.Breadcrumb;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
 
 /**
  * @author lazyman
  */
-public class SessionStorage implements Serializable {
+public class SessionStorage implements Serializable, DebugDumpable {
 
-    /**
-     * place to store "previous page" for back button
-     */
-    private Class<? extends WebPage> previousPage;
-    
-    private Page previousPageInstance;
-    /**
-     * place to store "previous page" parameters for back button
-     */
-    private PageParameters previousPageParams;
+   private static final long serialVersionUID = 1L;
 
-    /**
-     * place to store information in session for various pages
-     */
-    private Map<String, PageStorage> pageStorageMap = new HashMap<>();
+    public static final String KEY_CONFIGURATION = "configuration";
+    public static final String KEY_USERS = "users";
+    public static final String KEY_REPORTS = "reports";
+    public static final String KEY_RESOURCES = "resources";
+    public static final String KEY_ROLES = "roles";
+    public static final String KEY_SERVICES = "services";
+    public static final String KEY_ROLE_MEMBERS = "roleMembers";
+    public static final String KEY_ROLE_CATALOG = "roleMembers";
+    public static final String KEY_RESOURCE_ACCOUNT_CONTENT = "resourceAccountContent";
+    public static final String KEY_RESOURCE_ENTITLEMENT_CONTENT = "resourceEntitlementContent";
+    public static final String KEY_RESOURCE_GENERIC_CONTENT = "resourceGenericContent";
+    public static final String KEY_RESOURCE_OBJECT_CLASS_CONTENT = "resourceObjectClassContent";
+    public static final String KEY_RESOURCE_PAGE_RESOURCE_CONTENT = "Resource";
+    public static final String KEY_RESOURCE_PAGE_REPOSITORY_CONTENT = "Repository";
 
-    private static final String KEY_CONFIGURATION = "configuration";
-    private static final String KEY_USERS = "users";
-    private static final String KEY_REPORTS = "reports";
-    private static final String KEY_RESOURCES = "resources";
-    private static final String KEY_ROLES = "roles";
-    private static final String KEY_ROLE_MEMBERS = "roleMembers";
-    
     private static final String KEY_TASKS = "tasks";
 
     /**
@@ -59,29 +59,16 @@ public class SessionStorage implements Serializable {
     * */
     private UserProfileStorage userProfile;
 
-    public Class<? extends WebPage> getPreviousPage() {
-        return previousPage;
-    }
+	private List<Breadcrumb> breadcrumbs;
 
-    public void setPreviousPage(Class<? extends WebPage> previousPage) {
-        this.previousPage = previousPage;
-    }
-    
-    public void setPreviousPageInstance(Page previousPage) {
-        this.previousPageInstance = previousPage;
-    }
-    
-    public Page getPreviousPageInstance() {
-		return previousPageInstance;
+    /**
+     * place to store information in session for various pages
+     */
+    private Map<String, PageStorage> pageStorageMap = new HashMap<>();
+
+    public Map<String, PageStorage> getPageStorageMap() {
+		return pageStorageMap;
 	}
-
-    public PageParameters getPreviousPageParams() {
-        return previousPageParams;
-    }
-
-    public void setPreviousPageParams(PageParameters previousPageParams) {
-        this.previousPageParams = previousPageParams;
-    }
 
     public ConfigurationStorage getConfiguration() {
         if (pageStorageMap.get(KEY_CONFIGURATION) == null) {
@@ -111,12 +98,57 @@ public class SessionStorage implements Serializable {
         return (RolesStorage)pageStorageMap.get(KEY_ROLES);
     }
     
+    public RoleCatalogStorage getRoleCatalog() {
+        if (pageStorageMap.get(KEY_ROLE_CATALOG) == null) {
+            pageStorageMap.put(KEY_ROLE_CATALOG, new RoleCatalogStorage());
+        }
+        return (RoleCatalogStorage)pageStorageMap.get(KEY_ROLE_CATALOG);
+    }
+
+
+    public ServicesStorage getServices() {
+        if (pageStorageMap.get(KEY_SERVICES) == null) {
+            pageStorageMap.put(KEY_SERVICES, new ServicesStorage());
+        }
+        return (ServicesStorage)pageStorageMap.get(KEY_SERVICES);
+    }
+    
     public RoleMembersStorage getRoleMembers() {
     	if (pageStorageMap.get(KEY_ROLE_MEMBERS) == null) {
             pageStorageMap.put(KEY_ROLE_MEMBERS, new RoleMembersStorage());
         }
         return (RoleMembersStorage)pageStorageMap.get(KEY_ROLE_MEMBERS);
     }
+    
+    public ResourceContentStorage getResourceContentStorage(ShadowKindType kind, String searchMode) {
+    	String key = getContentStorageKey(kind, searchMode);
+    	if (pageStorageMap.get(key) == null) {
+            pageStorageMap.put(key, new ResourceContentStorage(kind));
+        }
+        return (ResourceContentStorage)pageStorageMap.get(key);
+		
+	}
+    
+    private String getContentStorageKey(ShadowKindType kind, String searchMode) {
+    	if (kind == null) {
+			return KEY_RESOURCE_OBJECT_CLASS_CONTENT;
+		}
+
+		switch (kind) {
+			case ACCOUNT:
+				return KEY_RESOURCE_ACCOUNT_CONTENT + searchMode;
+
+			case ENTITLEMENT:
+				return KEY_RESOURCE_ENTITLEMENT_CONTENT + searchMode;
+
+			case GENERIC:
+				return KEY_RESOURCE_GENERIC_CONTENT + searchMode;
+			default:
+				return KEY_RESOURCE_OBJECT_CLASS_CONTENT;
+
+		}
+    }
+   
 
     public TasksStorage getTasks() {
         if (pageStorageMap.get(KEY_TASKS) == null) {
@@ -138,14 +170,108 @@ public class SessionStorage implements Serializable {
         }
         return userProfile;
     }
+    
+    public PageStorage initPageStorage(String key){
+    	PageStorage pageStorage = null;
+    	if (KEY_USERS.equals(key)){
+    		pageStorage = new UsersStorage();
+    		pageStorageMap.put(KEY_USERS, pageStorage);
+    		
+    	} else if (KEY_ROLES.equals(key)){
+    		pageStorage = new RolesStorage();
+    		pageStorageMap.put(KEY_ROLES, pageStorage);
+    	} else if (KEY_SERVICES.equals(key)) {
+    		pageStorage = new ServicesStorage();
+    		pageStorageMap.put(KEY_SERVICES, pageStorage);
+    	} else if (KEY_RESOURCES.equals(key)) {
+    		pageStorage = new ResourcesStorage();
+    		pageStorageMap.put(KEY_RESOURCES, pageStorage);
+    	}
+    	return pageStorage;
+    	//TODO: fixme
+    }
 
     public void setUserProfile(UserProfileStorage profile){
         userProfile = profile;
     }
 
-    public void clearPagingInSession(boolean clearPaging){
-        if(clearPaging){
-            pageStorageMap.clear();
+    public List<Breadcrumb> getBreadcrumbs() {
+        if (breadcrumbs == null) {
+            breadcrumbs = new Stack<>();
         }
+        return breadcrumbs;
+    }
+
+    public void pushBreadcrumb(Breadcrumb breadcrumb) {
+        Validate.notNull(breadcrumb, "Breadcrumb must not be null");
+
+        Breadcrumb last = getBreadcrumbs().isEmpty() ?
+                null : getBreadcrumbs().get(getBreadcrumbs().size() - 1);
+        if (last != null && last.equals(breadcrumb)) {
+            return;
+        }
+
+        getBreadcrumbs().add(breadcrumb);
+    }
+
+    public Breadcrumb peekBreadcrumb() {
+        if (getBreadcrumbs().isEmpty()) {
+            return null;
+        }
+
+        return getBreadcrumbs().get(getBreadcrumbs().size() - 1);
+    }
+
+    public void clearBreadcrumbs() {
+        getBreadcrumbs().clear();
+    }
+
+	@Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		StringBuilder sb = new StringBuilder();
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append("SessionStorage\n");
+		DebugUtil.debugDumpWithLabelLn(sb, "userProfile", userProfile, indent+1);
+		DebugUtil.debugDumpWithLabelLn(sb, "breadcrumbs", breadcrumbs, indent+1);
+		DebugUtil.debugDumpWithLabel(sb, "pageStorageMap", pageStorageMap, indent+1);
+		return sb.toString();
+	}
+	
+	public void dumpSizeEstimates(StringBuilder sb, int indent) {
+		DebugUtil.dumpObjectSizeEstimate(sb, "SessionStorage", this, indent);
+		if (userProfile != null) {
+			sb.append("\n");
+			DebugUtil.dumpObjectSizeEstimate(sb, "userProfile", userProfile, indent + 1);
+		}
+		if (breadcrumbs != null) {
+			sb.append("\n");
+			DebugUtil.dumpObjectSizeEstimate(sb, "breadcrumbs", (Serializable)breadcrumbs, indent + 1);
+			for (Breadcrumb breadcrumb: breadcrumbs) {
+				sb.append("\n");
+				DebugUtil.dumpObjectSizeEstimate(sb, breadcrumb.getClass().getName(), breadcrumb, indent + 2);
+			}
+		}
+		sb.append("\n");
+		DebugUtil.dumpObjectSizeEstimate(sb, "pageStorageMap", (Serializable)pageStorageMap, indent + 1);
+		for (Entry<String,PageStorage> entry: pageStorageMap.entrySet()) {
+			sb.append("\n");
+			DebugUtil.dumpObjectSizeEstimate(sb, entry.getKey(), entry.getValue(), indent + 2);
+		}
+
+	}
+
+    public void clearResourceContentStorage(){
+        pageStorageMap.remove(KEY_RESOURCE_ACCOUNT_CONTENT + KEY_RESOURCE_PAGE_REPOSITORY_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_ACCOUNT_CONTENT + KEY_RESOURCE_PAGE_RESOURCE_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_ENTITLEMENT_CONTENT + KEY_RESOURCE_PAGE_REPOSITORY_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_ENTITLEMENT_CONTENT + KEY_RESOURCE_PAGE_RESOURCE_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_GENERIC_CONTENT + KEY_RESOURCE_PAGE_REPOSITORY_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_GENERIC_CONTENT + KEY_RESOURCE_PAGE_RESOURCE_CONTENT);
+        pageStorageMap.remove(KEY_RESOURCE_OBJECT_CLASS_CONTENT);
     }
 }

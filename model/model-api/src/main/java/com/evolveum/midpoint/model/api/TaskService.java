@@ -4,14 +4,12 @@ import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.task.api.TaskHandler;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
 
-import java.text.ParseException;
 import java.util.Collection;
 import java.util.List;
 
@@ -32,11 +30,11 @@ public interface TaskService {
      * Suspends a set of tasks. Sets their execution status to SUSPENDED. Stops their execution (unless doNotStop is set).
      *
      * @param taskOids a collection of OIDs of tasks that have to be suspended
-     * @param waitTime how long (in milliseconds) to wait for stopping the execution of tasks;
-     *                 WAIT_INDEFINITELY means wait indefinitely :)
-     *                 DO_NOT_WAIT means stop the tasks, but do not wait for finishing their execution
-     *                 DO_NOT_STOP means do not try to stop the task execution. Tasks will only be put into SUSPENDED state, and
-     *                  their executions (if any) will be left as they are. Use this option only when you know what you're doing.
+     * @param waitForStop how long (in milliseconds) to wait for stopping the execution of tasks;
+     *                      WAIT_INDEFINITELY means wait indefinitely
+     *                      DO_NOT_WAIT means stop the tasks, but do not wait for finishing their execution
+     *                      DO_NOT_STOP means do not try to stop the task execution. Tasks will only be put into SUSPENDED state, and
+     *                                  their executions (if any) will be left as they are. Use this option only when you know what you're doing.
      * @param parentResult
      * @return true if all the tasks were stopped, false if some tasks continue to run or if stopping was not requested (DO_NOT_STOP option)
      */
@@ -47,9 +45,10 @@ public interface TaskService {
      *
      * @param taskOids Collection of task OIDs to be suspended and deleted.
      * @param waitForStop How long (in milliseconds) to wait for task stop before proceeding with deletion.
-     *                 WAIT_INDEFINITELY means wait indefinitely :)
-     *                 DO_NOT_WAIT means stop the tasks, but do not wait for finishing their execution
-     *                 DO_NOT_STOP means do not try to stop the task execution. Tasks will only be put into SUSPENDED state, and
+     *                      WAIT_INDEFINITELY means wait indefinitely
+     *                      DO_NOT_WAIT means stop the tasks, but do not wait for finishing their execution
+     *                      DO_NOT_STOP means do not try to stop the task execution. Tasks will only be put into SUSPENDED state, and
+     *                                  their executions (if any) will be left as they are. Use this option only when you know what you're doing.
      * @param alsoSubtasks Should also subtasks be deleted?
      * @param parentResult
      */
@@ -153,7 +152,15 @@ public interface TaskService {
      */
     void synchronizeTasks(OperationResult parentResult) throws SchemaException, SecurityViolationException;
 
-    /**
+	/**
+	 * Synchronizes information in midPoint repository and activiti database.
+	 * Not needed to use during normal operation (only when problems occur).
+	 *
+	 * @param parentResult
+	 */
+	void synchronizeWorkflowRequests(OperationResult parentResult) throws SchemaException, SecurityViolationException;
+
+	/**
      * Gets a list of all task categories.
      * TODO consider removing this method
      *

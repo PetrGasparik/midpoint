@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,11 +24,13 @@ import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.RandomString;
+import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -499,7 +501,7 @@ public class EncodingTest extends BaseSQLRepoTest {
 
 
     @Test
-    public void repositorySelfTest() {
+    public void repositorySelfTest() throws Exception {
         OperationResult testResult = new OperationResult("self test");
         // Give repository chance to run its own self-test if available
         repositoryService.repositorySelfTest(testResult);
@@ -513,7 +515,7 @@ public class EncodingTest extends BaseSQLRepoTest {
         AssertJUnit.assertEquals(OperationResultStatus.SUCCESS, testResult.getStatus());
     }
 
-    private void repositorySelfTestUser(OperationResult testResult) {
+    private void repositorySelfTestUser(OperationResult testResult) throws SchemaException {
         OperationResult result = testResult.createSubresult("user");
 
         PrismObject<UserType> user = getObjectDefinition(UserType.class).instantiate();
@@ -558,10 +560,9 @@ public class EncodingTest extends BaseSQLRepoTest {
 
             OperationResult subresult1 = result.createSubresult(result.getOperation() + ".searchObjects.fullName");
             try {
-                ObjectQuery query = new ObjectQuery();
-                ObjectFilter filter = EqualFilter.createEqual(UserType.F_FULL_NAME, UserType.class, prismContext,
-                		PolyStringNormMatchingRule.NAME, toPolyString(USER_FULL_NAME));
-                query.setFilter(filter);
+                ObjectQuery query = QueryBuilder.queryFor(UserType.class, prismContext)
+                        .item(UserType.F_FULL_NAME).eq(toPolyString(USER_FULL_NAME)).matchingNorm()
+                        .build();
                 subresult1.addParam("query", query);
                 List<PrismObject<UserType>> foundObjects = repositoryService.searchObjects(UserType.class, query, null, subresult1);
                 if (LOGGER.isTraceEnabled()) {

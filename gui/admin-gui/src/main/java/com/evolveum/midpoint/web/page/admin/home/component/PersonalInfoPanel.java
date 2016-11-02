@@ -16,12 +16,14 @@
 
 package com.evolveum.midpoint.web.page.admin.home.component;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.util.MiscUtil;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.DateLabelComponent;
 import com.evolveum.midpoint.web.page.admin.home.dto.PersonalInfoDto;
 import com.evolveum.midpoint.web.security.SecurityUtils;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
@@ -31,10 +33,12 @@ import org.apache.wicket.markup.html.basic.Label;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 
+import java.util.Date;
+
 /**
  * @author lazyman
  */
-public class PersonalInfoPanel extends SimplePanel<PersonalInfoDto> {
+public class PersonalInfoPanel extends BasePanel<PersonalInfoDto> {
 
     private static final String ID_LAST_LOGIN_DATE = "lastLoginDate";
     private static final String ID_LAST_LOGIN_FROM = "lastLoginFrom";
@@ -43,8 +47,9 @@ public class PersonalInfoPanel extends SimplePanel<PersonalInfoDto> {
     private static final String ID_PASSWORD_EXP = "passwordExp";
 
 
-    public PersonalInfoPanel(String id) {
+    public PersonalInfoPanel(String id, PageBase parentPage) {
         super(id);
+        initLayout(parentPage);
     }
 
     @Override
@@ -83,18 +88,16 @@ public class PersonalInfoPanel extends SimplePanel<PersonalInfoDto> {
         return dto;
     }
 
-    @Override
-    protected void initLayout() {
-        Label lastLoginDate = new Label(ID_LAST_LOGIN_DATE, new AbstractReadOnlyModel<String>() {
+    protected void initLayout(PageBase parentPage) {
+        DateLabelComponent lastLoginDate = new DateLabelComponent(ID_LAST_LOGIN_DATE, new AbstractReadOnlyModel<Date>() {
 
             @Override
-            public String getObject() {
+            public Date getObject() {
                 PersonalInfoDto dto = getModel().getObject();
-
-                return dto.getLastLoginDate() != null ? WebMiscUtil.formatDate(dto.getLastLoginDate()) :
-                        PersonalInfoPanel.this.getString("PersonalInfoPanel.never");
+                return dto == null ? null : dto.getLastLoginDate();
             }
-        });
+        }, DateLabelComponent.LONG_MEDIUM_STYLE);
+        lastLoginDate.setBeforeTextOnDateNull(parentPage.getString("PersonalInfoPanel.never"));
         add(lastLoginDate);
 
         Label lastLoginFrom = new Label(ID_LAST_LOGIN_FROM, new AbstractReadOnlyModel<String>() {
@@ -109,16 +112,15 @@ public class PersonalInfoPanel extends SimplePanel<PersonalInfoDto> {
         });
         add(lastLoginFrom);
 
-        Label lastFailDate = new Label(ID_LAST_FAIL_DATE, new AbstractReadOnlyModel<String>() {
+        DateLabelComponent lastFailDate = new DateLabelComponent(ID_LAST_FAIL_DATE, new AbstractReadOnlyModel<Date>() {
 
             @Override
-            public String getObject() {
+            public Date getObject() {
                 PersonalInfoDto dto = getModel().getObject();
-
-                return dto.getLastFailDate() != null ? WebMiscUtil.formatDate(dto.getLastFailDate()) :
-                        PersonalInfoPanel.this.getString("PersonalInfoPanel.never");
+                return dto == null ? null : dto.getLastFailDate();
             }
-        });
+        }, DateLabelComponent.LONG_MEDIUM_STYLE);
+        lastFailDate.setBeforeTextOnDateNull(parentPage.getString("PersonalInfoPanel.never"));
         add(lastFailDate);
 
         Label lastFailFrom = new Label(ID_LAST_FAIL_FROM, new AbstractReadOnlyModel<String>() {
@@ -139,7 +141,7 @@ public class PersonalInfoPanel extends SimplePanel<PersonalInfoDto> {
             public String getObject() {
                 PersonalInfoDto dto = getModel().getObject();
 
-                return dto.getPasswordExp() != null ? WebMiscUtil.formatDate(dto.getPasswordExp()) :
+                return dto.getPasswordExp() != null ? WebComponentUtil.formatDate(dto.getPasswordExp()) :
                         PersonalInfoPanel.this.getString("PersonalInfoPanel.undefined");
             }
         });

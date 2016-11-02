@@ -22,7 +22,6 @@ import com.evolveum.midpoint.prism.query.OrgFilter;
 import com.evolveum.midpoint.repo.sql.data.common.RObjectReference;
 import com.evolveum.midpoint.repo.sql.data.common.ROrgClosure;
 import com.evolveum.midpoint.repo.sql.data.common.other.RReferenceOwner;
-import com.evolveum.midpoint.repo.sql.query.QueryContext;
 import com.evolveum.midpoint.repo.sql.query.QueryException;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import org.hibernate.criterion.*;
@@ -81,6 +80,8 @@ public class OrgRestriction extends Restriction<OrgFilter> {
                 detached.setProjection(Projections.distinct(Projections.property("p.ownerOid")));
                 detached.add(Restrictions.eq("p.targetOid", filter.getOrgRef().getOid()));
                 break;
+            case ANCESTORS:
+                throw new UnsupportedOperationException("ANCESTORS query is not supported in this query interpreter");
             case SUBTREE:
             default:
                 detached = DetachedCriteria.forClass(RObjectReference.class, "p");

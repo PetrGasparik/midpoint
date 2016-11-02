@@ -18,7 +18,6 @@ package com.evolveum.midpoint.repo.sql;
 
 import com.evolveum.midpoint.prism.ItemDefinition;
 import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContainerValue;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.PrismPropertyDefinition;
@@ -28,7 +27,6 @@ import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
 import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.prism.match.PolyStringOrigMatchingRule;
-import com.evolveum.midpoint.prism.match.PolyStringStrictMatchingRule;
 import com.evolveum.midpoint.prism.path.IdItemPathSegment;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.path.ItemPathSegment;
@@ -36,6 +34,7 @@ import com.evolveum.midpoint.prism.path.NameItemPathSegment;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.query.EqualFilter;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.repo.sql.testing.SqlRepoTestUtil;
 import com.evolveum.midpoint.schema.ResultHandler;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -45,7 +44,6 @@ import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 
@@ -56,13 +54,10 @@ import org.springframework.test.context.ContextConfiguration;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 
-import javax.xml.namespace.QName;
-
 import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -361,6 +356,11 @@ public class ConcurrencyTest extends BaseSQLRepoTest {
 
             try {
                 repositoryService.modifyObject(UserType.class, oid, deltas, result);
+				result.computeStatus();
+				if (result.isError()) {
+					LOGGER.error("Error found in operation result:\n{}", result.debugDump());
+					throw new IllegalStateException("Error found in operation result");
+				}
             } catch (Exception e) {
                 String msg = "modifyObject failed while modifying attribute(s) " + attributeNames()
                         + " to value " + dataWritten;
@@ -454,8 +454,8 @@ public class ConcurrencyTest extends BaseSQLRepoTest {
         String oid = repositoryService.addObject(user, null, result);
 
         repositoryService.searchObjectsIterative(UserType.class,
-                ObjectQuery.createObjectQuery(
-                        EqualFilter.createEqual(UserType.F_NAME, UserType.class, prismContext, PolyStringOrigMatchingRule.NAME, new PolyString(name))),
+                QueryBuilder.queryFor(UserType.class, prismContext)
+                    .item(UserType.F_NAME).eqPoly(name).matchingOrig().build(),
                 new ResultHandler<UserType>() {
                     @Override
                     public boolean handle(PrismObject<UserType> object, OperationResult parentResult) {

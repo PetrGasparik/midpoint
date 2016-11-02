@@ -24,7 +24,7 @@
 	<parent>
 		<artifactId>tools</artifactId>
 		<groupId>com.evolveum.midpoint</groupId>
-		<version>3.3</version>
+		<version>3.5-SNAPSHOT</version>
 	</parent>
     <scm>
         <connection>https://github.com/Evolveum/midpoint.git</connection>
@@ -32,14 +32,6 @@
         <url>https://fisheye.evolveum.com/browse/midPoint</url>
     </scm>
 	<dependencies>
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-classic</artifactId>
-		</dependency>
 		<dependency>
 			<groupId>org.testng</groupId>
 			<artifactId>testng</artifactId>

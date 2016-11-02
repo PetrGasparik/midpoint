@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,36 +15,28 @@
  */
 package com.evolveum.midpoint.web.page.admin.reports.component;
 
-import com.evolveum.midpoint.web.component.AjaxSubmitButton;
-import com.evolveum.midpoint.web.component.DateInput;
-import com.evolveum.midpoint.web.component.form.DateFormGroup;
-import com.evolveum.midpoint.web.component.form.DropDownFormGroup;
-import com.evolveum.midpoint.web.component.form.TextFormGroup;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
-import com.evolveum.midpoint.web.page.admin.reports.dto.AuditReportDto;
-import com.evolveum.midpoint.web.page.admin.reports.dto.ReportDto;
-import com.evolveum.midpoint.web.page.admin.reports.dto.UserReportDto;
-import com.evolveum.midpoint.web.util.DateValidator;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ExportType;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.apache.wicket.Component;
-import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.markup.html.form.*;
-import org.apache.wicket.markup.html.panel.FeedbackPanel;
+import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
+import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.PropertyModel;
 
-import javax.xml.datatype.XMLGregorianCalendar;
-
-import java.util.Date;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.web.component.form.DateFormGroup;
+import com.evolveum.midpoint.web.component.form.DropDownFormGroup;
+import com.evolveum.midpoint.web.component.form.TextFormGroup;
+import com.evolveum.midpoint.web.page.admin.reports.dto.UserReportDto;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ExportType;
 
 /**
  *  TODO - add proper Date validator
  *
  *  @author shood
  * */
-public class UserReportConfigPanel extends SimplePanel<UserReportDto>{
+public class UserReportConfigPanel extends BasePanel<UserReportDto>{
 
     private static final String ID_NAME = "name";
     private static final String ID_DATE_FROM = "dateFrom";
@@ -60,7 +52,7 @@ public class UserReportConfigPanel extends SimplePanel<UserReportDto>{
         initLayout(this);
     }
 
-    protected void initLayout(final Component component){
+    private void initLayout(final Component component){
 
         TextFormGroup name = new TextFormGroup(ID_NAME, new PropertyModel<String>(getModel(), UserReportDto.F_NAME),
                 createStringResource("ObjectType.name"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);
@@ -70,7 +62,7 @@ public class UserReportConfigPanel extends SimplePanel<UserReportDto>{
                 createStringResource("ObjectType.description"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);
         add(description);
 
-        IModel choices = WebMiscUtil.createReadonlyModelFromEnum(ExportType.class);
+        IModel choices = WebComponentUtil.createReadonlyModelFromEnum(ExportType.class);
         IChoiceRenderer renderer = new EnumChoiceRenderer();
         DropDownFormGroup exportType = new DropDownFormGroup(ID_EXPORT_TYPE, new
                 PropertyModel<ExportType>(getModel(), UserReportDto.F_EXPORT_TYPE), choices, renderer,

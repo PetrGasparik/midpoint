@@ -16,51 +16,25 @@
 
 package com.evolveum.midpoint.web.page.admin.configuration;
 
-import com.evolveum.midpoint.common.configuration.api.MidpointConfiguration;
-import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
-import com.evolveum.midpoint.prism.Definition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.match.PolyStringNormMatchingRule;
-import com.evolveum.midpoint.prism.polystring.PolyStringNormalizer;
-import com.evolveum.midpoint.prism.query.*;
-import com.evolveum.midpoint.schema.*;
-import com.evolveum.midpoint.schema.processor.ResourceSchema;
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.security.api.AuthorizationConstants;
-import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.logging.LoggingUtils;
-import com.evolveum.midpoint.util.logging.Trace;
-import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.application.AuthorizationAction;
-import com.evolveum.midpoint.web.application.PageDescriptor;
-import com.evolveum.midpoint.web.component.AjaxDownloadBehaviorFromFile;
-import com.evolveum.midpoint.web.component.BasicSearchPanel;
-import com.evolveum.midpoint.web.component.data.ObjectDataProvider;
-import com.evolveum.midpoint.web.component.data.TablePanel;
-import com.evolveum.midpoint.web.component.data.column.CheckBoxPanel;
-import com.evolveum.midpoint.web.component.data.column.LinkColumn;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.SelectableBean;
-import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.admin.configuration.component.AceEditorDialog;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.AccountDetailsSearchDto;
-import com.evolveum.midpoint.web.page.admin.home.PageDashboard;
-import com.evolveum.midpoint.web.page.admin.reports.component.AceEditorPanel;
-import com.evolveum.midpoint.web.page.admin.reports.component.RunReportPopupPanel;
-import com.evolveum.midpoint.web.page.admin.roles.PageRole;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.ResourceItemDto;
-import com.evolveum.midpoint.web.page.admin.users.PageOrgUnit;
-import com.evolveum.midpoint.web.page.admin.users.PageUser;
-import com.evolveum.midpoint.web.session.ConfigurationStorage;
-import com.evolveum.midpoint.web.session.UserProfileStorage;
-import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.SearchFormEnterBehavior;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import java.io.FileOutputStream;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
 
+import javax.xml.namespace.QName;
+
+import com.evolveum.midpoint.common.refinery.RefinedResourceSchemaImpl;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
+import com.evolveum.midpoint.prism.query.builder.S_AtomicFilterEntry;
+import com.evolveum.midpoint.util.exception.CommonException;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.wicket.AttributeModifier;
@@ -77,7 +51,9 @@ import org.apache.wicket.extensions.markup.html.repeater.data.table.IColumn;
 import org.apache.wicket.extensions.markup.html.repeater.data.table.PropertyColumn;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
-import org.apache.wicket.markup.html.form.*;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
+import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.markup.html.list.ListItem;
 import org.apache.wicket.markup.html.list.ListView;
 import org.apache.wicket.model.AbstractReadOnlyModel;
@@ -90,10 +66,65 @@ import org.apache.wicket.util.string.Strings;
 import org.apache.wicket.validation.IValidatable;
 import org.apache.wicket.validation.IValidator;
 
-import javax.xml.namespace.QName;
-
-import java.io.*;
-import java.util.*;
+import com.evolveum.midpoint.common.configuration.api.MidpointConfiguration;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.prism.Definition;
+import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.PrismProperty;
+import com.evolveum.midpoint.prism.polystring.PolyStringNormalizer;
+import com.evolveum.midpoint.prism.query.AndFilter;
+import com.evolveum.midpoint.prism.query.ObjectFilter;
+import com.evolveum.midpoint.prism.query.ObjectQuery;
+import com.evolveum.midpoint.schema.AbstractSummarizingResultHandler;
+import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.ResultHandler;
+import com.evolveum.midpoint.schema.SchemaConstantsGenerated;
+import com.evolveum.midpoint.schema.SelectorOptions;
+import com.evolveum.midpoint.schema.processor.ResourceSchema;
+import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.security.api.AuthorizationConstants;
+import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.LoggingUtils;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.web.application.AuthorizationAction;
+import com.evolveum.midpoint.web.application.PageDescriptor;
+import com.evolveum.midpoint.web.component.AjaxDownloadBehaviorFromFile;
+import com.evolveum.midpoint.web.component.BasicSearchPanel;
+import com.evolveum.midpoint.web.component.data.ObjectDataProvider;
+import com.evolveum.midpoint.web.component.data.TablePanel;
+import com.evolveum.midpoint.web.component.data.column.LinkColumn;
+import com.evolveum.midpoint.web.component.input.ChoiceableChoiceRenderer;
+import com.evolveum.midpoint.web.component.input.StringChoiceRenderer;
+import com.evolveum.midpoint.web.component.util.SelectableBean;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+import com.evolveum.midpoint.web.page.admin.configuration.component.AceEditorDialog;
+import com.evolveum.midpoint.web.page.admin.configuration.dto.AccountDetailsSearchDto;
+import com.evolveum.midpoint.web.page.admin.configuration.dto.ResourceItemDto;
+import com.evolveum.midpoint.web.page.admin.home.PageDashboard;
+import com.evolveum.midpoint.web.page.admin.roles.PageRole;
+import com.evolveum.midpoint.web.page.admin.users.PageOrgUnit;
+import com.evolveum.midpoint.web.page.admin.users.PageUser;
+import com.evolveum.midpoint.web.session.ConfigurationStorage;
+import com.evolveum.midpoint.web.session.UserProfileStorage;
+import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
+import com.evolveum.midpoint.web.util.SearchFormEnterBehavior;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.FailedOperationTypeType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationResultType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDefinitionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.SchemaHandlingType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationSituationType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 /**
  * @author lazyman
@@ -213,22 +244,7 @@ public class PageAccounts extends PageAdminConfiguration {
 
         DropDownChoice<ResourceItemDto> resources = new DropDownChoice<>(
                 ID_RESOURCES, resourceModel, resourcesModel,
-                new IChoiceRenderer<ResourceItemDto>() {
-
-                    @Override
-                    public Object getDisplayValue(ResourceItemDto object) {
-                        if (object == null) {
-                            return "";
-                        }
-
-                        return object.getName();
-                    }
-
-                    @Override
-                    public String getIdValue(ResourceItemDto object, int index) {
-                        return Integer.toString(index);
-                    }
-                });
+                new ChoiceableChoiceRenderer<ResourceItemDto>());
         form.add(resources);
 
         initLinks(form, accForm);
@@ -316,7 +332,7 @@ public class PageAccounts extends PageAdminConfiguration {
 
         DropDownChoice failedOperationType = new DropDownChoice<>(ID_SEARCH_FAILED_OPERATION_TYPE,
                 new PropertyModel<FailedOperationTypeType>(searchModel, AccountDetailsSearchDto.F_FAILED_OPERATION_TYPE),
-                WebMiscUtil.createReadonlyModelFromEnum(FailedOperationTypeType.class), new EnumChoiceRenderer<FailedOperationTypeType>(this));
+                WebComponentUtil.createReadonlyModelFromEnum(FailedOperationTypeType.class), new EnumChoiceRenderer<FailedOperationTypeType>(this));
         failedOperationType.add(new OnChangeAjaxBehavior() {
 
             @Override
@@ -330,7 +346,7 @@ public class PageAccounts extends PageAdminConfiguration {
         
         DropDownChoice kind = new DropDownChoice<>(ID_SEARCH_KIND,
                 new PropertyModel<ShadowKindType>(searchModel, AccountDetailsSearchDto.F_KIND),
-                WebMiscUtil.createReadonlyModelFromEnum(ShadowKindType.class), new EnumChoiceRenderer<ShadowKindType>(this));
+                WebComponentUtil.createReadonlyModelFromEnum(ShadowKindType.class), new EnumChoiceRenderer<ShadowKindType>(this));
         kind.add(new OnChangeAjaxBehavior() {
 
             @Override
@@ -344,18 +360,7 @@ public class PageAccounts extends PageAdminConfiguration {
 
         DropDownChoice intent = new DropDownChoice<>(ID_SEARCH_INTENT,
                 new PropertyModel<String>(searchModel, AccountDetailsSearchDto.F_INTENT),
-                createIntentChoices(), new IChoiceRenderer<String>() {
-
-            @Override
-            public String getDisplayValue(String object) {
-                return object;
-            }
-
-            @Override
-            public String getIdValue(String object, int index) {
-                return Integer.toString(index);
-            }
-        });
+                createIntentChoices(), new StringChoiceRenderer(null));
         intent.setNullValid(true);
         intent.add(new OnChangeAjaxBehavior() {
 
@@ -449,7 +454,7 @@ public class PageAccounts extends PageAdminConfiguration {
                     }
 
                 } catch (Exception e){
-                    LoggingUtils.logException(LOGGER, "Couldn't load intents from resource.", e);
+                    LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load intents from resource.", e);
                     error("Couldn't load intents from resource.");
                     return null;
                 }
@@ -529,15 +534,13 @@ public class PageAccounts extends PageAdminConfiguration {
                 Task task = createSimpleTask(OPERATION_GET_TOTALS);
                 OperationResult result = new OperationResult(OPERATION_GET_TOTALS);
                 try {
-                    EqualFilter situationFilter = EqualFilter.createEqual(ShadowType.F_SYNCHRONIZATION_SITUATION, ShadowType.class,
-                            getPrismContext(), null, situation);
-
-                    AndFilter andFilter = AndFilter.createAnd(filter, situationFilter);
-                    ObjectQuery query = ObjectQuery.createObjectQuery(andFilter);
-
+                    ObjectFilter situationFilter = QueryBuilder.queryFor(ShadowType.class, getPrismContext())
+                            .item(ShadowType.F_SYNCHRONIZATION_SITUATION).eq(situation)
+                            .buildFilter();
+                    ObjectQuery query = ObjectQuery.createObjectQuery(AndFilter.createAnd(filter, situationFilter));
                     return getModelService().countObjects(ShadowType.class, query, options, task, result);
-                } catch (Exception ex) {
-                    LoggingUtils.logException(LOGGER, "Couldn't count shadows", ex);
+                } catch (CommonException|RuntimeException ex) {
+                    LoggingUtils.logUnexpectedException(LOGGER, "Couldn't count shadows", ex);
                 }
 
                 return 0;
@@ -562,7 +565,7 @@ public class PageAccounts extends PageAdminConfiguration {
                         }
                     });
                 } catch (Exception ex) {
-                    LoggingUtils.logException(LOGGER, "Couldn't list files", ex);
+                    LoggingUtils.logUnexpectedException(LOGGER, "Couldn't list files", ex);
                     getSession().error("Couldn't list files, reason: " + ex.getMessage());
 
                     throw new RestartResponseException(PageDashboard.class);
@@ -672,7 +675,7 @@ public class PageAccounts extends PageAdminConfiguration {
                     @Override
                     public String getObject() {
                         FocusType focus = loadShadowOwner(rowModel);
-                        return WebMiscUtil.getName(focus);
+                        return WebComponentUtil.getName(focus);
                     }
                 };
             }
@@ -694,10 +697,10 @@ public class PageAccounts extends PageAdminConfiguration {
     	
     	
 		try {
-			xml = getPrismContext().serializeAtomicValue(result, ShadowType.F_RESULT, PrismContext.LANG_XML);
+			xml = getPrismContext().xmlSerializer().serializeRealValue(result, ShadowType.F_RESULT);
 			aceEditor.updateModel(new Model<String>(xml));
 		} catch (SchemaException e) {
-			LoggingUtils.logException(LOGGER, "Couldn't parse result", e);
+			LoggingUtils.logUnexpectedException(LOGGER, "Couldn't parse result", e);
 			aceEditor.updateModel(new Model<String>("Unable to show result. For more information see logs."));
 		}
 		
@@ -715,23 +718,19 @@ public class PageAccounts extends PageAdminConfiguration {
         if (dto == null) {
             return null;
         }
-        OperationResult result = new OperationResult(OPERATION_LOAD_ACCOUNTS);
         String oid = dto.getOid();
-        try {
-            return RefFilter.createReferenceEqual(ShadowType.F_RESOURCE_REF, ShadowType.class,
-                    getPrismContext(), oid);
-        } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't create query", ex);
-            error("Couldn't create query, reason: " + ex.getMessage());
-        } finally {
-            result.recomputeStatus();
-        }
+        return QueryBuilder.queryFor(ShadowType.class, getPrismContext())
+                .item(ShadowType.F_RESOURCE_REF).ref(oid)
+                .buildFilter();
+    }
 
-        if (!WebMiscUtil.isSuccessOrHandledError(result)) {
-            showResult(result);
+    private ObjectQuery appendResourceQueryFilter(S_AtomicFilterEntry q) {
+        ResourceItemDto dto = resourceModel.getObject();
+        if (dto == null) {
+            return q.all().build();         // TODO ok?
+        } else {
+            return q.item(ShadowType.F_RESOURCE_REF).ref(dto.getOid()).build();
         }
-
-        return null;
     }
 
     private List<ResourceItemDto> loadResources() {
@@ -739,27 +738,35 @@ public class PageAccounts extends PageAdminConfiguration {
 
         OperationResult result = new OperationResult(OPERATION_LOAD_RESOURCES);
         try {
-            List<PrismObject<ResourceType>> objects = getModelService().searchObjects(ResourceType.class, null, null,
+            List<PrismObject<ResourceType>> objects = getModelService().searchObjects(ResourceType.class, null, SelectorOptions.createCollection(GetOperationOptions.createNoFetch()),
                     createSimpleTask(OPERATION_LOAD_RESOURCES), result);
 
             if (objects != null) {
                 for (PrismObject<ResourceType> object : objects) {
-                    resources.add(new ResourceItemDto(object.getOid(), WebMiscUtil.getName(object)));
+                	StringBuilder nameBuilder = new StringBuilder(WebComponentUtil.getName(object));
+                	PrismProperty<OperationResultType> fetchResult = object.findProperty(ResourceType.F_FETCH_RESULT);
+                	if (fetchResult != null){
+                		nameBuilder.append(" (");
+                		nameBuilder.append(fetchResult.getRealValue().getStatus());
+                		nameBuilder.append(")");
+                	}
+                    resources.add(new ResourceItemDto(object.getOid(), nameBuilder.toString()));
                 }
             }
+            result.recordSuccess();
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't load resources", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load resources", ex);
             result.recordFatalError("Couldn't load resources, reason: " + ex.getMessage(), ex);
         } finally {
             if (result.isUnknown()) {
-                result.recomputeStatus();
+                result.computeStatus();
             }
         }
 
         Collections.sort(resources);
 
-        if (!WebMiscUtil.isSuccessOrHandledError(result)) {
-            showResultInSession(result);
+        if (!WebComponentUtil.isSuccessOrHandledError(result)) {
+            showResult(result, false);
             throw new RestartResponseException(PageDashboard.class);
         }
 
@@ -795,7 +802,7 @@ public class PageAccounts extends PageAdminConfiguration {
             resourcePrism = getModelService().getObject(ResourceType.class, oid, null,
                     createSimpleTask(OPERATION_GET_INTENTS), result);
 
-            ResourceSchema schema = RefinedResourceSchema.getResourceSchema(resourcePrism, getPrismContext());
+            ResourceSchema schema = RefinedResourceSchemaImpl.getResourceSchema(resourcePrism, getPrismContext());
             schema.getObjectClassDefinitions();
 
             for(Definition def: schema.getDefinitions()){
@@ -804,8 +811,11 @@ public class PageAccounts extends PageAdminConfiguration {
 
             dto.setObjectClassList(accountObjectClassList);
         } catch (Exception e){
-            LoggingUtils.logException(LOGGER, "Couldn't load object class list from resource.", e);
-            error("Couldn't load object class list from resource.");
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load object class list from resource.", e);
+            result.recordFatalError("Couldn't load object class list from resource.: " +e.getMessage(), e);
+            showResult(result, false);
+            resourceModel.setObject(null);
+            new RestartResponseException(PageAccounts.this);
         }
     }
 
@@ -843,7 +853,7 @@ public class PageAccounts extends PageAdminConfiguration {
             return;
         }
 
-        String fileName = "accounts-" + WebMiscUtil.formatDate("yyyy-MM-dd-HH-mm-ss", new Date()) + ".xml";
+        String fileName = "accounts-" + WebComponentUtil.formatDate("yyyy-MM-dd-HH-mm-ss", new Date()) + ".xml";
 
         OperationResult result = new OperationResult(OPERATION_EXPORT);
         Writer writer = null;
@@ -865,7 +875,7 @@ public class PageAccounts extends PageAdminConfiguration {
 
                         result.computeStatus();
                     } catch (Exception ex) {
-                        LoggingUtils.logException(LOGGER, "Couldn't serialize account", ex);
+                        LoggingUtils.logUnexpectedException(LOGGER, "Couldn't serialize account", ex);
                         result.recordFatalError("Couldn't serialize account.", ex);
 
                         return false;
@@ -885,7 +895,7 @@ public class PageAccounts extends PageAdminConfiguration {
 
             result.recomputeStatus();
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't export accounts", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't export accounts", ex);
             error(getString("PageAccounts.exportException", ex.getMessage()));
         } finally {
             IOUtils.closeQuietly(writer);
@@ -943,7 +953,7 @@ public class PageAccounts extends PageAdminConfiguration {
                 file.delete();
             }
         } catch (Exception ex) {
-            LoggingUtils.logException(LOGGER, "Couldn't delete export files", ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't delete export files", ex);
             error("Couldn't delete export files, reason: " + ex.getMessage());
         }
 
@@ -980,69 +990,41 @@ public class PageAccounts extends PageAdminConfiguration {
         target.add(getAccountsContainer());
     }
 
-    private ObjectQuery createObjectQuery(){
+    private ObjectQuery createObjectQuery() {
         AccountDetailsSearchDto dto = searchModel.getObject();
-        ObjectQuery query = new ObjectQuery();
 
-        List<ObjectFilter> filters = new ArrayList<>();
         String searchText = dto.getText();
         ShadowKindType kind = dto.getKind();
         String intent = dto.getIntent();
         String objectClass = dto.getObjectClass();
         FailedOperationTypeType failedOperatonType = dto.getFailedOperationType();
 
-        if(StringUtils.isNotEmpty(searchText)){
+        S_AtomicFilterEntry q = QueryBuilder.queryFor(ShadowType.class, getPrismContext());
+
+        if (StringUtils.isNotEmpty(searchText)) {
             PolyStringNormalizer normalizer = getPrismContext().getDefaultPolyStringNormalizer();
             String normalized = normalizer.normalize(searchText);
-
-            ObjectFilter substring = SubstringFilter.createSubstring(ShadowType.F_NAME, ShadowType.class, getPrismContext(),
-                    PolyStringNormMatchingRule.NAME, normalized);
-            filters.add(substring);
+            q = q.item(ShadowType.F_NAME).contains(normalized).matchingNorm().and();
         }
-
-        if(kind != null){
-            ObjectFilter kindFilter = EqualFilter.createEqual(ShadowType.F_KIND, ShadowType.class, getPrismContext(),
-                    null, kind);
-            filters.add(kindFilter);
+        if (kind != null) {
+            q = q.item(ShadowType.F_KIND).eq(kind).and();
         }
-
-        if(StringUtils.isNotEmpty(intent)){
-            ObjectFilter intentFilter = EqualFilter.createEqual(ShadowType.F_INTENT, ShadowType.class, getPrismContext(),
-                    null, intent);
-            filters.add(intentFilter);
+        if (StringUtils.isNotEmpty(intent)) {
+            q = q.item(ShadowType.F_INTENT).eq(kind).and();
         }
-        
         if (failedOperatonType != null){
-        	ObjectFilter failedOperationFilter = EqualFilter.createEqual(ShadowType.F_FAILED_OPERATION_TYPE, ShadowType.class, getPrismContext(),
-                    null, failedOperatonType);
-            filters.add(failedOperationFilter);
+            q = q.item(ShadowType.F_FAILED_OPERATION_TYPE).eq(failedOperatonType).and();
         }
-
-        if(StringUtils.isNotEmpty(objectClass)){
+        if (StringUtils.isNotEmpty(objectClass)) {
             QName objClass = new QName(objectClass);
-
-            for(QName q: dto.getObjectClassList()){
-                if(objectClass.equals(q.getLocalPart())){
-                    objClass = q;
+            for (QName qn: dto.getObjectClassList()) {
+                if (objectClass.equals(qn.getLocalPart())){
+                    objClass = qn;
                 }
             }
-
-            ObjectFilter objectClassFilter = EqualFilter.createEqual(ShadowType.F_OBJECT_CLASS, ShadowType.class, getPrismContext(),
-                    null, objClass);
-            filters.add(objectClassFilter);
+            q = q.item(ShadowType.F_OBJECT_CLASS).eq(objClass).and();
         }
-
-        AndFilter searchFilter;
-        if(!filters.isEmpty()){
-            searchFilter = AndFilter.createAnd(filters);
-
-            ObjectFilter resourceFilter = createResourceQueryFilter();
-            query.setFilter(resourceFilter != null ? AndFilter.createAnd(searchFilter, resourceFilter) : searchFilter);
-        } else {
-            query.setFilter(createResourceQueryFilter());
-        }
-
-        return query;
+        return appendResourceQueryFilter(q);
     }
 
     private void clearSearchPerformed(AjaxRequestTarget target){
@@ -1103,13 +1085,13 @@ public class PageAccounts extends PageAdminConfiguration {
             //owner was not found, it's possible and it's ok on unlinked accounts
         } catch (Exception ex){
             result.recordFatalError(getString("PageAccounts.message.ownerNotFound", shadowOid), ex);
-            LoggingUtils.logException(LOGGER, "Could not load owner of account with oid: " + shadowOid, ex);
+            LoggingUtils.logUnexpectedException(LOGGER, "Could not load owner of account with oid: " + shadowOid, ex);
         } finally {
             result.computeStatusIfUnknown();
         }
 
-        if(WebMiscUtil.showResultInPage(result)){
-            showResultInSession(result);
+        if(WebComponentUtil.showResultInPage(result)){
+            showResult(result, false);
         }
 
         return owner;

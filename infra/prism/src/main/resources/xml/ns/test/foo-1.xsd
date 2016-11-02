@@ -81,7 +81,7 @@
         </xsd:annotation>
         <xsd:complexType>
             <xsd:sequence>
-                <xsd:any namespace="##other" minOccurs="0" maxOccurs="unbounded" processContents="lax">
+                <xsd:any namespace="##any" minOccurs="0" maxOccurs="unbounded" processContents="lax">
                 </xsd:any>
             </xsd:sequence>
         </xsd:complexType>
@@ -100,9 +100,10 @@
             <xsd:element ref="tns:name" minOccurs="0">
             	<xsd:annotation>
             		<xsd:appinfo>
-            			<a:displayName>Name</a:displayName>
+            			<a:displayName>ObjectType.name</a:displayName>
             			<a:displayOrder>0</a:displayOrder>
             			<a:help>Short unique name of the object</a:help>
+            			<a:emphasized>true</a:emphasized>
             		</xsd:appinfo>
             	</xsd:annotation>
             </xsd:element>
@@ -110,7 +111,7 @@
             <xsd:element ref="tns:extension" minOccurs="0" maxOccurs="1">
             	<xsd:annotation>
             		<xsd:appinfo>
-            			<a:displayName>Extension</a:displayName>
+            			<a:displayName>ObjectType.extension</a:displayName>
             			<a:displayOrder>1000</a:displayOrder>
             			<a:help>Object extension contains extra properties</a:help>
             		</xsd:appinfo>
@@ -144,14 +145,21 @@
                     <xsd:element name="fullName" type="xsd:string">
                     	<xsd:annotation>
                     		<xsd:appinfo>
-                    			<a:displayName>Full Name</a:displayName>
+                    			<a:displayName>UserType.fullName</a:displayName>
                     			<a:displayOrder>10</a:displayOrder>
 		            			<a:help>User full name</a:help>
+		            			<a:emphasized>true</a:emphasized>
                     		</xsd:appinfo>
                     	</xsd:annotation>
                     </xsd:element>
                     <xsd:element name="givenName" type="xsd:string" minOccurs="0"/>
-                    <xsd:element name="familyName" type="xsd:string" minOccurs="0"/>
+                    <xsd:element name="familyName" type="xsd:string" minOccurs="0">
+                    	<xsd:annotation>
+                    		<xsd:appinfo>
+		            			<a:emphasized>true</a:emphasized>
+                    		</xsd:appinfo>
+                    	</xsd:annotation>
+                    </xsd:element>
                     <!-- Multi-valued property -->
                     <xsd:element name="additionalNames" type="xsd:string" minOccurs="0" maxOccurs="unbounded"/>
                     <xsd:element name="polyName" type="t:PolyStringType" minOccurs="0"/>
@@ -162,7 +170,7 @@
                     <xsd:element name="activation" type="tns:ActivationType" minOccurs="0">
                     	<xsd:annotation>
 		            		<xsd:appinfo>
-		            			<a:displayName>Activation</a:displayName>
+		            			<a:displayName>ActivationType.activation</a:displayName>
 		            			<a:displayOrder>1200</a:displayOrder>
 		            			<a:help>User activation properties</a:help>
 		            		</xsd:appinfo>
@@ -291,6 +299,7 @@
         </xsd:annotation>
         <xsd:sequence>
         	<xsd:element name="description" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="note" type="xsd:string" minOccurs="0"/>
         	<xsd:element name="accountConstruction" type="tns:AccountConstructionType" minOccurs="0"/>
         	<xsd:element name="activation" type="tns:ActivationType" minOccurs="0"/>
         </xsd:sequence>

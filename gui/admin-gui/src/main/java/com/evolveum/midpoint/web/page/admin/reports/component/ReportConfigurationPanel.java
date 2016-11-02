@@ -15,43 +15,29 @@
  */
 package com.evolveum.midpoint.web.page.admin.reports.component;
 
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.web.component.DateInput;
-import com.evolveum.midpoint.web.component.form.CheckFormGroup;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
 import com.evolveum.midpoint.web.component.form.DropDownFormGroup;
 import com.evolveum.midpoint.web.component.form.TextAreaFormGroup;
 import com.evolveum.midpoint.web.component.form.TextFormGroup;
-import com.evolveum.midpoint.web.component.prism.ContainerStatus;
-import com.evolveum.midpoint.web.component.prism.ObjectWrapper;
-import com.evolveum.midpoint.web.component.prism.PrismObjectPanel;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.PrismPropertyModel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
 import com.evolveum.midpoint.web.page.admin.reports.dto.ReportDto;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ExportType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportType;
-import java.util.ArrayList;
-import java.util.List;
-import org.apache.wicket.Component;
-
-import org.apache.wicket.markup.html.form.CheckBox;
 import org.apache.wicket.markup.html.form.ChoiceRenderer;
 import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
 import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.PropertyModel;
-import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author shood
  * @author lazyman
  *
  */
-public class ReportConfigurationPanel extends SimplePanel<ReportDto> {
+public class ReportConfigurationPanel extends BasePanel<ReportDto> {
 
     private static final String ID_NAME = "name";
     private static final String ID_DESCRIPTION = "description";
@@ -70,9 +56,9 @@ public class ReportConfigurationPanel extends SimplePanel<ReportDto> {
 
     public ReportConfigurationPanel(String id, IModel<ReportDto> model) {
         super(id, model);
+		initLayout();
     }
 
-    @Override
     protected void initLayout() {
         TextFormGroup name = new TextFormGroup(ID_NAME, new PropertyModel<String>(getModel(), ID_NAME),
                 createStringResource("ObjectType.name"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);
@@ -83,7 +69,7 @@ public class ReportConfigurationPanel extends SimplePanel<ReportDto> {
                 createStringResource("ObjectType.description"), ID_LABEL_SIZE, ID_INPUT_SIZE, false);
         add(description);
 
-        IModel choices = WebMiscUtil.createReadonlyModelFromEnum(ExportType.class);
+        IModel choices = WebComponentUtil.createReadonlyModelFromEnum(ExportType.class);
         IChoiceRenderer renderer = new EnumChoiceRenderer();
         DropDownFormGroup exportType = new DropDownFormGroup(ID_EXPORT_TYPE, new PropertyModel<ExportType>(getModel(), ReportDto.F_EXPORT_TYPE), choices, renderer,
                 createStringResource("ReportType.export"), ID_LABEL_SIZE, ID_INPUT_SIZE, true);

@@ -25,6 +25,7 @@ import static org.testng.AssertJUnit.assertNull;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.List;
 
 import javax.xml.namespace.QName;
 
@@ -51,7 +52,6 @@ import com.evolveum.icf.dummy.resource.DummyAccount;
 import com.evolveum.icf.dummy.resource.DummyObjectClass;
 import com.evolveum.icf.dummy.resource.DummyResource;
 import com.evolveum.icf.dummy.resource.DummySyncStyle;
-import com.evolveum.midpoint.common.InternalsConfig;
 import com.evolveum.midpoint.common.refinery.RefinedObjectClassDefinition;
 import com.evolveum.midpoint.common.refinery.RefinedResourceSchema;
 import com.evolveum.midpoint.common.refinery.ShadowDiscriminatorObjectDelta;
@@ -77,18 +77,26 @@ import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.prism.match.StringIgnoreCaseMatchingRule;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
+import com.evolveum.midpoint.prism.query.EqualFilter;
+import com.evolveum.midpoint.prism.query.ObjectFilter;
+import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.GetOperationOptions;
+import com.evolveum.midpoint.schema.SearchResultList;
 import com.evolveum.midpoint.schema.SelectorOptions;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.schema.internals.InternalMonitor;
+import com.evolveum.midpoint.schema.internals.InternalsConfig;
 import com.evolveum.midpoint.schema.processor.ResourceAttribute;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeContainer;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
+import com.evolveum.midpoint.schema.processor.ResourceSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.result.OperationResultStatus;
 import com.evolveum.midpoint.schema.util.MiscSchemaUtil;
+import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.task.api.Task;
@@ -117,6 +125,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceAttributeDefinitionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowAssociationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
@@ -256,6 +265,16 @@ public class TestVillage extends AbstractStoryTest {
 	private static final File GROUP_GOV_MONKEY_ISLAND_LDIF_FILE = new File(TEST_DIR, "group-gov-monkey-island.ldif");
 	private static final File GROUP_EXEC_MONKEY_ISLAND_LDIF_FILE = new File(TEST_DIR, "group-exec-monkey-island.ldif");
 
+	private static final String GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_NAME = "groupOfUniqueNames";
+	private static final QName GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_QNAME = new QName(MidPointConstants.NS_RI, GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_NAME);
+
+	private static final String GROUP_MEMBER_ATTRIBUTE_NAME = "uniqueMember";
+
+	private static final String GROUP_JOLLYROGERS_DN = "cn=jollyrogers,ou=groups,dc=example,dc=com";
+
+	private static final String GROUP_PROJECT_JOLLY_ROGER_ADMIN_DN = "cn=admins,ou=Jolly Roger,dc=example,dc=com";
+
+
 	protected static DummyResource dummyResourceSrc;
 	protected static DummyResourceContoller dummyResourceCtlSrc;
 	protected ResourceType resourceDummySrcType;
@@ -316,6 +335,8 @@ public class TestVillage extends AbstractStoryTest {
 		// Tasks
 		importObjectFromFile(TASK_LIVE_SYNC_DUMMY_SOURCE_FILE, initResult);
 		
+		InternalMonitor.setTracePrismObjectClone(true);
+		
 	}
 	
 	@Override
@@ -342,6 +363,96 @@ public class TestVillage extends AbstractStoryTest {
         waitForTaskStart(TASK_TRIGGER_SCANNER_OID, true);
         waitForTaskStart(TASK_VALIDITY_SCANNER_OID, true);
         waitForTaskStart(TASK_LIVE_SYNC_DUMMY_SOURCE_OID, false);
+	}
+	
+	/**
+	 * MID-3424
+	 */
+	@Test
+    public void test020ResourceOpenDjGet() throws Exception {
+		final String TEST_NAME = "test020ResourceOpenDjGet";
+        TestUtil.displayTestTile(this, TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestTrafo.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+        rememberResourceSchemaFetchCount();
+        rememberResourceSchemaParseCount();
+        rememberConnectorCapabilitiesFetchCount();
+        rememberConnectorInitializationCount();
+        rememberConnectorSchemaParseCount();
+        rememberPrismObjectCloneCount();
+        
+        // WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        modelService.getObject(ResourceType.class, RESOURCE_OPENDJ_OID, null, task, result);
+        
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        // variable number of clones because of trigger scanner task
+        assertPrismObjectCloneIncrement(2, 3);
+        
+        assertResourceSchemaFetchIncrement(0);
+        assertResourceSchemaParseCountIncrement(0);
+        assertConnectorCapabilitiesFetchIncrement(0);
+		assertConnectorInitializationCountIncrement(0);
+        assertConnectorSchemaParseIncrement(0);
+	}
+	
+	/**
+	 * MID-3424
+	 */
+	@Test
+    public void test022ResourceOpenDjRefinedSchema() throws Exception {
+		final String TEST_NAME = "test022ResourceOpenDjRefinedSchema";
+        TestUtil.displayTestTile(this, TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestTrafo.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+        PrismObject<ResourceType> resourceBefore = modelService.getObject(ResourceType.class, RESOURCE_OPENDJ_OID, null, task, result);
+        ResourceSchema resourceSchemaBefore = RefinedResourceSchema.getResourceSchema(resourceBefore, prismContext);
+        RefinedResourceSchema refinedSchemaBefore = RefinedResourceSchema.getRefinedSchema(resourceBefore);
+        
+        rememberResourceSchemaFetchCount();
+        rememberResourceSchemaParseCount();
+        rememberConnectorCapabilitiesFetchCount();
+        rememberConnectorInitializationCount();
+        rememberConnectorSchemaParseCount();
+        rememberPrismObjectCloneCount();
+        
+        // WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        long t0 = System.currentTimeMillis();
+        PrismObject<ResourceType> resourceAfter = modelService.getObject(ResourceType.class, RESOURCE_OPENDJ_OID, null, task, result);
+        long t1 = System.currentTimeMillis();
+        
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        long t2 = System.currentTimeMillis();
+        ResourceSchema resourceSchemaAfter = RefinedResourceSchema.getResourceSchema(resourceAfter, prismContext);
+        long t3 = System.currentTimeMillis();
+        RefinedResourceSchema refinedSchemaAfter = RefinedResourceSchema.getRefinedSchema(resourceAfter);
+        long t4 = System.currentTimeMillis();
+        
+        display("Times", "getObject(RESOURCE_OPENDJ_OID): "+(t1-t0)+"ms\ngetResourceSchema: "+(t3-t2)
+        		+"ms\ngetRefinedSchema: "+(t4-t3)+"ms");
+        
+        // variable number of clones: 2 or 3 because of trigger scanner task
+        assertPrismObjectCloneIncrement(2,3);
+        
+        assertResourceSchemaFetchIncrement(0);
+        assertResourceSchemaParseCountIncrement(0);
+        assertConnectorCapabilitiesFetchIncrement(0);
+		assertConnectorInitializationCountIncrement(0);
+        assertConnectorSchemaParseIncrement(0);
+        
+        assertTrue("Resource schema has changed", resourceSchemaBefore == resourceSchemaAfter );
+        assertTrue("Refined schema has changed", refinedSchemaBefore == refinedSchemaAfter );
 	}
 	
 	@Test
@@ -811,8 +922,49 @@ public class TestVillage extends AbstractStoryTest {
         assertLinks(org, 2);
         
         Entry ouEntry = openDJController.fetchAndAssertEntry("ou=Jolly Roger,dc=example,dc=com", "organizationalUnit");
-        Entry groupEntry = openDJController.fetchAndAssertEntry("cn=admins,ou=Jolly Roger,dc=example,dc=com", "groupOfUniqueNames");
+        Entry groupEntry = openDJController.fetchAndAssertEntry(GROUP_PROJECT_JOLLY_ROGER_ADMIN_DN, GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_NAME);
       //TODO: more assertions
+	}
+	
+	/**
+	 * MID-3429
+	 */
+	@Test
+    public void test310ProjectJollyRogerNestedGroup() throws Exception {
+		final String TEST_NAME = "test310ProjectJollyRogerNestedGroup";
+        TestUtil.displayTestTile(this, TEST_NAME);
+        Task task = taskManager.createTaskInstance(TestTrafo.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        
+        openDJController.addEntry("dn: "+GROUP_JOLLYROGERS_DN+"\n"+
+                                  "objectclass: "+GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_NAME+"\n"+
+        		                  "cn: jollyrogers\n"+
+        		                  GROUP_MEMBER_ATTRIBUTE_NAME+": "+GROUP_PROJECT_JOLLY_ROGER_ADMIN_DN+"\n");
+		
+        display("LDAP entries", openDJController.dumpEntries());
+        
+        ObjectQuery query = ObjectQueryUtil.createResourceAndObjectClassFilterPrefix(RESOURCE_OPENDJ_OID, GROUP_OF_UNIQUE_NAMES_OBJECTCLASS_QNAME, prismContext)
+				.and().itemWithDef(
+						new PrismPropertyDefinition<>(new QName(RESOURCE_OPENDJ_NAMESPACE, "cn"), DOMUtil.XSD_STRING, prismContext),
+						ShadowType.F_ATTRIBUTES, new QName(RESOURCE_OPENDJ_NAMESPACE, "cn")).eq("admins")
+				.build();
+
+        // WHEN
+        TestUtil.displayWhen(TEST_NAME);
+		// TODO: search for cn=admins,ou=Jolly Roger,dc=example,dc=com
+        SearchResultList<PrismObject<ShadowType>> groupShadows = modelService.searchObjects(ShadowType.class, query, null, task, result);
+        
+        // THEN
+        TestUtil.displayThen(TEST_NAME);
+        result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+        display("groupShadows", groupShadows);
+        assertEquals("Wrong number of shadows found", 1, groupShadows.size());
+        PrismObject<ShadowType> groupShadow = groupShadows.get(0);
+        List<ShadowAssociationType> associations = groupShadow.asObjectable().getAssociation();
+        // MID-3430, MID-3429
+//        assertEquals("Wrong number of associations in "+groupShadow, 1, associations.size());
 	}
 	
 	@Test

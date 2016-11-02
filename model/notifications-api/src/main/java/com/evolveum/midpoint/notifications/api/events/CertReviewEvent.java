@@ -20,10 +20,8 @@ import com.evolveum.midpoint.task.api.LightweightIdentifierGenerator;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCaseType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationDecisionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.EventCategoryType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.EventOperationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -57,7 +55,7 @@ public class CertReviewEvent extends AccessCertificationEvent {
     public Collection<AccessCertificationCaseType> getCasesWithoutResponse() {
         List<AccessCertificationCaseType> rv = new ArrayList<>();
         for (AccessCertificationCaseType aCase : cases) {
-            if (!hasResponse(aCase, getRequesteeOid(), campaign.getCurrentStageNumber())) {
+            if (!hasResponse(aCase, getRequesteeOid(), campaign.getStageNumber())) {
                 rv.add(aCase);
             }
         }

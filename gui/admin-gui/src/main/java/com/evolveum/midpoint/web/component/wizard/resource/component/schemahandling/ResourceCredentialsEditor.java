@@ -16,26 +16,35 @@
 
 package com.evolveum.midpoint.web.component.wizard.resource.component.schemahandling;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.NonEmptyModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.exception.CommonException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.web.component.form.multivalue.MultiValueTextEditPanel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.web.component.input.ObjectReferenceChoiceRenderer;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.component.wizard.WizardUtil;
 import com.evolveum.midpoint.web.component.wizard.resource.component.schemahandling.modal.MappingEditorDialog;
 import com.evolveum.midpoint.web.component.wizard.resource.dto.MappingTypeDto;
+import com.evolveum.midpoint.web.page.admin.resources.PageResourceWizard;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.markup.html.form.AjaxSubmitLink;
 import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
 import org.apache.wicket.markup.html.basic.Label;
-import org.apache.wicket.markup.html.form.*;
+import org.apache.wicket.markup.html.form.DropDownChoice;
+import org.apache.wicket.markup.html.form.EnumChoiceRenderer;
+import org.apache.wicket.markup.html.form.Form;
+import org.apache.wicket.markup.html.form.TextField;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
@@ -49,7 +58,7 @@ import java.util.Map;
 /**
  *  @author shood
  * */
-public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDefinitionType>{
+public class ResourceCredentialsEditor extends BasePanel<ResourceCredentialsDefinitionType> {
 
     private static final Trace LOGGER = TraceManager.getTrace(ResourceCredentialsEditor.class);
 
@@ -68,10 +77,11 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
     private static final String ID_T_IN = "inboundTooltip";
     private static final String ID_T_PASS_POLICY = "passwordPolicyRefTooltip";
 
-    private Map<String, String> passPolicyMap = new HashMap<>();
+    final private Map<String, String> passPolicyMap = new HashMap<>();
 
-    public ResourceCredentialsEditor(String id, IModel<ResourceCredentialsDefinitionType> model){
+    public ResourceCredentialsEditor(String id, IModel<ResourceCredentialsDefinitionType> model, PageResourceWizard parentPage) {
         super(id, model);
+		initLayout(parentPage);
     }
 
     @Override
@@ -89,14 +99,24 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
         return model;
     }
 
-    @Override
-    protected void initLayout(){
+    protected void initLayout(final PageResourceWizard parentPage) {
         DropDownChoice fetchStrategy = new DropDownChoice<>(ID_FETCH_STRATEGY,
                 new PropertyModel<AttributeFetchStrategyType>(getModel(), "password.fetchStrategy"),
-                WebMiscUtil.createReadonlyModelFromEnum(AttributeFetchStrategyType.class),
+                WebComponentUtil.createReadonlyModelFromEnum(AttributeFetchStrategyType.class),
                 new EnumChoiceRenderer<AttributeFetchStrategyType>(this));
+		parentPage.addEditingEnabledBehavior(fetchStrategy);
         add(fetchStrategy);
 
+		VisibleEnableBehaviour showIfEditingOrOutboundExists = new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				ResourceCredentialsDefinitionType credentials = getModel().getObject();
+				if (credentials == null || credentials.getPassword() == null) {
+					return !parentPage.isReadOnly();
+				}
+				return !parentPage.isReadOnly() || credentials.getPassword().getOutbound() != null;
+			}
+		};
         TextField outboundLabel = new TextField<>(ID_OUTBOUND_LABEL, new AbstractReadOnlyModel<String>() {
 
             @Override
@@ -113,6 +133,7 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
         });
         outboundLabel.setEnabled(false);
         outboundLabel.setOutputMarkupId(true);
+		outboundLabel.add(showIfEditingOrOutboundExists);
         add(outboundLabel);
 
         AjaxSubmitLink outbound = new AjaxSubmitLink(ID_OUTBOUND_BUTTON) {
@@ -123,10 +144,11 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
             }
         };
         outbound.setOutputMarkupId(true);
+		outbound.add(showIfEditingOrOutboundExists);
         add(outbound);
 
         MultiValueTextEditPanel inbound = new MultiValueTextEditPanel<MappingType>(ID_INBOUND,
-                new PropertyModel<List<MappingType>>(getModel(), "password.inbound"), false){
+                new PropertyModel<List<MappingType>>(getModel(), "password.inbound"), null, false, true, parentPage.getReadOnlyModel()) {
 
             @Override
             protected IModel<String> createTextModel(final IModel<MappingType> model) {
@@ -159,20 +181,11 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
 
                     @Override
                     public List<ObjectReferenceType> getObject() {
-                        return createPasswordPolicyList();
+                    	return WebModelServiceUtils.createObjectReferenceList(ValuePolicyType.class, getPageBase(), passPolicyMap);
+                       
                     }
-                }, new IChoiceRenderer<ObjectReferenceType>() {
-
-            @Override
-            public Object getDisplayValue(ObjectReferenceType object) {
-                return passPolicyMap.get(object.getOid());
-            }
-
-            @Override
-            public String getIdValue(ObjectReferenceType object, int index) {
-                return Integer.toString(index);
-            }
-        });
+                }, new ObjectReferenceChoiceRenderer(passPolicyMap));
+		parentPage.addEditingEnabledBehavior(passwordPolicy);
         add(passwordPolicy);
 
         Label fetchTooltip = new Label(ID_T_FETCH);
@@ -191,11 +204,11 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
         passPolicyTooltip.add(new InfoTooltipBehavior());
         add(passPolicyTooltip);
 
-        initModals();
+        initModals(parentPage.getReadOnlyModel());
     }
 
-    private void initModals(){
-        ModalWindow inboundEditor = new MappingEditorDialog(ID_MODAL_INBOUND, null){
+    private void initModals(NonEmptyModel<Boolean> readOnlyModel){
+        ModalWindow inboundEditor = new MappingEditorDialog(ID_MODAL_INBOUND, null, readOnlyModel) {
 
             @Override
             public void updateComponents(AjaxRequestTarget target) {
@@ -204,7 +217,7 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
         };
         add(inboundEditor);
 
-        ModalWindow outboundEditor = new MappingEditorDialog(ID_MODAL_OUTBOUND, null){
+        ModalWindow outboundEditor = new MappingEditorDialog(ID_MODAL_OUTBOUND, null, readOnlyModel) {
 
             @Override
             public void updateComponents(AjaxRequestTarget target) {
@@ -224,9 +237,9 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
         try{
             policies = getPageBase().getModelService().searchObjects(ValuePolicyType.class, new ObjectQuery(), null, task, result);
             result.recomputeStatus();
-        } catch (Exception e){
+        } catch (CommonException |RuntimeException e) {
             result.recordFatalError("Couldn't load password policies.", e);
-            LoggingUtils.logException(LOGGER, "Couldn't load password policies", e);
+            LoggingUtils.logUnexpectedException(LOGGER, "Couldn't load password policies", e);
         }
 
         // TODO - show error somehow
@@ -238,7 +251,7 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
             ObjectReferenceType ref;
 
             for(PrismObject<ValuePolicyType> policy: policies){
-                passPolicyMap.put(policy.getOid(), WebMiscUtil.getName(policy));
+                passPolicyMap.put(policy.getOid(), WebComponentUtil.getName(policy));
                 ref = new ObjectReferenceType();
                 ref.setType(ValuePolicyType.COMPLEX_TYPE);
                 ref.setOid(policy.getOid());
@@ -257,7 +270,7 @@ public class ResourceCredentialsEditor extends SimplePanel<ResourceCredentialsDe
 
     private void inboundEditPerformed(AjaxRequestTarget target, MappingType mapping){
         MappingEditorDialog window = (MappingEditorDialog) get(ID_MODAL_INBOUND);
-        window.updateModel(target, mapping, true);
+        window.updateModel(target, mapping, false);
         window.show(target);
     }
 }

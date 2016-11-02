@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,6 @@ import com.evolveum.midpoint.util.exception.CommunicationException;
 import com.evolveum.midpoint.util.exception.ConfigurationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensElementContextType;
-import com.evolveum.midpoint.xml.ns._public.model.model_context_3.LensObjectDeltaOperationType;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
 import org.apache.commons.lang.StringUtils;
@@ -35,7 +33,6 @@ import org.apache.commons.lang.Validate;
 
 import com.evolveum.midpoint.common.crypto.CryptoUtil;
 import com.evolveum.midpoint.model.api.context.ModelElementContext;
-import com.evolveum.midpoint.model.api.context.SynchronizationPolicyDecision;
 import com.evolveum.midpoint.model.common.expression.ObjectDeltaObject;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
@@ -43,7 +40,6 @@ import com.evolveum.midpoint.prism.PrismObjectDefinition;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.prism.delta.PropertyDelta;
 import com.evolveum.midpoint.schema.util.ShadowUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 
@@ -122,6 +118,10 @@ public abstract class LensElementContext<O extends ObjectType> implements ModelE
 	@Override
     public Class<O> getObjectTypeClass() {
 		return objectTypeClass;
+	}
+	
+	public boolean canRepresent(Class type) {
+		return type.isAssignableFrom(objectTypeClass);
 	}
 	
 	public PrismContext getPrismContext() {
@@ -265,6 +265,16 @@ public abstract class LensElementContext<O extends ObjectType> implements ModelE
 		return false;
 	}
 
+	public SimpleOperationName getOperation() {
+		if (isAdd()) {
+			return SimpleOperationName.ADD;
+		}
+		if (isDelete()) {
+			return SimpleOperationName.DELETE;
+		}
+		return SimpleOperationName.MODIFY;
+	}
+	
     @Override
 	public List<LensObjectDeltaOperation<O>> getExecutedDeltas() {
 		return executedDeltas;

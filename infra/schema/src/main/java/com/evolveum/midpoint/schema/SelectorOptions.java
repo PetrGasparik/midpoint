@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,15 +28,14 @@ import javax.xml.namespace.QName;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.path.ItemPathSegment;
 import com.evolveum.midpoint.prism.path.NameItemPathSegment;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.LookupTableType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.TaskType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 
 /**
  * @author semancik
  *
  */
-public class SelectorOptions<T> implements Serializable {
+public class SelectorOptions<T> implements Serializable, DebugDumpable {
 	
 	private ObjectSelector selector;
 	private T options;
@@ -57,11 +56,15 @@ public class SelectorOptions<T> implements Serializable {
 	public static <T> SelectorOptions<T> create(ItemPath path, T options) {
 		return new SelectorOptions<T>(new ObjectSelector(path), options);
 	}
-	
+
 	public static <T> SelectorOptions<T> create(QName pathQName, T options) {
 		return new SelectorOptions<T>(new ObjectSelector(new ItemPath(pathQName)), options);
 	}
-		
+
+	public static <T> SelectorOptions<T> create(T options) {
+		return new SelectorOptions<T>(options);
+	}
+
 	public static <T> Collection<SelectorOptions<T>> createCollection(ItemPath path, T options) {
 		Collection<SelectorOptions<T>> optionsCollection = new ArrayList<SelectorOptions<T>>(1);
 		optionsCollection.add(create(path, options));
@@ -95,7 +98,7 @@ public class SelectorOptions<T> implements Serializable {
 		}
 		return optionsCollection;
 	}
-    //endregion
+	//endregion
 
     //region Simple getters
     public ObjectSelector getSelector() {
@@ -143,7 +146,9 @@ public class SelectorOptions<T> implements Serializable {
             new ItemPath(TaskType.F_SUBTASK),
             new ItemPath(TaskType.F_NODE_AS_OBSERVED),
             new ItemPath(TaskType.F_NEXT_RUN_START_TIMESTAMP),
-            new ItemPath(LookupTableType.F_ROW)));
+            new ItemPath(TaskType.F_WORKFLOW_CONTEXT, WfContextType.F_WORK_ITEM),
+            new ItemPath(LookupTableType.F_ROW),
+            new ItemPath(AccessCertificationCampaignType.F_CASE)));
 
     public static boolean hasToLoadPath(ItemPath path, Collection<SelectorOptions<GetOperationOptions>> options) {
         List<SelectorOptions<GetOperationOptions>> retrieveOptions = filterRetrieveOptions(options);
@@ -274,5 +279,16 @@ public class SelectorOptions<T> implements Serializable {
 	public String toString() {
 		return "ObjectOperationOptions(" + selector + ": " + options + ")";
 	}
-    //endregion
+
+	@Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		return toString();
+	}
+
+	//endregion
 }

@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
+import com.evolveum.midpoint.prism.*;
 import org.apache.commons.lang.Validate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,11 +33,6 @@ import com.evolveum.midpoint.model.common.expression.ExpressionFactory;
 import com.evolveum.midpoint.model.common.expression.ExpressionUtil;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
 import com.evolveum.midpoint.model.impl.util.Utils;
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
@@ -62,6 +59,8 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
 import com.evolveum.prism.xml.ns._public.query_3.PagingType;
+import java.util.HashSet;
+import java.util.Set;
 
 @Component
 public class CorrelationConfirmationEvaluator {
@@ -132,6 +131,14 @@ public class CorrelationConfirmationEvaluator {
 					"SYNCHRONIZATION: CORRELATION: expression for {} returned {} users: {}",
 					new Object[] { currentShadow, users.size(),
 							PrettyPrinter.prettyPrint(users, 3) });
+			if (users.size() > 1) {
+                    // remove duplicates
+				Set<PrismObject<F>> usersWithoutDups = new HashSet<>();
+				usersWithoutDups.addAll(users);
+				users.clear();
+				users.addAll(usersWithoutDups);
+				LOGGER.debug("SYNCHRONIZATION: CORRELATION: found {} users without duplicates", users.size());
+			}
 		}
 		return users;
 	}
@@ -147,10 +154,10 @@ public class CorrelationConfirmationEvaluator {
 		
 		ExpressionType condition = conditionalFilter.getCondition();
 		ExpressionVariables variables = Utils.getDefaultExpressionVariables(null,currentShadow, resourceType, configurationType);
-		ItemDefinition outputDefinition = new PrismPropertyDefinition(
+		ItemDefinition outputDefinition = new PrismPropertyDefinitionImpl(
 				ExpressionConstants.OUTPUT_ELMENT_NAME, DOMUtil.XSD_BOOLEAN,
 				prismContext);
-		PrismPropertyValue<Boolean> satisfy = ExpressionUtil.evaluateExpression(variables,
+		PrismPropertyValue<Boolean> satisfy = (PrismPropertyValue) ExpressionUtil.evaluateExpression(variables,
 				outputDefinition, condition, expressionFactory, shortDesc, task, parentResult);
 		if (satisfy.getValue() == null) {
 			return false;
@@ -379,13 +386,14 @@ private <F extends FocusType> boolean matchUserCorrelationRule(Class<F> focusTyp
 		ExpressionVariables variables = Utils.getDefaultExpressionVariables(user, shadow, resource, configuration);
 		String shortDesc = "confirmation expression for "+resource.asPrismObject();
 		
-		PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinition<>(ExpressionConstants.OUTPUT_ELMENT_NAME, 
+		PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinitionImpl<>(ExpressionConstants.OUTPUT_ELMENT_NAME,
 				DOMUtil.XSD_BOOLEAN, prismContext);
 		Expression<PrismPropertyValue<Boolean>,PrismPropertyDefinition<Boolean>> expression = expressionFactory.makeExpression(expressionType, 
 				outputDefinition, shortDesc, task, result);
 
 		ExpressionEvaluationContext params = new ExpressionEvaluationContext(null, variables, shortDesc, task, result);
-		PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> outputTriple = expression.evaluate(params);
+		PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> outputTriple = ModelExpressionThreadLocalHolder
+				.evaluateExpressionInContext(expression, params, task, result);
 		Collection<PrismPropertyValue<Boolean>> nonNegativeValues = outputTriple.getNonNegativeValues();
 		if (nonNegativeValues == null || nonNegativeValues.isEmpty()) {
 			throw new ExpressionEvaluationException("Expression returned no value ("+nonNegativeValues.size()+") in "+shortDesc);

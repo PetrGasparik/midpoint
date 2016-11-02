@@ -34,8 +34,7 @@ import org.springframework.stereotype.Component;
 import com.evolveum.midpoint.notifications.api.NotificationManager;
 import com.evolveum.midpoint.notifications.api.transports.Message;
 import com.evolveum.midpoint.notifications.api.transports.Transport;
-import com.evolveum.midpoint.notifications.impl.NotificationsUtil;
-import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.notifications.impl.NotificationFuctionsImpl;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
 import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.repo.api.RepositoryService;
@@ -85,8 +84,26 @@ public class MailTransport implements Transport {
         result.addCollectionOfSerializablesAsParam("mailMessage recipient(s)", mailMessage.getTo());
         result.addParam("mailMessage subject", mailMessage.getSubject());
 
-        SystemConfigurationType systemConfiguration = NotificationsUtil.getSystemConfiguration(cacheRepositoryService, new OperationResult("dummy"));
-        if (systemConfiguration == null || systemConfiguration.getNotificationConfiguration() == null
+        SystemConfigurationType systemConfiguration = NotificationFuctionsImpl.getSystemConfiguration(cacheRepositoryService, new OperationResult("dummy"));
+        
+//        if (systemConfiguration == null) {
+//        	String msg = "No notifications are configured. Mail notification to " + mailMessage.getTo() + " will not be sent.";
+//        	 LOGGER.warn(msg) ;
+//             result.recordWarning(msg);
+//             return;
+//        }
+//        
+//        MailConfigurationType mailConfigurationType = null;
+//        SecurityPolicyType securityPolicyType = NotificationFuctionsImpl.getSecurityPolicyConfiguration(systemConfiguration.getGlobalSecurityPolicyRef(), cacheRepositoryService, result);
+//        if (securityPolicyType != null && securityPolicyType.getAuthentication() != null && securityPolicyType.getAuthentication().getMailAuthentication() != null) {
+//        	for (MailAuthenticationPolicyType mailAuthenticationPolicy : securityPolicyType.getAuthentication().getMailAuthentication()) {
+//        		if (mailAuthenticationPolicy.getNotificationConfiguration() != null ){
+//        			mailConfigurationType = mailAuthenticationPolicy.getNotificationConfiguration().getMail();
+//        		}
+//        	}
+//        }
+        
+        if (systemConfiguration == null  || systemConfiguration.getNotificationConfiguration() == null
                 || systemConfiguration.getNotificationConfiguration().getMail() == null) {
             String msg = "No notifications are configured. Mail notification to " + mailMessage.getTo() + " will not be sent.";
             LOGGER.warn(msg) ;
@@ -94,7 +111,9 @@ public class MailTransport implements Transport {
             return;
         }
 
-        MailConfigurationType mailConfigurationType = systemConfiguration.getNotificationConfiguration().getMail();
+//		if (mailConfigurationType == null) {
+			MailConfigurationType mailConfigurationType = systemConfiguration.getNotificationConfiguration().getMail();
+//		}
         String redirectToFile = mailConfigurationType.getRedirectToFile();
         if (redirectToFile != null) {
             try {
@@ -133,11 +152,20 @@ public class MailTransport implements Transport {
             MailTransportSecurityType mailTransportSecurityType = mailServerConfigurationType.getTransportSecurity();
 
             boolean sslEnabled = false, starttlsEnable = false, starttlsRequired = false;
-            switch (mailTransportSecurityType) {
-                case STARTTLS_ENABLED: starttlsEnable = true; break;
-                case STARTTLS_REQUIRED: starttlsEnable = true; starttlsRequired = true; break;
-                case SSL: sslEnabled = true; break;
-            }
+			if (mailTransportSecurityType != null) {
+				switch (mailTransportSecurityType) {
+					case STARTTLS_ENABLED:
+						starttlsEnable = true;
+						break;
+					case STARTTLS_REQUIRED:
+						starttlsEnable = true;
+						starttlsRequired = true;
+						break;
+					case SSL:
+						sslEnabled = true;
+						break;
+				}
+			}
             properties.put("mail.smtp.ssl.enable", "" + sslEnabled);
             properties.put("mail.smtp.starttls.enable", "" + starttlsEnable);
             properties.put("mail.smtp.starttls.required", "" + starttlsRequired);

@@ -65,7 +65,7 @@ public class AccountOperationListener implements ResourceOperationListener {
     private transient RepositoryService cacheRepositoryService;
 
     @Autowired
-    private NotificationsUtil notificationsUtil;
+    private NotificationFuctionsImpl notificationsUtil;
 
     @PostConstruct
     public void init() {
@@ -180,9 +180,11 @@ public class AccountOperationListener implements ResourceOperationListener {
             LOGGER.warn("No owner for task " + task + ", therefore no requester will be set for event " + event.getId());
         }
 
-        if (task != null) {
+        if (task != null && task.getChannel() != null) {
             event.setChannel(task.getChannel());
-        }
+        } else if (operationDescription.getSourceChannel() != null) {
+			event.setChannel(operationDescription.getSourceChannel());
+		}
 
         return event;
     }

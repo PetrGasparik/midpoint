@@ -15,35 +15,8 @@
  */
 package com.evolveum.midpoint.web.page.admin.reports;
 
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.security.api.AuthorizationConstants;
-import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.Holder;
-import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.logging.Trace;
-import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.application.AuthorizationAction;
-import com.evolveum.midpoint.web.application.PageDescriptor;
-import com.evolveum.midpoint.web.component.AjaxSubmitButton;
-import com.evolveum.midpoint.web.component.TabbedPanel;
-import com.evolveum.midpoint.web.component.message.OpResult;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.PrismPropertyModel;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.web.page.admin.configuration.PageAdminConfiguration;
-import com.evolveum.midpoint.web.page.admin.reports.component.AceEditorPanel;
-import com.evolveum.midpoint.web.page.admin.reports.component.JasperReportConfigurationPanel;
-import com.evolveum.midpoint.web.page.admin.reports.component.ReportConfigurationPanel;
-import com.evolveum.midpoint.web.page.admin.reports.dto.ReportDto;
-import com.evolveum.midpoint.web.page.error.PageError;
-import com.evolveum.midpoint.web.util.Base64Model;
-import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportType;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.wicket.RestartResponseException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
@@ -59,9 +32,34 @@ import org.apache.wicket.validation.IValidatable;
 import org.apache.wicket.validation.IValidator;
 import org.apache.wicket.validation.RawValidationError;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import com.evolveum.midpoint.gui.api.component.result.OpResult;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.gui.api.util.WebModelServiceUtils;
+import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.schema.result.OperationResult;
+import com.evolveum.midpoint.security.api.AuthorizationConstants;
+import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.Holder;
+import com.evolveum.midpoint.util.exception.SchemaException;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.web.application.AuthorizationAction;
+import com.evolveum.midpoint.web.application.PageDescriptor;
+import com.evolveum.midpoint.web.component.AjaxSubmitButton;
+import com.evolveum.midpoint.web.component.TabbedPanel;
+import com.evolveum.midpoint.web.page.admin.configuration.PageAdminConfiguration;
+import com.evolveum.midpoint.web.page.admin.reports.component.AceEditorPanel;
+import com.evolveum.midpoint.web.page.admin.reports.component.JasperReportConfigurationPanel;
+import com.evolveum.midpoint.web.page.admin.reports.component.ReportConfigurationPanel;
+import com.evolveum.midpoint.web.page.admin.reports.dto.ReportDto;
+import com.evolveum.midpoint.web.page.error.PageError;
+import com.evolveum.midpoint.web.util.Base64Model;
+import com.evolveum.midpoint.web.util.OnePageParameterEncoder;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ReportType;
 
 /**
  * @author shood
@@ -73,7 +71,7 @@ import java.util.List;
         @AuthorizationAction(actionUri = AuthorizationConstants.AUTZ_UI_REPORT_URL,
                 label = "PageReport.auth.report.label",
                 description = "PageReport.auth.report.description")})
-public class PageReport<T extends Serializable> extends PageAdminReports {
+public class PageReport extends PageAdminReports {
 
     private static Trace LOGGER = TraceManager.getTrace(PageReport.class);
 
@@ -119,7 +117,7 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
 
         Task task = createSimpleTask(OPERATION_LOAD_REPORT);
         OperationResult result = task.getResult();
-        PrismObject<ReportType> prismReport = WebModelUtils.loadObject(ReportType.class, reportOid.toString(), 
+        PrismObject<ReportType> prismReport = WebModelServiceUtils.loadObject(ReportType.class, reportOid.toString(), 
         		this, task, result);
         
         if (prismReport == null) {
@@ -218,7 +216,7 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
 
                 OpResult opResult = null;
                 try {
-                    validateObject(value, reportHolder, true, result);
+                    validateObject(value, reportHolder, PrismContext.LANG_XML, true, result);
 
                     if(!result.isAcceptable()){
                         result.recordFatalError("Could not validate object", result.getCause());
@@ -263,12 +261,12 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
                 Holder<PrismObject<ReportType>> reportHolder = new Holder<>(null);
 
                 try {
-                    validateObject(object, reportHolder, true, result);
+                    validateObject(object, reportHolder, PrismContext.LANG_XML, true, result);
                     model.getObject().setObject(reportHolder.getValue());
                 } catch (Exception e){
                     LOGGER.error("Could not set object. Validation problem occured." + result.getMessage());
                     result.recordFatalError("Could not set object. Validation problem occured,", e);
-                    showResultInSession(result);
+                    showResult(result, "Could not set object. Validation problem occured.");
                 }
             }
 
@@ -321,7 +319,7 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
 				delta = ObjectDelta.createAddDelta(newReport);
 				delta.setPrismContext(getPrismContext());
 			} else {
-				PrismObject<ReportType> oldReport = WebModelUtils.loadObject(ReportType.class,
+				PrismObject<ReportType> oldReport = WebModelServiceUtils.loadObject(ReportType.class,
 						newReport.getOid(), this, task, result);
 
 				if (oldReport != null) {
@@ -330,17 +328,19 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
 			}
 			if (delta != null) {
                             getPrismContext().adopt(delta);
-                            getModelService().executeChanges(WebMiscUtil.createDeltaCollection(delta), null, task, result);
+                            getModelService().executeChanges(WebComponentUtil.createDeltaCollection(delta), null, task, result);
 			}
+			
         } catch (Exception e) {
             result.recordFatalError("Couldn't save report.", e);
+           
         } finally {
             result.computeStatusIfUnknown();
         }
 
-        if (WebMiscUtil.isSuccessOrHandledError(result)) {
-            showResultInSession(result);
-            setResponsePage(PageReports.class);
+        if (WebComponentUtil.isSuccessOrHandledError(result)) {
+            showResult(result);
+            redirectBack();
         } else {
             showResult(result);
             target.add(getFeedbackPanel());
@@ -348,6 +348,6 @@ public class PageReport<T extends Serializable> extends PageAdminReports {
     }
 
     protected void onCancelPerformed(AjaxRequestTarget target) {
-        setResponsePage(PageReports.class);
+        redirectBack();
     }
 }

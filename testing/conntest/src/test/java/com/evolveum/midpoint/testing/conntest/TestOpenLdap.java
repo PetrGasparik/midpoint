@@ -96,6 +96,17 @@ public class TestOpenLdap extends AbstractLdapConnTest {
 	}
 	
 	@Override
+	protected String getPeopleLdapSuffix() {
+		return "ou=people,"+getLdapSuffix();
+	}
+
+	@Override
+	protected String getGroupsLdapSuffix() {
+		return "ou=groups,"+getLdapSuffix();
+	}
+
+	
+	@Override
 	protected String getLdapGroupObjectClass() {
 		return "groupOfNames";
 	}

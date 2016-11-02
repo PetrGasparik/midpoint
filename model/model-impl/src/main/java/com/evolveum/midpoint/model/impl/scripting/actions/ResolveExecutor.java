@@ -21,19 +21,13 @@ import com.evolveum.midpoint.model.impl.scripting.ExecutionContext;
 import com.evolveum.midpoint.model.api.ScriptExecutionException;
 import com.evolveum.midpoint.prism.Item;
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.PrismReference;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
-import com.evolveum.midpoint.prism.delta.ObjectDelta;
-import com.evolveum.midpoint.schema.DeltaConvertor;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.model.scripting_3.ActionExpressionType;
-import com.evolveum.prism.xml.ns._public.types_3.ChangeTypeType;
-import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
 
 import org.springframework.stereotype.Component;
 
@@ -84,31 +78,7 @@ public class ResolveExecutor extends BaseActionExecutor {
             } else {
                 throw new ScriptExecutionException("Item could not be resolved, because it is not a PrismReference: " + item.toString());
             }
-        }
+		}
         return output;
-    }
-
-    private ObjectDelta createDelta(ObjectType objectType, Data deltaData) throws ScriptExecutionException {
-        if (deltaData.getData().size() != 1) {
-            throw new ScriptExecutionException("Expected exactly one delta to apply, found "  + deltaData.getData().size() + " instead.");
-        }
-        ObjectDeltaType deltaType = ((PrismProperty<ObjectDeltaType>) deltaData.getData().get(0)).getRealValue();
-        if (deltaType.getChangeType() == null) {
-            deltaType.setChangeType(ChangeTypeType.MODIFY);
-        }
-        if (deltaType.getOid() == null && deltaType.getChangeType() != ChangeTypeType.ADD) {
-            deltaType.setOid(objectType.getOid());
-        }
-        if (deltaType.getObjectType() == null) {
-            if (objectType.asPrismObject().getDefinition() == null) {
-                throw new ScriptExecutionException("No definition for prism object " + objectType);
-            }
-            deltaType.setObjectType(objectType.asPrismObject().getDefinition().getTypeName());
-        }
-        try {
-            return DeltaConvertor.createObjectDelta(deltaType, prismContext);
-        } catch (SchemaException e) {
-            throw new ScriptExecutionException("Couldn't process delta due to schema exception", e);
-        }
     }
 }

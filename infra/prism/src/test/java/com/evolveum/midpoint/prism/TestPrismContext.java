@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import com.evolveum.midpoint.prism.foo.AccountConstructionType;
 import com.evolveum.midpoint.prism.foo.AccountType;
 import com.evolveum.midpoint.prism.foo.ActivationType;
 import com.evolveum.midpoint.prism.foo.AssignmentType;
-import com.evolveum.midpoint.prism.foo.ObjectFactory;
 import com.evolveum.midpoint.prism.foo.UserType;
 import com.evolveum.midpoint.prism.schema.PrismSchema;
 import com.evolveum.midpoint.prism.schema.SchemaDescription;
@@ -67,7 +66,7 @@ public class TestPrismContext {
 		System.out.println("===[ testPrefixMapper ]===");
 		
 		// WHEN
-		PrismContext prismContext = constructInitializedPrismContext();
+		PrismContextImpl prismContext = constructInitializedPrismContext();
 		
 		// THEN
 		assertNotNull("No prism context", prismContext);
@@ -160,12 +159,16 @@ public class TestPrismContext {
 
 		assertEquals("Wrong compile-time class in user definition", UserType.class, userDefinition.getCompileTimeClass());
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_NAME_QNAME, PolyStringType.COMPLEX_TYPE, 0, 1);
-		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, USER_NAME_QNAME, "Name");
+		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, USER_NAME_QNAME, "ObjectType.name");
 		PrismAsserts.assertItemDefinitionDisplayOrder(userDefinition, USER_NAME_QNAME, 0);
+		PrismAsserts.assertEmphasized(userDefinition, USER_NAME_QNAME, true);
 		PrismAsserts.assertItemDefinitionHelp(userDefinition, USER_NAME_QNAME, "Short unique name of the object");
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_DESCRIPTION_QNAME, DOMUtil.XSD_STRING, 0, 1);
+		PrismAsserts.assertEmphasized(userDefinition, USER_DESCRIPTION_QNAME, false);
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_FULLNAME_QNAME, DOMUtil.XSD_STRING, 1, 1);
+		PrismAsserts.assertEmphasized(userDefinition, USER_FULLNAME_QNAME, true);
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_GIVENNAME_QNAME, DOMUtil.XSD_STRING, 0, 1);
+		PrismAsserts.assertEmphasized(userDefinition, USER_GIVENNAME_QNAME, false);
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_FAMILYNAME_QNAME, DOMUtil.XSD_STRING, 0, 1);
 		PrismAsserts.assertPropertyDefinition(userDefinition, USER_ADDITIONALNAMES_QNAME, DOMUtil.XSD_STRING, 0, -1);
 		assertFalse("User definition is marked as runtime", userDefinition.isRuntimeSchema());
@@ -174,7 +177,7 @@ public class TestPrismContext {
 		PrismAsserts.assertDefinition(extensionContainer, USER_EXTENSION_QNAME, DOMUtil.XSD_ANY, 0, 1);
 		assertTrue("Extension is not runtime", extensionContainer.isRuntimeSchema());
 		assertTrue("Extension is not empty", extensionContainer.getDefinitions().isEmpty());
-		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, USER_EXTENSION_QNAME, "Extension");
+		PrismAsserts.assertItemDefinitionDisplayName(userDefinition, USER_EXTENSION_QNAME, "ObjectType.extension");
 		PrismAsserts.assertItemDefinitionDisplayOrder(userDefinition, USER_EXTENSION_QNAME, 1000);
 		PrismAsserts.assertItemDefinitionHelp(userDefinition, USER_EXTENSION_QNAME, "Object extension contains extra properties");
 		
@@ -191,7 +194,7 @@ public class TestPrismContext {
 		PrismAsserts.assertDefinition(assignmentContainer, USER_ASSIGNMENT_QNAME, ASSIGNMENT_TYPE_QNAME, 0, -1);
 		assertFalse("Assignment is runtime", assignmentContainer.isRuntimeSchema());
 		assertEquals("Wrong compile time class for assignment container", AssignmentType.class, assignmentContainer.getCompileTimeClass());
-		assertEquals("Assignment size", 3, assignmentContainer.getDefinitions().size());
+		assertEquals("Assignment size", 4, assignmentContainer.getDefinitions().size());
 		PrismAsserts.assertPropertyDefinition(assignmentContainer, USER_DESCRIPTION_QNAME, DOMUtil.XSD_STRING, 0, 1);
 		PrismAsserts.assertPropertyDefinition(assignmentContainer, USER_ACCOUNT_CONSTRUCTION_QNAME, ACCOUNT_CONSTRUCTION_TYPE_QNAME, 0, 1);
 		

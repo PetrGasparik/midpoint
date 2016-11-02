@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,7 @@ package com.evolveum.icf.dummy.resource;
 
 import java.io.FileNotFoundException;
 import java.net.ConnectException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
-import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
 
 /**
@@ -55,7 +47,8 @@ public class DummyAccount extends DummyObject {
 		return password;
 	}
 
-	public void setPassword(String password) {
+	public void setPassword(String password) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkModifyBreak();
 		this.password = password;
 	}
 	
@@ -63,13 +56,19 @@ public class DummyAccount extends DummyObject {
 		return lockout;
 	}
 
-	public void setLockout(boolean lockout) {
+	public void setLockout(boolean lockout) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkModifyBreak();
 		this.lockout = lockout;
 	}
 
 	@Override
-	protected DummyObjectClass getObjectClass() throws ConnectException, FileNotFoundException {
+	protected DummyObjectClass getObjectClass() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return resource.getAccountObjectClass();
+	}
+
+	@Override
+	protected DummyObjectClass getObjectClassNoExceptions() {
+		return resource.getAccountObjectClassNoExceptions();
 	}
 
 	@Override
@@ -89,8 +88,9 @@ public class DummyAccount extends DummyObject {
 
 	@Override
 	protected void extendDebugDump(StringBuilder sb, int indent) {
+		sb.append("\n");
 		DebugUtil.debugDumpWithLabelToStringLn(sb, "Password", password, indent + 1);
-		DebugUtil.debugDumpWithLabelToStringLn(sb, "Lockout", lockout, indent + 1);
+		DebugUtil.debugDumpWithLabelToString(sb, "Lockout", lockout, indent + 1);
 	}
 	
 }

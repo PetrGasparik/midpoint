@@ -15,76 +15,104 @@
  */
 package com.evolveum.midpoint.web.component.wizard.resource.dto;
 
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDefinitionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceAttributeDefinitionType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectAssociationType;
+import org.jetbrains.annotations.NotNull;
 
 import javax.xml.namespace.QName;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  *  @author shood
  * */
-public class SchemaHandlingDto implements Serializable{
+public class SchemaHandlingDto implements Serializable {
 
-    public static final String F_OBJECT_TYPES = "objectTypeList";
-    public static final String F_SELECTED = "selected";
-    public static final String F_SELECTED_OBJECT_CLASS = "selectedObjectClass";
+    public static final String F_OBJECT_TYPE_DTO_LIST = "objectTypeDtoList";
+    public static final String F_SELECTED_OBJECT_TYPE_DTO = "selectedObjectTypeDto";
+    public static final String F_SELECTED_ATTRIBUTE = "selectedAttribute";
+    public static final String F_SELECTED_ASSOCIATION = "selectedAssociation";
+    public static final String F_OBJECT_CLASS_NAME = "objectClassName";
 
-    private List<ResourceObjectTypeDefinitionTypeDto> objectTypeList = new ArrayList<>();
-    private ResourceObjectTypeDefinitionType selected;
-    private String selectedObjectClass;
-    private List<QName> objectClassList;
+    @NotNull private final List<ResourceObjectTypeDefinitionTypeDto> objectTypeDtoList;
+	@NotNull private final List<QName> objectClassList;
+    private ResourceObjectTypeDefinitionTypeDto selectedObjectTypeDto;
+    private String objectClassName;
+	private ResourceAttributeDefinitionType selectedAttribute;
+	private ResourceObjectAssociationType selectedAssociation;
 
-    public List<ResourceObjectTypeDefinitionTypeDto> getObjectTypeList() {
-        return objectTypeList;
+	public SchemaHandlingDto(@NotNull List<ResourceObjectTypeDefinitionTypeDto> list, @NotNull List<QName> objectClasses) {
+		this.objectTypeDtoList = list;
+		this.objectClassList = objectClasses;
+	}
+
+	@NotNull
+	public List<ResourceObjectTypeDefinitionTypeDto> getObjectTypeDtoList() {
+        return objectTypeDtoList;
     }
 
-    public void setObjectTypeList(List<ResourceObjectTypeDefinitionTypeDto> objectTypeList) {
-        this.objectTypeList = objectTypeList;
+    public ResourceObjectTypeDefinitionTypeDto getSelectedObjectTypeDto() {
+        return selectedObjectTypeDto;
     }
 
-    public ResourceObjectTypeDefinitionType getSelected() {
-        return selected;
+	public void setSelectedObjectTypeDto(ResourceObjectTypeDefinitionTypeDto selectedObjectTypeDto) {
+        this.selectedObjectTypeDto = selectedObjectTypeDto;
+		setObjectClassNameFrom(selectedObjectTypeDto);
     }
 
-    public void setSelected(ResourceObjectTypeDefinitionType selected) {
-        this.selected = selected;
+	private void setObjectClassNameFrom(ResourceObjectTypeDefinitionTypeDto objectType) {
+		if (objectType == null) {
+			objectClassName = null;
+		} else {
+			QName oc = objectType.getObjectType().getObjectClass();
+			objectClassName = oc != null ? oc.getLocalPart() : null;
+		}
+	}
 
-        if(selected == null){
-            selectedObjectClass = null;
-        } else if(selected.getObjectClass() != null){
-            selectedObjectClass = selected.getObjectClass().getLocalPart();
-        } else if(selected.getObjectClass() == null){
-            selectedObjectClass = null;
-        }
-    }
-
-    public List<QName> getObjectClassList() {
+	@NotNull
+	public List<QName> getObjectClassList() {
         return objectClassList;
     }
 
-    public void setObjectClassList(List<QName> objectClassList) {
-        this.objectClassList = objectClassList;
+	@SuppressWarnings("unused")
+    public String getObjectClassName() {
+        return objectClassName;
     }
 
-    public String getSelectedObjectClass() {
-        return selectedObjectClass;
+	@SuppressWarnings("unused")
+    public void setObjectClassName(String objectClassName) {
+        this.objectClassName = objectClassName;
+		if (selectedObjectTypeDto != null) {
+			selectedObjectTypeDto.getObjectType().setObjectClass(findObjectClassQName(objectClassName));	// update object class in selected objectType container
+		}
     }
 
-    public void setSelectedObjectClass(String selectedObjectClass) {
-        this.selectedObjectClass = selectedObjectClass;
+	private QName findObjectClassQName(String localName) {
+		if (localName == null) {
+			return null;
+		}
+		for (QName q: objectClassList) {
+			if (localName.equals(q.getLocalPart())) {
+				return q;
+			}
+		}
+		return null;
+		//throw new IllegalStateException("No " + localName + " in object class list: " + objectClassList);
+	}
 
-        if(selectedObjectClass == null && selected != null){
-            selected.setObjectClass(null);
-        }
+	public ResourceAttributeDefinitionType getSelectedAttribute() {
+		return selectedAttribute;
+	}
 
-        if(selected != null){
-            for(QName q: objectClassList){
-                if(q.getLocalPart().equals(selectedObjectClass)){
-                    selected.setObjectClass(q);
-                }
-            }
-        }
-    }
+	public void setSelectedAttribute(ResourceAttributeDefinitionType selectedAttribute) {
+		this.selectedAttribute = selectedAttribute;
+	}
+
+	public ResourceObjectAssociationType getSelectedAssociation() {
+		return selectedAssociation;
+	}
+
+	public void setSelectedAssociation(ResourceObjectAssociationType selectedAssociation) {
+		this.selectedAssociation = selectedAssociation;
+	}
 }

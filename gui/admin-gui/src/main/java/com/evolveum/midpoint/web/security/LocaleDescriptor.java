@@ -16,13 +16,8 @@
 
 package com.evolveum.midpoint.web.security;
 
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.Validate;
-
 import java.io.Serializable;
 import java.util.Locale;
-import java.util.Properties;
 
 /**
  * @author lazyman

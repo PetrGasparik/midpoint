@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.Text;
 
-import com.evolveum.midpoint.prism.parser.XPathHolder;
+import com.evolveum.midpoint.prism.marshaller.XPathHolder;
 import com.evolveum.midpoint.prism.query.ObjectFilter;
 import com.evolveum.midpoint.prism.query.ObjectPaging;
 import com.evolveum.midpoint.prism.query.ObjectQuery;
@@ -48,6 +48,7 @@ import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.ObjectListType;
 import com.evolveum.midpoint.xml.ns._public.common.api_types_3.PropertyReferenceListType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.CachingMetadataType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ConstructionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
@@ -56,8 +57,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceAttributeDef
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationSituationDescriptionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UnknownJavaObjectType;
 import com.evolveum.prism.xml.ns._public.query_3.PagingType;
-import com.evolveum.prism.xml.ns._public.query_3.QueryType;
-import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
 import com.evolveum.prism.xml.ns._public.types_3.ItemDeltaType;
 import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
@@ -298,29 +297,26 @@ public class SchemaDebugUtil {
 			sb.append("...");
 		}
 		
-//		if (vc.getValueConstructor() != null) {
-//			prettyPringValueConstructor(sb, vc.getValueConstructor());
-//			sb.append(",");
-//		}
-//		
-//		if (vc.getSequence() != null) {
-//			sb.append("[");
-//			for (JAXBElement vconstr: vc.getSequence().getValueConstructor()) {
-//				prettyPringValueConstructor(sb,vconstr);
-//				sb.append(",");
-//			}
-//			sb.append("]");
-//		}
-		
 		// TODO: Other properties
 		sb.append(")");
 		return sb.toString();
 	}
 	
-	private static void prettyPringValueConstructor(StringBuilder sb, JAXBElement vconstr) {
-		sb.append("ValueConstructor(");
-		sb.append(prettyPrint(vconstr));
+	public static String prettyPrint(CachingMetadataType cachingMetadata) {
+		if (cachingMetadata == null) {
+			return "null";
+		}
+		StringBuilder sb = new StringBuilder("CachingMetadataType(");
+		if (cachingMetadata.getSerialNumber() != null) {
+			sb.append("serialNumber:");
+			sb.append(prettyPrint(cachingMetadata.getSerialNumber()));
+		}
+		if (cachingMetadata.getRetrievalTimestamp() != null) {
+			sb.append("retrievalTimestamp:");
+			sb.append(prettyPrint(cachingMetadata.getRetrievalTimestamp()));
+		}
 		sb.append(")");
+		return sb.toString();
 	}
 
 	public static String prettyPrint(ObjectReferenceType ref) {

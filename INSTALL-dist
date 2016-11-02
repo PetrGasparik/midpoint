@@ -8,8 +8,8 @@ and release notes can be found at:
 
 1. Pre-requisities:
 
-    1. Java 7
-    2. Apache Tomcat 6.x or 7.x (or another supported web container)
+    1. Java (JRE) 8
+    2. Apache Tomcat 8.x (or another supported web container)
 
 2. Install Apache Tomcat
 
@@ -34,4 +34,4 @@ URL by default:
 where <hostname> and <port> are the hostname and port number of the web container.
 
 Login: administrator
-Password 5ecr3t
+Password: 5ecr3t

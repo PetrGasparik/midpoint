@@ -12,6 +12,7 @@ import static com.codeborne.selenide.Selectors.by;
 import static com.codeborne.selenide.Selectors.byText;
 import static com.codeborne.selenide.Selenide.*;
 import static com.codeborne.selenide.Condition.*;
+import static com.codeborne.selenide.Selectors.byAttribute;
 
 /**
  * Created by Kate on 07.08.2015.
@@ -28,12 +29,7 @@ public class LoginTest extends AbstractSelenideTest {
         //perform login
         login(ADMIN_LOGIN, ADMIN_PASSWORD);
 
-        //check if welcome message appears after user logged in
-        $(byText("welcome to midPoint")).shouldBe(visible);
-
-        //check if Superuser role is displayed in My Assignments on Dashboard
-        $(byText("Superuser"));
-
+        checkLoginIsPerformed();
         close();
     }
 
@@ -59,9 +55,7 @@ public class LoginTest extends AbstractSelenideTest {
         //perform login
         login("", ADMIN_PASSWORD);
 
-        //check if error message appears
-        $(By.className("messages-error")).find(by("title", "Partial error")).shouldBe(visible);
-
+        $(byText("Invalid username and/or password.")).shouldBe(visible);
         close();
     }
 
@@ -87,9 +81,7 @@ public class LoginTest extends AbstractSelenideTest {
         //perform login
         login(ADMIN_LOGIN, "");
 
-        //check if error message appears
-        $(By.className("messages-error")).find(by("title", "Partial error")).shouldBe(visible);
-
+        $(byText("Couldn't authenticate user, reason: couldn't encode password.")).shouldBe(visible);
         close();
     }
 
@@ -104,8 +96,7 @@ public class LoginTest extends AbstractSelenideTest {
         //create user with filled user name only
         createUser(USER_WITHOUT_PASSWORD, new HashMap<String, String>());
 
-        //check if Success message appears after user saving
-        $(byText("Success")).shouldBe(visible);
+        checkOperationStatusOk("Save (GUI)");
 
         //search for the created user in users list
         searchForElement(USER_WITHOUT_PASSWORD);
@@ -113,16 +104,16 @@ public class LoginTest extends AbstractSelenideTest {
         $(By.linkText(USER_WITHOUT_PASSWORD)).shouldBe(visible).click();
 
         //assign End user role to user
-        assignObjectToUser(ASSIGN_ROLE_LINKTEXT, EndUserTests.ENDUSER_ROLE_NAME);
-
+        assignObjectToFocusObject(ASSIGN_ROLE_LINKTEXT, EndUserTests.ENDUSER_ROLE_NAME);
+        checkOperationStatusOk("Save (GUI)");
+        logout();
         close();
 
         //perform login
         login(USER_WITHOUT_PASSWORD, "");
 
         //check if error message appears
-        $(By.className("messages-error")).find(byText("'password' is required.")).shouldBe(visible);
-
+        $(byText("Couldn't authenticate user, reason: couldn't encode password.")).shouldBe(visible);
     }
 
 

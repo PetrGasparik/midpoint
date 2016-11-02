@@ -16,12 +16,11 @@
 
 package com.evolveum.midpoint.web.component.input;
 
+import java.util.List;
+
 import com.evolveum.midpoint.web.component.prism.InputPanel;
 
-import org.apache.wicket.ajax.AjaxRequestTarget;
-import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.markup.html.form.DropDownChoice;
-import org.apache.wicket.markup.html.form.FormComponent;
 import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.model.IModel;
 
@@ -32,11 +31,11 @@ public class DropDownChoicePanel<T> extends InputPanel {
 
     private static final String ID_INPUT = "input";
 
-    public DropDownChoicePanel(String id, IModel<T> model, IModel<T> choices) {
+    public DropDownChoicePanel(String id, IModel<T> model, IModel<? extends List<? extends T>> choices) {
         this(id, model, choices, false);
     }
 
-    public DropDownChoicePanel(String id, IModel<T> model, IModel<T> choices, boolean allowNull) {
+    public DropDownChoicePanel(String id, IModel<T> model, IModel<? extends List<? extends T>> choices, boolean allowNull) {
         super(id);
 
         DropDownChoice input = new DropDownChoice(ID_INPUT, model, choices) {
@@ -50,15 +49,15 @@ public class DropDownChoicePanel<T> extends InputPanel {
         add(input);
     }
 
-    public DropDownChoicePanel(String id, IModel<T> model, IModel<T> choices, IChoiceRenderer<T> renderer) {
+    public DropDownChoicePanel(String id, IModel<T> model, IModel<? extends List<? extends T>> choices, IChoiceRenderer<T> renderer) {
         this(id, model, choices, renderer, false);
     }
     
-    public DropDownChoicePanel(String id, IModel<T> model, IModel<T> choices, IChoiceRenderer<T> renderer,
+    public DropDownChoicePanel(String id, IModel<T> model, IModel<? extends List<? extends T>> choices, IChoiceRenderer<T> renderer,
                                boolean allowNull) {
         super(id);
 
-        DropDownChoice input = new DropDownChoice(ID_INPUT, model, choices, renderer) {
+        DropDownChoice<T> input = new DropDownChoice<T>(ID_INPUT, model, choices, renderer) {
 
             @Override
             protected String getNullValidDisplayValue() {
@@ -70,7 +69,7 @@ public class DropDownChoicePanel<T> extends InputPanel {
     }
 
     @Override
-    public FormComponent getBaseFormComponent() {
-        return (FormComponent) get("input");
+    public DropDownChoice getBaseFormComponent() {
+        return (DropDownChoice) get("input");
     }
 }

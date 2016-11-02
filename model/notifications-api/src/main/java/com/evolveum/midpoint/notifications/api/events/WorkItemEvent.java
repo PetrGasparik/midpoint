@@ -20,7 +20,13 @@ import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.LightweightIdentifierGenerator;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.DecisionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.EventCategoryType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.WfContextType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.WorkItemType;
+import org.apache.commons.lang.Validate;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.xml.namespace.QName;
 
@@ -31,22 +37,27 @@ import java.util.Map;
  */
 public class WorkItemEvent extends WorkflowEvent {
 
-    private String workItemName;
-    private SimpleObjectRef assignee;
+    @NotNull private final WorkItemType workItem;
+    private final SimpleObjectRef assignee;
 
-    public WorkItemEvent(LightweightIdentifierGenerator lightweightIdentifierGenerator, ChangeType changeType) {
-        super(lightweightIdentifierGenerator, changeType);
+    public WorkItemEvent(LightweightIdentifierGenerator lightweightIdentifierGenerator, ChangeType changeType, @NotNull WorkItemType workItem,
+			@Nullable SimpleObjectRef assignee, WfContextType workflowContext) {
+        super(lightweightIdentifierGenerator, changeType, workflowContext);
+        Validate.notNull(workItem);
+        this.workItem = workItem;
+		this.assignee = assignee;
     }
 
     public String getWorkItemName() {
-        return workItemName;
+        return workItem.getName();
     }
 
-    public void setWorkItemName(String workItemName) {
-        this.workItemName = workItemName;
-    }
+	@NotNull
+	public WorkItemType getWorkItem() {
+		return workItem;
+	}
 
-    @Override
+	@Override
     public boolean isCategoryType(EventCategoryType eventCategoryType) {
         return eventCategoryType == EventCategoryType.WORK_ITEM_EVENT || eventCategoryType == EventCategoryType.WORKFLOW_EVENT;
     }
@@ -55,21 +66,27 @@ public class WorkItemEvent extends WorkflowEvent {
         return assignee;
     }
 
-    public void setAssignee(SimpleObjectRef assignee) {
-        this.assignee = assignee;
-    }
-
     @Override
     public void createExpressionVariables(Map<QName, Object> variables, OperationResult result) {
         super.createExpressionVariables(variables, result);
-        variables.put(SchemaConstants.C_ASSIGNEE, assignee != null ? assignee.resolveObjectType(result) : assignee);
+        variables.put(SchemaConstants.C_ASSIGNEE, assignee != null ? assignee.resolveObjectType(result, false) : null);
+        variables.put(SchemaConstants.C_WORK_ITEM, workItem);
     }
 
-    @Override
+	@Override
+	protected String getAnswer() {
+		DecisionType decision = workItem.getDecision();
+		if (decision == null) {
+			return null;
+		}
+		return decision.getResultAsString();
+	}
+
+	@Override
     public String toString() {
         return "WorkflowProcessEvent{" +
                 "workflowEvent=" + super.toString() +
-                ", workItemName=" + workItemName +
+                ", workItemName=" + getWorkItemName() +
                 ", assignee=" + assignee +
                 '}';
 

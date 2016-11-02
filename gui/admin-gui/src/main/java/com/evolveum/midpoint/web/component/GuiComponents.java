@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import org.apache.wicket.markup.html.form.DropDownChoice;
 import org.apache.wicket.markup.html.form.IChoiceRenderer;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
-import org.apache.wicket.model.Model;
 import org.apache.wicket.model.StringResourceModel;
+
+import com.evolveum.midpoint.gui.api.page.PageBase;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,11 +57,17 @@ public class GuiComponents {
         return EXECUTOR.submit(callable);
     }
 
-    public static DropDownChoice createTriStateCombo(String id, IModel<Boolean> model) {
-        final IChoiceRenderer renderer = new IChoiceRenderer() {
+    public static <T> DropDownChoice createTriStateCombo(String id, IModel<Boolean> model) {
+        final IChoiceRenderer<T> renderer = new IChoiceRenderer<T>() {
+        	
+        
+        	@Override
+        	public T getObject(String id, IModel<? extends List<? extends T>> choices) {
+        		return id != null ? choices.getObject().get(Integer.parseInt(id)) : null;
+        	}
 
             @Override
-            public Object getDisplayValue(Object object) {
+            public String getDisplayValue(T object) {
                 String key;
                 if (object == null) {
                     key = KEY_BOOLEAN_NULL;
@@ -69,22 +76,26 @@ public class GuiComponents {
                     key = b ? KEY_BOOLEAN_TRUE : KEY_BOOLEAN_FALSE;
                 }
 
-                StringResourceModel model = new StringResourceModel(key, new Model<String>(), key);
+                StringResourceModel model = PageBase.createStringResourceStatic(null, key);
+//                
                 return model.getString();
             }
 
             @Override
-            public String getIdValue(Object object, int index) {
+            public String getIdValue(T object, int index) {
                 return Integer.toString(index);
             }
+
+
+		
         };
 
         DropDownChoice dropDown = new DropDownChoice(id, model, createChoices(), renderer) {
 
             @Override
             protected CharSequence getDefaultChoice(String selectedValue) {
-                StringResourceModel model = new StringResourceModel(KEY_BOOLEAN_NULL,
-                        new Model<String>(), KEY_BOOLEAN_NULL);
+            	StringResourceModel model = PageBase.createStringResourceStatic(null, KEY_BOOLEAN_NULL);
+
                 return model.getString();
             }
         };

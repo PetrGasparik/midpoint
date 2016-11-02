@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +20,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 
-import javax.xml.namespace.QName;
-
+import com.evolveum.midpoint.prism.PrismContainer;
+import com.evolveum.midpoint.prism.PrismObject;
 import org.apache.commons.lang.StringUtils;
 
-import com.evolveum.midpoint.prism.Containerable;
-import com.evolveum.midpoint.prism.Objectable;
 import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.match.MatchingRuleRegistry;
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
 
@@ -37,25 +33,40 @@ public class InOidFilter extends ObjectFilter {
 
 	private Collection<String> oids;
 	private ExpressionWrapper expression;
+	private boolean considerOwner;				// temporary hack (checks owner OID)
 	
-	InOidFilter(Collection<String> oids) {
+	private InOidFilter(boolean considerOwner, Collection<String> oids) {
+		this.considerOwner = considerOwner;
 		this.oids = oids;
 	}
 	
-	InOidFilter(ExpressionWrapper expression){
+	private InOidFilter(boolean considerOwner, ExpressionWrapper expression){
+		this.considerOwner = considerOwner;
 		this.expression = expression;
 	}
-	
+
+	public static InOidFilter createInOid(boolean considerOwner, Collection<String> oids){
+		return new InOidFilter(considerOwner, oids);
+	}
+
 	public static InOidFilter createInOid(Collection<String> oids){
-		return new InOidFilter(oids);
+		return new InOidFilter(false, oids);
 	}
 	
 	public static InOidFilter createInOid(String... oids){
-		return new InOidFilter(Arrays.asList(oids));
+		return new InOidFilter(false, Arrays.asList(oids));
 	}
-	
-	public static InOidFilter createInOid(ExpressionWrapper expression){
-		return new InOidFilter(expression);
+
+	public static InOidFilter createOwnerHasOidIn(Collection<String> oids){
+		return new InOidFilter(true, oids);
+	}
+
+	public static InOidFilter createOwnerHasOidIn(String... oids){
+		return new InOidFilter(true, Arrays.asList(oids));
+	}
+
+	public static InOidFilter createInOid(boolean considerOwner, ExpressionWrapper expression){
+		return new InOidFilter(considerOwner, expression);
 	}
 		
 	public Collection<String> getOids() {
@@ -65,7 +76,11 @@ public class InOidFilter extends ObjectFilter {
 	public void setOids(Collection<String> oids) {
 		this.oids = oids;
 	}
-	
+
+	public boolean isConsiderOwner() {
+		return considerOwner;
+	}
+
 	public ExpressionWrapper getExpression() {
 		return expression;
 	}
@@ -74,10 +89,8 @@ public class InOidFilter extends ObjectFilter {
 		this.expression = expression;
 	}
 	
-	
-	
 	@Override
-	public void checkConsistence() {
+	public void checkConsistence(boolean requireDefinitions) {
 		if (oids == null) {
 			throw new IllegalArgumentException("Null oids in "+this);
 		}
@@ -97,21 +110,20 @@ public class InOidFilter extends ObjectFilter {
 	public String debugDump(int indent) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("IN OID: ");
-		
-			
-		sb.append("\n");
-		DebugUtil.indentDebugDump(sb, indent+1);
+		if (considerOwner) {
+			sb.append("(for owner)");
+		}
 		sb.append("VALUE:");
 		if (getOids() != null) {
 			sb.append("\n");
 			for (String oid : getOids()) {
+				DebugUtil.indentDebugDump(sb, indent+1);
 				sb.append(oid);
 				sb.append("\n");
 			}
 		} else {
-			sb.append(" null");
+			sb.append(" null\n");
 		}
-		
 		
 		return sb.toString();
 		
@@ -139,39 +151,64 @@ public class InOidFilter extends ObjectFilter {
 
 	@Override
 	public InOidFilter clone() {
-		InOidFilter inOid = new InOidFilter(getOids());
+		InOidFilter inOid = new InOidFilter(considerOwner, getOids());
 		inOid.setExpression(getExpression());
 		return inOid;
 	}
 
 	@Override
 	public boolean match(PrismContainerValue value, MatchingRuleRegistry matchingRuleRegistry) throws SchemaException {
-		return false;
+		if (value == null) {
+			return false;			// just for sure
+		}
+
+		// are we a prism object?
+		if (value.getParent() instanceof PrismObject) {
+			if (considerOwner) {
+				return false;
+			}
+			String oid = ((PrismObject) (value.getParent())).getOid();
+			return StringUtils.isNotBlank(oid) && oids != null && oids.contains(oid);
+		}
+
+		final PrismContainerValue pcvToConsider;
+		if (considerOwner) {
+			if (!(value.getParent() instanceof PrismContainer)) {
+				return false;
+			}
+			PrismContainer container = (PrismContainer) value.getParent();
+			if (!(container.getParent() instanceof PrismContainerValue)) {
+				return false;
+			}
+			pcvToConsider = (PrismContainerValue) container.getParent();
+		} else {
+			pcvToConsider = value;
+		}
+		return pcvToConsider.getId() != null && oids.contains(pcvToConsider.getId());
+	}
+
+	@Override
+	public boolean equals(Object o, boolean exact) {
+		if (this == o)
+			return true;
+		if (o == null || getClass() != o.getClass())
+			return false;
+
+		InOidFilter that = (InOidFilter) o;
+
+		if (considerOwner != that.considerOwner)
+			return false;
+		if (oids != null ? !oids.equals(that.oids) : that.oids != null)
+			return false;
+		return expression != null ? expression.equals(that.expression) : that.expression == null;
+
 	}
 
 	@Override
 	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + ((oids == null) ? 0 : oids.hashCode());
+		int result = oids != null ? oids.hashCode() : 0;
+		result = 31 * result + (expression != null ? expression.hashCode() : 0);
+		result = 31 * result + (considerOwner ? 1 : 0);
 		return result;
 	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		InOidFilter other = (InOidFilter) obj;
-		if (oids == null) {
-			if (other.oids != null)
-				return false;
-		} else if (!oids.equals(other.oids))
-			return false;
-		return true;
-	}
-
 }

@@ -23,6 +23,7 @@ import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
 import com.evolveum.midpoint.model.impl.expr.ModelExpressionThreadLocalHolder;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismPropertyDefinition;
+import com.evolveum.midpoint.prism.PrismPropertyDefinitionImpl;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.prism.xml.XsdTypeMapper;
@@ -76,19 +77,12 @@ public class AccCertExpressionHelper {
         QName xsdType = XsdTypeMapper.toXsdType(resultClass);
 
         QName resultName = new QName(SchemaConstants.NS_C, "result");
-        PrismPropertyDefinition<T> resultDef = new PrismPropertyDefinition(resultName, xsdType, prismContext);
+        PrismPropertyDefinition<T> resultDef = new PrismPropertyDefinitionImpl(resultName, xsdType, prismContext);
 
         Expression<PrismPropertyValue<T>,PrismPropertyDefinition<T>> expression = expressionFactory.makeExpression(expressionType, resultDef, shortDesc, task, result);
         ExpressionEvaluationContext params = new ExpressionEvaluationContext(null, expressionVariables, shortDesc, task, result);
-        ModelExpressionThreadLocalHolder.pushCurrentResult(result);
-        ModelExpressionThreadLocalHolder.pushCurrentTask(task);
-        PrismValueDeltaSetTriple<PrismPropertyValue<T>> exprResult;
-        try {
-            exprResult = expression.evaluate(params);
-        } finally {
-            ModelExpressionThreadLocalHolder.popCurrentResult();
-            ModelExpressionThreadLocalHolder.popCurrentTask();
-        }
+
+        PrismValueDeltaSetTriple<PrismPropertyValue<T>> exprResult = ModelExpressionThreadLocalHolder.evaluateExpressionInContext(expression, params, task, result);
 
         List<T> retval = new ArrayList<>();
         for (PrismPropertyValue<T> item : exprResult.getZeroSet()) {

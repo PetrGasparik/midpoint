@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,9 @@ package com.evolveum.midpoint.init;
 import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.audit.spi.AuditServiceRegistry;
-import com.evolveum.midpoint.prism.PrismContainerValue;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.Visitable;
 import com.evolveum.midpoint.prism.Visitor;
@@ -43,7 +41,6 @@ import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CleanupPolicyType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import org.apache.commons.lang.Validate;
@@ -119,10 +116,6 @@ public class AuditServiceProxy implements AuditService, AuditServiceRegistry {
     private void assertCorrectness(AuditEventRecord record, Task task) {
         if (task == null) {
             LOGGER.warn("Task is null in a call to audit service");
-        } else {
-            if (task.getOwner() == null) {
-                LOGGER.warn("Task '{}' has no owner in a call to audit service (should not happen except for initial repository loading)", new Object[]{task.getName()});
-            }
         }
     }
 
@@ -232,12 +225,36 @@ public class AuditServiceProxy implements AuditService, AuditServiceRegistry {
 	@Override
 	public List<AuditEventRecord> listRecords(String query, Map<String, Object> params) {
 		List<AuditEventRecord> result = new ArrayList<AuditEventRecord>();
-		for (AuditService service : services){
-			List<AuditEventRecord> records = service.listRecords(query, params);
-			if (records != null && !records.isEmpty()){
-				result.addAll(records);
+		for (AuditService service : services) {
+			if (service.supportsRetrieval()) {
+				List<AuditEventRecord> records = service.listRecords(query, params);
+				if (records != null && !records.isEmpty()){
+					result.addAll(records);
+				}
 			}
 		}
 		return result;
+	}
+
+    @Override
+    public long countObjects(String query, Map<String, Object> params) {
+        long count = 0;
+        for (AuditService service : services) {
+        	if (service.supportsRetrieval()) {
+	            long c = service.countObjects(query, params);
+	            count += c;
+        	}
+        }
+        return count;
+    }
+
+	@Override
+	public boolean supportsRetrieval() {
+		for (AuditService service : services) {
+        	if (service.supportsRetrieval()) {
+	            return true;
+        	}
+        }
+		return false;
 	}
 }

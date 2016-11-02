@@ -18,17 +18,9 @@ package com.evolveum.midpoint.repo.sql.data.common;
 
 import java.util.Collection;
 
-import javax.persistence.Column;
-import javax.persistence.Embedded;
-import javax.persistence.Entity;
-import javax.persistence.Lob;
-import javax.persistence.Table;
-import javax.persistence.UniqueConstraint;
-
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
-import org.hibernate.annotations.ForeignKey;
-import org.hibernate.annotations.Index;
-import org.hibernate.annotations.Type;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
+import org.hibernate.annotations.Persister;
 
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.repo.sql.data.common.embedded.RPolyString;
@@ -51,6 +43,7 @@ import javax.persistence.UniqueConstraint;
 @Entity
 @ForeignKey(name = "fk_connector_host")
 @Table(uniqueConstraints = @UniqueConstraint(name = "uc_connector_host_name", columnNames = {"name_norm"}))
+@Persister(impl = MidPointJoinedPersister.class)
 public class RConnectorHost extends RObject<ConnectorHostType> {
 
     private RPolyString name;

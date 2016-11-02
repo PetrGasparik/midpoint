@@ -16,11 +16,17 @@
 
 package com.evolveum.midpoint.prism.maven;
 
-import java.io.*;
-
 import com.evolveum.midpoint.prism.ComplexTypeDefinition;
+import com.evolveum.midpoint.prism.PrismContext;
+import com.evolveum.midpoint.prism.PrismContextImpl;
 import com.evolveum.midpoint.prism.PrismObjectDefinition;
+import com.evolveum.midpoint.prism.schema.PrismSchema;
+import com.evolveum.midpoint.prism.schema.SchemaDefinitionFactory;
+import com.evolveum.midpoint.prism.schema.SchemaRegistry;
+import com.evolveum.midpoint.prism.schema.SchemaRegistryImpl;
+import com.evolveum.midpoint.prism.xml.GlobalDynamicNamespacePrefixMapper;
 import com.evolveum.midpoint.util.MiscUtil;
+import com.evolveum.midpoint.util.exception.SchemaException;
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -31,14 +37,10 @@ import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.zip.ZipArchiver;
+import org.jetbrains.annotations.NotNull;
 import org.xml.sax.SAXException;
 
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.schema.PrismSchema;
-import com.evolveum.midpoint.prism.schema.SchemaDefinitionFactory;
-import com.evolveum.midpoint.prism.schema.SchemaRegistry;
-import com.evolveum.midpoint.prism.xml.GlobalDynamicNamespacePrefixMapper;
-import com.evolveum.midpoint.util.exception.SchemaException;
+import java.io.*;
 
 /**
  * @goal schemadoc
@@ -64,6 +66,11 @@ public class SchemaDocMojo extends AbstractMojo {
 	 * @parameter
 	 */
 	private File[] schemaFiles;
+
+	/**
+	 * @parameter
+     */
+    private File[] catalogFiles;
 
     /**
      * @parameter default-value="${project.build.directory}" required=true
@@ -237,7 +244,7 @@ public class SchemaDocMojo extends AbstractMojo {
 
     private PrismContext createInitializedPrismContext() throws MojoFailureException {
         try {
-            SchemaRegistry schemaRegistry = createSchemaRegistry();
+            SchemaRegistryImpl schemaRegistry = createSchemaRegistry();
 
             for (File schemaFile: schemaFiles) {
                 getLog().info("SchemaDoc: registering schema file: "+schemaFile);
@@ -247,7 +254,17 @@ public class SchemaDocMojo extends AbstractMojo {
                 schemaRegistry.registerPrismSchemaFile(schemaFile);
             }
 
-            PrismContext context = PrismContext.create(schemaRegistry);
+            if (catalogFiles != null && catalogFiles.length > 0) {
+                for (File catalogFile : catalogFiles) {
+                    getLog().info("SchemaDoc: using catalog file: " + catalogFile);
+                    if (!catalogFile.exists()) {
+                        throw new IOException("Catalog file '" + catalogFile + "' does not exist.");
+                    }
+                }
+                schemaRegistry.setCatalogFiles(catalogFiles);
+            }
+
+            PrismContextImpl context = PrismContextImpl.create(schemaRegistry);
             context.setDefinitionFactory(new SchemaDefinitionFactory());
             context.initialize();
 
@@ -277,8 +294,9 @@ public class SchemaDocMojo extends AbstractMojo {
     	throw new MojoFailureException(e.getMessage());
 	}
 
-	private SchemaRegistry createSchemaRegistry() throws SchemaException {
-		SchemaRegistry schemaRegistry = new SchemaRegistry();
+	@NotNull
+	private SchemaRegistryImpl createSchemaRegistry() throws SchemaException {
+		SchemaRegistryImpl schemaRegistry = new SchemaRegistryImpl();
 		schemaRegistry.setNamespacePrefixMapper(new GlobalDynamicNamespacePrefixMapper());
 		return schemaRegistry;
 	}

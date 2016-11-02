@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,682 +16,638 @@
 
 package com.evolveum.midpoint.web.component.prism;
 
-import java.io.Serializable;
-import java.text.DateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
-import javax.xml.datatype.XMLGregorianCalendar;
-import javax.xml.namespace.QName;
-
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.Validate;
-
-import com.evolveum.midpoint.prism.Item;
-import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContainerValue;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.PrismReference;
-import com.evolveum.midpoint.prism.PrismReferenceDefinition;
+import com.evolveum.midpoint.gui.api.page.PageBase;
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.prism.delta.ContainerDelta;
+import com.evolveum.midpoint.prism.delta.ItemDelta;
+import com.evolveum.midpoint.prism.delta.ObjectDelta;
+import com.evolveum.midpoint.prism.delta.ReferenceDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.schema.util.ResourceTypeUtil;
-import com.evolveum.midpoint.util.DOMUtil;
+import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.util.DebugDumpable;
 import com.evolveum.midpoint.util.DebugUtil;
+import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.util.logging.LoggingUtils;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.page.PageBase;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AuthorizationPhaseType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationCapabilityType;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.Validate;
+import org.apache.commons.lang.math.NumberUtils;
+import org.jetbrains.annotations.Nullable;
+
+import javax.xml.namespace.QName;
+
+import java.io.Serializable;
+import java.util.*;
 
 /**
  * @author lazyman
  */
-public class ContainerWrapper<T extends PrismContainer> implements ItemWrapper, Serializable, DebugDumpable {
+public class ContainerWrapper<C extends Containerable> implements ItemWrapper, Serializable, DebugDumpable {
 
 	private static final Trace LOGGER = TraceManager.getTrace(ContainerWrapper.class);
 
-	private static final List<QName> INHERITED_OBJECT_ATTRIBUTES = Arrays.asList(ObjectType.F_NAME,
-			ObjectType.F_DESCRIPTION, ObjectType.F_FETCH_RESULT, ObjectType.F_PARENT_ORG,
-			ObjectType.F_PARENT_ORG_REF, FocusType.F_LINK, FocusType.F_LINK_REF);
-
-	private static final String DOT_CLASS = ContainerWrapper.class.getName() + ".";
-	private static final String CREATE_PROPERTIES = DOT_CLASS + "createProperties";
-
 	private String displayName;
-	private ObjectWrapper<? extends ObjectType> object;
-	private T container;
-	private ContainerStatus status;
+    private ObjectWrapper<? extends ObjectType> objectWrapper;
+    private PrismContainer<C> container;
+    private ContainerStatus status;
 
-	private boolean main;
-	private ItemPath path;
-	private List<ItemWrapper> properties;
+    private boolean main;
+    private ItemPath path;
+    private List<ItemWrapper> properties;
 
-	private boolean readonly;
-	private boolean showInheritedObjectAttributes;
+    private boolean readonly;
+    private boolean showInheritedObjectAttributes;
 
-	private OperationResult result;
+    private PrismContainerDefinition<C> containerDefinition;
 
-	private PrismContainerDefinition containerDefinition;
-
-	public ContainerWrapper(ObjectWrapper object, T container, ContainerStatus status, ItemPath path,
-			PageBase pageBase) {
-		Validate.notNull(container, "Prism object must not be null.");
+	ContainerWrapper(ObjectWrapper objectWrapper, PrismContainer<C> container, ContainerStatus status, ItemPath path) {
+		Validate.notNull(container, "container must not be null.");
 		Validate.notNull(status, "Container status must not be null.");
-		Validate.notNull(pageBase, "pageBase must not be null.");
 
-		this.object = object;
+		this.objectWrapper = objectWrapper;
 		this.container = container;
 		this.status = status;
 		this.path = path;
-		main = path == null;
-		readonly = object.isReadonly(); // [pm] this is quite questionable
-		showInheritedObjectAttributes = object.isShowInheritedObjectAttributes();
+		this.main = path == null;
+		this.readonly = objectWrapper.isReadonly(); // [pm] this is quite questionable
+		this.showInheritedObjectAttributes = objectWrapper.isShowInheritedObjectAttributes();
 		// have to be after setting "main" property
-		containerDefinition = getItemDefinition();
-		properties = createProperties(pageBase);
+		this.containerDefinition = getItemDefinition();
 	}
 
-	public void revive(PrismContext prismContext) throws SchemaException {
-		if (container != null) {
-			container.revive(prismContext);
-		}
+	ContainerWrapper(PrismContainer<C> container, ContainerStatus status, ItemPath path, boolean readOnly) {
+        Validate.notNull(container, "container must not be null.");
+        Validate.notNull(container.getDefinition(), "container definition must not be null.");
+        Validate.notNull(status, "Container status must not be null.");
+
+        this.container = container;
+		this.containerDefinition = container.getDefinition();
+        this.status = status;
+        this.path = path;
+        this.main = path == null;
+        this.readonly = readOnly;
+        this.showInheritedObjectAttributes = false;
+    }
+
+    public void revive(PrismContext prismContext) throws SchemaException {
+        if (container != null) {
+            container.revive(prismContext);
+        }
+        if (containerDefinition != null) {
+            containerDefinition.revive(prismContext);
+        }
+        if (properties != null) {
+            for (ItemWrapper itemWrapper : properties) {
+                itemWrapper.revive(prismContext);
+            }
+        }
+    }
+
+    @Override
+    public PrismContainerDefinition<C> getItemDefinition() {
 		if (containerDefinition != null) {
-			containerDefinition.revive(prismContext);
+			return containerDefinition;
 		}
-		if (properties != null) {
-			for (ItemWrapper itemWrapper : properties) {
-				itemWrapper.revive(prismContext);
-			}
-		}
-	}
+        if (main) {
+            return objectWrapper.getDefinition();
+        } else {
+            return objectWrapper.getDefinition().findContainerDefinition(path);
+        }
+    }
 
-	@Override
-	public PrismContainerDefinition getItemDefinition() {
-		if (main) {
-			return object.getDefinition();
-		} else {
-			return object.getDefinition().findContainerDefinition(path);
-		}
-	}
-
-	OperationResult getResult() {
-		return result;
-	}
-
-	void clearResult() {
-		result = null;
-	}
-
+    @Nullable
 	ObjectWrapper getObject() {
-		return object;
-	}
+        return objectWrapper;
+    }
 
-	ContainerStatus getStatus() {
-		return status;
-	}
+    public ContainerStatus getStatus() {
+        return status;
+    }
 
-	public ItemPath getPath() {
-		return path;
-	}
+    public ItemPath getPath() {
+        return path;
+    }
 
-	public T getItem() {
-		return container;
-	}
+    public PrismContainer<C> getItem() {
+        return container;
+    }
 
-	public List<ItemWrapper> getItems() {
-		return properties;
-	}
+    public List<ItemWrapper> getItems() {
+        if (properties == null) {
+            properties = new ArrayList<>();
+        }
+        return properties;
+    }
 
-	public ItemWrapper findPropertyWrapper(QName name) {
-		Validate.notNull(name, "QName must not be null.");
-		for (ItemWrapper wrapper : getItems()) {
-			if (name.equals(wrapper.getItem().getElementName())) {
-				return wrapper;
-			}
-		}
-		return null;
-	}
+    public void setProperties(List<ItemWrapper> properties) {
+        this.properties = properties;
+    }
 
-	private List<ItemWrapper> createProperties(PageBase pageBase) {
-		result = new OperationResult(CREATE_PROPERTIES);
+    public <IW extends ItemWrapper> IW findPropertyWrapper(QName name) {
+        Validate.notNull(name, "QName must not be null.");
+        for (ItemWrapper wrapper : getItems()) {
+            if (name.equals(wrapper.getItem().getElementName())) {
+                return (IW) wrapper;
+            }
+        }
+        return null;
+    }
 
-		List<ItemWrapper> properties = new ArrayList<ItemWrapper>();
+    // TODO: refactor this. Why it is not in the itemWrapper?
+    boolean isItemVisible(ItemWrapper item) {
+        ItemDefinition def = item.getItemDefinition();
+        if (def.isIgnored() || def.isOperational()) {
+            return false;
+        }
 
-		PrismContainerDefinition definition = null;
-		PrismObject parent = getObject().getObject();
-		Class clazz = parent.getCompileTimeClass();
-		if (ShadowType.class.isAssignableFrom(clazz)) {
-			QName name = containerDefinition.getName();
+        if (def instanceof PrismPropertyDefinition && skipProperty((PrismPropertyDefinition) def)) {
+            return false;
+        }
 
-			if (ShadowType.F_ATTRIBUTES.equals(name)) {
-				try {
-					definition = object.getRefinedAttributeDefinition();
+        // we decide not according to status of this container, but according to
+        // the status of the whole object
+        if (objectWrapper != null && objectWrapper.getStatus() == ContainerStatus.ADDING) {
 
-					if (definition == null) {
-						PrismReference resourceRef = parent.findReference(ShadowType.F_RESOURCE_REF);
-						PrismObject<ResourceType> resource = resourceRef.getValue().getObject();
+            return (def.canAdd() && def.isEmphasized())
+                    || (def.canAdd() && showEmpty(item));
+        }
 
-						definition = pageBase
-								.getModelInteractionService()
-								.getEditObjectClassDefinition((PrismObject<ShadowType>) object.getObject(), resource,
-										AuthorizationPhaseType.REQUEST)
-								.toResourceAttributeContainerDefinition();
+        // otherwise, object.getStatus() is MODIFYING
 
-						if (LOGGER.isTraceEnabled()) {
-							LOGGER.trace("Refined account def:\n{}", definition.debugDump());
-						}
-					}
-				} catch (Exception ex) {
-					LoggingUtils.logException(LOGGER,
-							"Couldn't load definitions from refined schema for shadow", ex);
-					result.recordFatalError(
-							"Couldn't load definitions from refined schema for shadow, reason: "
-									+ ex.getMessage(), ex);
+        if (def.canModify()) {
+            return showEmpty(item);
+        } else {
+            if (def.canRead()) {
+                return showEmpty(item);
+            }
+            return false;
+        }
+    }
 
-					return properties;
-				}
-			} else {
-				definition = containerDefinition;
-			}
-		} else if (ResourceType.class.isAssignableFrom(clazz)) {
-			if (containerDefinition != null) {
-				definition = containerDefinition;
-			} else {
-				definition = container.getDefinition();
-			}
-		} else {
-			definition = containerDefinition;
-		}
-
-		if (definition == null) {
-			LOGGER.error("Couldn't get property list from null definition {}",
-					new Object[] { container.getElementName() });
-			return properties;
-		}
-
-		// assignments are treated in a special way -- we display names of
-		// org.units and roles
-		// (but only if ObjectWrapper.isShowAssignments() is true; otherwise
-		// they are filtered out by ObjectWrapper)
-		if (container.getCompileTimeClass() != null
-				&& AssignmentType.class.isAssignableFrom(container.getCompileTimeClass())) {
-
-			for (Object o : container.getValues()) {
-				PrismContainerValue<AssignmentType> pcv = (PrismContainerValue<AssignmentType>) o;
-
-				AssignmentType assignmentType = pcv.asContainerable();
-
-				if (assignmentType.getTargetRef() == null) {
-					continue;
-				}
-
-				// hack... we want to create a definition for Name
-				// PrismPropertyDefinition def = ((PrismContainerValue)
-				// pcv.getContainer().getParent()).getContainer().findProperty(ObjectType.F_NAME).getDefinition();
-				PrismPropertyDefinition def = new PrismPropertyDefinition(ObjectType.F_NAME,
-						DOMUtil.XSD_STRING, pcv.getPrismContext());
-
-				if (OrgType.COMPLEX_TYPE.equals(assignmentType.getTargetRef().getType())) {
-					def.setDisplayName("Org.Unit");
-					def.setDisplayOrder(100);
-				} else if (RoleType.COMPLEX_TYPE.equals(assignmentType.getTargetRef().getType())) {
-					def.setDisplayName("Role");
-					def.setDisplayOrder(200);
-				} else {
-					continue;
-				}
-
-				PrismProperty<Object> temp = def.instantiate();
-
-				String value = formatAssignmentBrief(assignmentType);
-
-				temp.setValue(new PrismPropertyValue<Object>(value));
-				// TODO: do this.isReadOnly() - is that OK? (originally it was the default behavior for all cases)
-				properties.add(new PropertyWrapper(this, temp, this.isReadonly(), ValueStatus.NOT_CHANGED)); 
-			}
-
-		} else if (isShadowAssociation()) {
-			if (object.getAssociations() != null) {
-				for (PrismProperty property : object.getAssociations()) {
-					// TODO: fix this -> for now, read only is supported..
-					PropertyWrapper propertyWrapper = new PropertyWrapper(this, property, true,
-							ValueStatus.NOT_CHANGED);
-					properties.add(propertyWrapper);
-				}
-			}
-
-		} else { // if not an assignment
-
-			if ((container.getValues().size() == 1 || container.getValues().isEmpty()) 
-					&& (containerDefinition == null || containerDefinition.isSingleValue())) {
-
-				// there's no point in showing properties for non-single-valued
-				// parent containers,
-				// so we continue only if the parent is single-valued
-
-				Collection<ItemDefinition> propertyDefinitions = definition.getDefinitions();
-				for (ItemDefinition itemDef : propertyDefinitions) {
-					if (itemDef instanceof PrismPropertyDefinition) {
-
-						PrismPropertyDefinition def = (PrismPropertyDefinition) itemDef;
-						if (def.isIgnored() || skipProperty(def)) {
-							continue;
-						}
-						if (!showInheritedObjectAttributes
-								&& INHERITED_OBJECT_ATTRIBUTES.contains(def.getName())) {
-							continue;
-						}
-
-						// capability handling for activation properties
-						if (isShadowActivation() && !hasCapability(def)) {
-							continue;
-						}
-
-						if (isShadowAssociation()) {
-							continue;
-						}
-
-						PrismProperty property = container.findProperty(def.getName());
-						boolean propertyIsReadOnly;
-						// decision is based on parent object status, not this
-						// container's one (because container can be added also
-						// to an existing object)
-						if (object.getStatus() == ContainerStatus.MODIFYING) {
-
-							propertyIsReadOnly = !def.canModify();
-						} else {
-							propertyIsReadOnly = !def.canAdd();
-						}
-						if (property == null) {
-							properties.add(new PropertyWrapper(this, def.instantiate(), propertyIsReadOnly,
-									ValueStatus.ADDED));
-						} else {
-							properties.add(new PropertyWrapper(this, property, propertyIsReadOnly,
-									ValueStatus.NOT_CHANGED));
-						}
-					} else if (itemDef instanceof PrismReferenceDefinition){
-						PrismReferenceDefinition def = (PrismReferenceDefinition) itemDef;
-						
-						if (INHERITED_OBJECT_ATTRIBUTES.contains(def.getName())){
-							continue;
-						}
-						
-						PrismReference reference = container.findReference(def.getName());
-						boolean propertyIsReadOnly;
-						// decision is based on parent object status, not this
-						// container's one (because container can be added also
-						// to an existing object)
-						if (object.getStatus() == ContainerStatus.MODIFYING) {
-
-							propertyIsReadOnly = !def.canModify();
-						} else {
-							propertyIsReadOnly = !def.canAdd();
-						}
-						if (reference == null) {
-							properties.add(new ReferenceWrapper(this, def.instantiate(), propertyIsReadOnly,
-									ValueStatus.ADDED));
-						} else {
-							properties.add(new ReferenceWrapper(this, reference, propertyIsReadOnly,
-									ValueStatus.NOT_CHANGED));
-						}
-
-					}
-				}
-			}
-		}
-
-		Collections.sort(properties, new ItemWrapperComparator());
-
-		result.recomputeStatus();
-
-		return properties;
-	}
-
-	private boolean isPassword(PrismPropertyDefinition def) {
-		// in the future, this option could apply as well
-		return CredentialsType.F_PASSWORD.equals(container.getElementName())
-				|| CredentialsType.F_PASSWORD.equals(def.getName()); 
-	}
-
-	private boolean isShadowAssociation() {
-		if (!ShadowType.class.isAssignableFrom(getObject().getObject().getCompileTimeClass())) {
-			return false;
-		}
-
-		if (!ShadowType.F_ASSOCIATION.equals(container.getElementName())) {
-			return false;
-		}
-
-		return true;
-	}
-
-	private boolean isShadowActivation() {
-		if (!ShadowType.class.isAssignableFrom(getObject().getObject().getCompileTimeClass())) {
-			return false;
-		}
-
-		if (!ShadowType.F_ACTIVATION.equals(container.getElementName())) {
-			return false;
-		}
-
-		return true;
-	}
-
-	private boolean hasCapability(PrismPropertyDefinition def) {
-		ShadowType shadow = (ShadowType) getObject().getObject().asObjectable();
-
-		ActivationCapabilityType cap = ResourceTypeUtil.getEffectiveCapability(shadow.getResource(),
-				ActivationCapabilityType.class);
-
-		if (ActivationType.F_VALID_FROM.equals(def.getName()) && cap.getValidFrom() == null) {
-			return false;
-		}
-
-		if (ActivationType.F_VALID_TO.equals(def.getName()) && cap.getValidTo() == null) {
-			return false;
-		}
-
-		if (ActivationType.F_ADMINISTRATIVE_STATUS.equals(def.getName()) && cap.getStatus() == null) {
-			return false;
-		}
-
-		return true;
-	}
-
-	// FIXME temporary - brutal hack - the following three methods are copied from
-	// AddRoleAssignmentAspect - Pavol M.
-
-	private String formatAssignmentBrief(AssignmentType assignment) {
-		StringBuilder sb = new StringBuilder();
-		if (assignment.getTarget() != null) {
-			sb.append(assignment.getTarget().getName());
-		} else {
-			sb.append(assignment.getTargetRef().getOid());
-		}
-		if (assignment.getActivation() != null
-				&& (assignment.getActivation().getValidFrom() != null || assignment.getActivation()
-						.getValidTo() != null)) {
-			sb.append(" ");
-			sb.append("(");
-			sb.append(formatTimeIntervalBrief(assignment));
-			sb.append(")");
-		}
-		if (assignment.getActivation() != null) {
-			switch (assignment.getActivation().getAdministrativeStatus()) {
-				case ARCHIVED:
-					sb.append(", archived");
-					break; // TODO i18n
-				case ENABLED:
-					sb.append(", enabled");
-					break;
-				case DISABLED:
-					sb.append(", disabled");
-					break;
-			}
-		}
-		return sb.toString();
-	}
-
-	public static String formatTimeIntervalBrief(AssignmentType assignment) {
-		StringBuilder sb = new StringBuilder();
-		if (assignment != null
-				&& assignment.getActivation() != null
-				&& (assignment.getActivation().getValidFrom() != null || assignment.getActivation()
-						.getValidTo() != null)) {
-			if (assignment.getActivation().getValidFrom() != null
-					&& assignment.getActivation().getValidTo() != null) {
-				sb.append(formatTime(assignment.getActivation().getValidFrom()));
-				sb.append("-");
-				sb.append(formatTime(assignment.getActivation().getValidTo()));
-			} else if (assignment.getActivation().getValidFrom() != null) {
-				sb.append("from ");
-				sb.append(formatTime(assignment.getActivation().getValidFrom()));
-			} else {
-				sb.append("to ");
-				sb.append(formatTime(assignment.getActivation().getValidTo()));
-			}
-		}
-		return sb.toString();
-	}
-
-	private static String formatTime(XMLGregorianCalendar time) {
-		DateFormat formatter = DateFormat.getDateInstance();
-		return formatter.format(time.toGregorianCalendar().getTime());
-	}
-
-
-	boolean isItemVisible(ItemWrapper item) {
-		ItemDefinition def = item.getItemDefinition();
-		if (def.isIgnored() || def.isOperational()) {
-			return false;
-		}
-
-		if (def instanceof PrismPropertyDefinition && skipProperty((PrismPropertyDefinition) def)) {
-			return false;
-		}
-
-		// we decide not according to status of this container, but according to
-		// the status of the whole object
-		if (object.getStatus() == ContainerStatus.ADDING) {
-			return def.canAdd();
-		}
-
-		// otherwise, object.getStatus() is MODIFYING
-
-		if (def.canModify()) {
-			return showEmpty(item);
-		} else {
-			if (def.canRead()) {
-				return showEmpty(item);
-			}
-			return false;
-		}
+    public void computeStripes() {
+    	int visibleProperties = 0;
+    	for (ItemWrapper item: properties) {
+    		if (item.isVisible()) {
+    			visibleProperties++;
+    		}
+    		if (visibleProperties % 2 == 0) {
+    			item.setStripe(true);
+    		} else {
+    			item.setStripe(false);
+    		}
+    	}
+    }
+    
+	public boolean isShowInheritedObjectAttributes() {
+		return showInheritedObjectAttributes;
 	}
 
 	private boolean showEmpty(ItemWrapper item) {
-		ObjectWrapper object = getObject();
-			List<ValueWrapper> values = item.getValues();
-			boolean isEmpty = values.isEmpty();
-			if (values.size() == 1) {
-				ValueWrapper value = values.get(0);
-				if (ValueStatus.ADDED.equals(value.getStatus())) {
-					isEmpty = true;
+		// make sure that emphasized state is evaluated after the normal definitions are considered
+		// we do not want to display emphasized property if the user does not have an access to it.
+		// MID-3206
+        if (item.getItemDefinition().isEmphasized()) {
+        	return true;
+        }
+        ObjectWrapper objectWrapper = getObject();
+        List<ValueWrapper> valueWrappers = item.getValues();
+        boolean isEmpty;
+        if (valueWrappers == null) {
+            isEmpty = true;
+        } else {
+            isEmpty = valueWrappers.isEmpty();
+        }
+        if (!isEmpty && valueWrappers.size() == 1) {
+            ValueWrapper value = valueWrappers.get(0);
+            if (ValueStatus.ADDED.equals(value.getStatus())) {
+                isEmpty = true;
+            }
+        }
+        return (objectWrapper == null || objectWrapper.isShowEmpty()) || !isEmpty;
+    }
+
+    @Override
+    public String getDisplayName() {
+        if (StringUtils.isNotEmpty(displayName)) {
+            return displayName;
+        }
+        return getDisplayNameFromItem(container);
+    }
+
+    @Override
+    public void setDisplayName(String name) {
+        this.displayName = name;
+    }
+
+    @Override
+    public QName getName() {
+        return getItem().getElementName();
+    }
+
+    public boolean isMain() {
+        return main;
+    }
+
+    public void setMain(boolean main) {
+        this.main = main;
+    }
+
+    static String getDisplayNameFromItem(Item item) {
+        Validate.notNull(item, "Item must not be null.");
+
+        String displayName = item.getDisplayName();
+        if (StringUtils.isEmpty(displayName)) {
+            QName name = item.getElementName();
+            if (name != null) {
+                displayName = name.getLocalPart();
+            } else {
+                displayName = item.getDefinition().getTypeName().getLocalPart();
+            }
+        }
+
+        return displayName;
+    }
+
+    public boolean hasChanged() {
+        for (ItemWrapper item : getItems()) {
+            if (item.hasChanged()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("ContainerWrapper(");
+        builder.append(getDisplayNameFromItem(container));
+        builder.append(" (");
+        builder.append(status);
+        builder.append(") ");
+        builder.append(getItems() == null ? null : getItems().size());
+        builder.append(" items)");
+        return builder.toString();
+    }
+
+    /**
+     * This methods check if we want to show property in form (e.g.
+     * failedLogins, fetchResult, lastFailedLoginTimestamp must be invisible)
+     *
+     * @return
+     * @deprecated will be implemented through annotations in schema
+     */
+    @Deprecated
+    private boolean skipProperty(PrismPropertyDefinition def) {
+        final List<QName> names = new ArrayList<QName>();
+        names.add(PasswordType.F_FAILED_LOGINS);
+        names.add(PasswordType.F_LAST_FAILED_LOGIN);
+        names.add(PasswordType.F_LAST_SUCCESSFUL_LOGIN);
+        names.add(PasswordType.F_PREVIOUS_SUCCESSFUL_LOGIN);
+        names.add(ObjectType.F_FETCH_RESULT);
+        // activation
+        names.add(ActivationType.F_EFFECTIVE_STATUS);
+        names.add(ActivationType.F_VALIDITY_STATUS);
+        // user
+        names.add(UserType.F_RESULT);
+        // org and roles
+        names.add(OrgType.F_APPROVAL_PROCESS);
+        names.add(OrgType.F_APPROVER_EXPRESSION);
+        names.add(OrgType.F_AUTOMATICALLY_APPROVED);
+        names.add(OrgType.F_CONDITION);
+
+
+        for (QName name : names) {
+            if (name.equals(def.getName())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public boolean isReadonly() {
+		// readonly flag in container is an override. Do not get the value from definition
+		// otherwise it will be propagated to items and overrides the item definition.
+    	return readonly;
+    }
+
+    public void setReadonly(boolean readonly) {
+        this.readonly = readonly;
+    }
+
+    @Override
+    public List<ValueWrapper> getValues() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public boolean isVisible() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return getItem().isEmpty();
+    }
+
+    @Override
+    public ContainerWrapper<C> getContainer() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    //TODO add new PrismContainerValue to association container
+    public void addValue() {
+        getItems().add(createItem());
+    }
+
+    public ItemWrapper createItem() {
+        ValueWrapper wrapper = new ValueWrapper(this, new PrismPropertyValue(null), ValueStatus.ADDED);
+        return wrapper.getItem();
+    }
+
+    
+	public void sort(final PageBase pageBase) {
+		if (objectWrapper.isSorted()){
+            Collections.sort(properties, new Comparator<ItemWrapper>(){
+                @Override
+                public int compare(ItemWrapper pw1, ItemWrapper pw2) {
+                    ItemDefinition id1 = pw1.getItemDefinition();
+                    ItemDefinition id2 = pw2.getItemDefinition();
+                    String str1 =(id1 != null ? (id1.getDisplayName() != null ?
+                            (pageBase.createStringResource(id1.getDisplayName()) != null &&
+                                    StringUtils.isNotEmpty(pageBase.createStringResource(id1.getDisplayName()).getString()) ?
+                                    pageBase.createStringResource(id1.getDisplayName()).getString() : id1.getDisplayName()):
+                            (id1.getName() != null && id1.getName().getLocalPart() != null ? id1.getName().getLocalPart() : "")) : "");
+                    String str2 =(id2 != null ? (id2.getDisplayName() != null ?
+                            (pageBase.createStringResource(id2.getDisplayName()) != null &&
+                                    StringUtils.isNotEmpty(pageBase.createStringResource(id2.getDisplayName()).getString()) ?
+                                    pageBase.createStringResource(id2.getDisplayName()).getString() : id2.getDisplayName()):
+                            (id2.getName() != null && id2.getName().getLocalPart() != null ? id2.getName().getLocalPart() : "")) : "");
+                    return str1.compareToIgnoreCase(str2);
+                }
+            });
+        }
+        else {
+            final int[] maxOrderArray = new int[3];
+            Collections.sort(properties, new Comparator<ItemWrapper>(){
+                @Override
+                public int compare(ItemWrapper pw1, ItemWrapper pw2) {
+                    ItemDefinition id1 = pw1.getItemDefinition();
+                    ItemDefinition id2 = pw2.getItemDefinition();
+
+                    //we need to find out the value of the biggest displayOrder to put
+                    //properties with null display order to the end of the list
+                    int displayOrder1 = (id1 != null && id1.getDisplayOrder() != null) ? id1.getDisplayOrder() : 0;
+                    int displayOrder2 = (id2 != null && id2.getDisplayOrder() != null) ? id2.getDisplayOrder() : 0;
+                    if (maxOrderArray[0] == 0){
+                        maxOrderArray[0] = displayOrder1 > displayOrder2 ? displayOrder1 + 1 : displayOrder2 + 1;
+                    }
+                    maxOrderArray[1] = displayOrder1;
+                    maxOrderArray[2] = displayOrder2;
+
+                    int maxDisplayOrder = NumberUtils.max(maxOrderArray);
+                    maxOrderArray[0] = maxDisplayOrder + 1;
+
+                    return Integer.compare(id1 != null  && id1.getDisplayOrder() != null ? id1.getDisplayOrder() : maxDisplayOrder,
+                            id2 != null && id2.getDisplayOrder() != null ? id2.getDisplayOrder() : maxDisplayOrder);
+                }
+            });
+        }
+	}
+    
+    @Override
+    public String debugDump() {
+        return debugDump(0);
+    }
+
+    @Override
+    public String debugDump(int indent) {
+        StringBuilder sb = new StringBuilder();
+        DebugUtil.indentDebugDump(sb, indent);
+        sb.append("ContainerWrapper: ").append(PrettyPrinter.prettyPrint(getName())).append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "displayName", displayName, indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "status", status == null ? null : status.toString(), indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "main", main, indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "readonly", readonly, indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "showInheritedObjectAttributes", showInheritedObjectAttributes, indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "path", path == null ? null : path.toString(), indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "containerDefinition", containerDefinition == null ? null : containerDefinition.toString(), indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpWithLabel(sb, "container", container == null ? null : container.toString(), indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDumpLabel(sb, "properties", indent + 1);
+        sb.append("\n");
+        DebugUtil.debugDump(sb, properties, indent + 2, false);
+        return sb.toString();
+    }
+
+	@Override
+	public boolean isStripe() {
+		// Does not make much sense, but it is given by the interface
+		return false;
+	}
+
+	@Override
+	public void setStripe(boolean isStripe) {
+		// Does not make much sense, but it is given by the interface
+	}
+
+	public <O extends ObjectType> void collectModifications(ObjectDelta<O> delta) throws SchemaException {
+		if (getItemDefinition().getName().equals(ShadowType.F_ASSOCIATION)) {
+			//create ContainerDelta for association container
+			//HACK HACK HACK create correct procession for association container data
+			//according to its structure
+			ContainerDelta<ShadowAssociationType> associationDelta =
+					ContainerDelta.createDelta(ShadowType.F_ASSOCIATION,
+							(PrismContainerDefinition<ShadowAssociationType>) getItemDefinition());
+			for (ItemWrapper itemWrapper : getItems()) {
+				AssociationWrapper associationItemWrapper = (AssociationWrapper) itemWrapper;
+				List<ValueWrapper> assocValueWrappers = associationItemWrapper.getValues();
+				for (ValueWrapper assocValueWrapper : assocValueWrappers) {
+					PrismContainerValue<ShadowAssociationType> assocValue = (PrismContainerValue<ShadowAssociationType>) assocValueWrapper.getValue();
+					if (!assocValue.isEmpty()) {
+						if (assocValueWrapper.getStatus() == ValueStatus.DELETED) {
+							associationDelta.addValueToDelete(assocValue.clone());
+						} else if (assocValueWrapper.getStatus().equals(ValueStatus.ADDED)) {
+							associationDelta.addValueToAdd(assocValue.clone());
+						}
+					}
 				}
 			}
-			return object.isShowEmpty() || !isEmpty;
-	}
+			if (!associationDelta.isEmpty()) {
+				delta.addModification(associationDelta);
+			}
+		} else {
+			if (!hasChanged()) {
+				return;
+			}
 
-	@Override
-	public String getDisplayName() {
-		if (StringUtils.isNotEmpty(displayName)) {
-			return displayName;
-		}
-		return getDisplayNameFromItem(container);
-	}
-
-	@Override
-	public void setDisplayName(String name) {
-		this.displayName = name;
-	}
-
-	public boolean isMain() {
-		return main;
-	}
-
-	public void setMain(boolean main) {
-		this.main = main;
-	}
-
-	static String getDisplayNameFromItem(Item item) {
-		Validate.notNull(item, "Item must not be null.");
-
-		String displayName = item.getDisplayName();
-		if (StringUtils.isEmpty(displayName)) {
-			QName name = item.getElementName();
-			if (name != null) {
-				displayName = name.getLocalPart();
-			} else {
-				displayName = item.getDefinition().getTypeName().getLocalPart();
+			for (ItemWrapper itemWrapper : getItems()) {
+				if (!itemWrapper.hasChanged()) {
+					continue;
+				}
+				ItemPath containerPath = getPath() != null ? getPath() : new ItemPath();
+				if (itemWrapper instanceof PropertyWrapper) {
+					ItemDelta pDelta = computePropertyDeltas((PropertyWrapper) itemWrapper, containerPath);
+					if (!pDelta.isEmpty()) {
+						//HACK to remove a password replace delta is to be created
+						if (getName().equals(CredentialsType.F_PASSWORD)) {
+							if (pDelta.getValuesToDelete() != null){
+								pDelta.resetValuesToDelete();
+								pDelta.setValuesToReplace(new ArrayList());
+							}
+						}
+						delta.addModification(pDelta);
+					}
+				} else if (itemWrapper instanceof ReferenceWrapper) {
+					ReferenceDelta pDelta = computeReferenceDeltas((ReferenceWrapper) itemWrapper, containerPath);
+					if (!pDelta.isEmpty()) {
+						delta.addModification(pDelta);
+					}
+				} else {
+					LOGGER.trace("Delta from wrapper: ignoring {}", itemWrapper);
+				}
 			}
 		}
-
-		return displayName;
 	}
 
-	public boolean hasChanged() {
-		for (ItemWrapper item : getItems()) {
-			if (item.hasChanged()) {
-				return true;
+	private ItemDelta computePropertyDeltas(PropertyWrapper propertyWrapper, ItemPath containerPath) {
+		ItemDefinition itemDef = propertyWrapper.getItem().getDefinition();
+		ItemDelta pDelta = itemDef.createEmptyDelta(containerPath.subPath(itemDef.getName()));
+		addItemDelta(propertyWrapper, pDelta, itemDef, containerPath);
+		return pDelta;
+	}
+
+	private ReferenceDelta computeReferenceDeltas(ReferenceWrapper referenceWrapper, ItemPath containerPath) {
+		PrismReferenceDefinition propertyDef = referenceWrapper.getItem().getDefinition();
+		ReferenceDelta pDelta = new ReferenceDelta(containerPath, propertyDef.getName(), propertyDef,
+				propertyDef.getPrismContext());
+		addItemDelta(referenceWrapper, pDelta, propertyDef, containerPath.subPath(propertyDef.getName()));
+		return pDelta;
+	}
+
+	private void addItemDelta(ItemWrapper<? extends Item, ? extends ItemDefinition> itemWrapper, ItemDelta pDelta, ItemDefinition propertyDef,
+			ItemPath containerPath) {
+		for (ValueWrapper valueWrapper : itemWrapper.getValues()) {
+			valueWrapper.normalize(propertyDef.getPrismContext());
+			ValueStatus valueStatus = valueWrapper.getStatus();
+			if (!valueWrapper.hasValueChanged()
+					&& (ValueStatus.NOT_CHANGED.equals(valueStatus) || ValueStatus.ADDED.equals(valueStatus))) {
+				continue;
+			}
+
+			// TODO: need to check if the resource has defined
+			// capabilities
+			// todo this is bad hack because now we have not tri-state
+			// checkbox
+			if (SchemaConstants.PATH_ACTIVATION.equivalent(containerPath) && getObject() != null) {
+
+				PrismObject<?> object = getObject().getObject();
+				if (object.asObjectable() instanceof ShadowType
+						&& (((ShadowType) object.asObjectable()).getActivation() == null || ((ShadowType) object
+						.asObjectable()).getActivation().getAdministrativeStatus() == null)) {
+
+					if (!getObject().hasResourceCapability(((ShadowType) object.asObjectable()).getResource(),
+							ActivationCapabilityType.class)) {
+						continue;
+					}
+				}
+			}
+
+			PrismValue newValCloned = ObjectWrapper.clone(valueWrapper.getValue());
+			PrismValue oldValCloned = ObjectWrapper.clone(valueWrapper.getOldValue());
+			switch (valueWrapper.getStatus()) {
+				case ADDED:
+					if (newValCloned != null) {
+						if (SchemaConstants.PATH_PASSWORD.equivalent(containerPath)) {
+							// password change will always look like add,
+							// therefore we push replace
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (password) ADD -> replace {}", pDelta.getPath(), newValCloned);
+							}
+							pDelta.setValuesToReplace(Arrays.asList(newValCloned));
+						} else if (propertyDef.isSingleValue()) {
+							// values for single-valued properties
+							// should be pushed via replace
+							// in order to prevent problems e.g. with
+							// summarizing deltas for
+							// unreachable resources
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (single,new) ADD -> replace {}", pDelta.getPath(), newValCloned);
+							}
+							pDelta.setValueToReplace(newValCloned);
+						} else {
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (multi,new) ADD -> add {}", pDelta.getPath(), newValCloned);
+							}
+							pDelta.addValueToAdd(newValCloned);
+						}
+					}
+					break;
+				case DELETED:
+					if (newValCloned != null) {
+						if (LOGGER.isTraceEnabled()) {
+							LOGGER.trace("Delta from wrapper: {} (new) DELETE -> delete {}", pDelta.getPath(), newValCloned);
+						}
+						pDelta.addValueToDelete(newValCloned);
+					}
+					if (oldValCloned != null) {
+						if (LOGGER.isTraceEnabled()) {
+							LOGGER.trace("Delta from wrapper: {} (old) DELETE -> delete {}", pDelta.getPath(), oldValCloned);
+						}
+						pDelta.addValueToDelete(oldValCloned);
+					}
+					break;
+				case NOT_CHANGED:
+					// this is modify...
+					if (propertyDef.isSingleValue()) {
+						// newValCloned.isEmpty()
+						if (newValCloned != null && !newValCloned.isEmpty()) {
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (single,new) NOT_CHANGED -> replace {}", pDelta.getPath(), newValCloned);
+							}
+							pDelta.setValuesToReplace(Arrays.asList(newValCloned));
+						} else {
+							if (oldValCloned != null) {
+								if (LOGGER.isTraceEnabled()) {
+									LOGGER.trace("Delta from wrapper: {} (single,old) NOT_CHANGED -> delete {}", pDelta.getPath(), oldValCloned);
+								}
+								pDelta.addValueToDelete(oldValCloned);
+							}
+						}
+					} else {
+						if (newValCloned != null && !newValCloned.isEmpty()) {
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (multi,new) NOT_CHANGED -> add {}", pDelta.getPath(), newValCloned);
+							}
+							pDelta.addValueToAdd(newValCloned);
+						}
+						if (oldValCloned != null) {
+							if (LOGGER.isTraceEnabled()) {
+								LOGGER.trace("Delta from wrapper: {} (multi,old) NOT_CHANGED -> delete {}", pDelta.getPath(), oldValCloned);
+							}
+							pDelta.addValueToDelete(oldValCloned);
+						}
+					}
+					break;
 			}
 		}
-
-		return false;
 	}
 
-	@Override
-	public String toString() {
-		StringBuilder builder = new StringBuilder();
-		builder.append(getDisplayNameFromItem(container));
-		builder.append(", ");
-		builder.append(status);
-		builder.append("\n");
-		for (ItemWrapper wrapper : getItems()) {
-			builder.append("\t");
-			builder.append(wrapper.toString());
-			builder.append("\n");
-		}
-		return builder.toString();
-	}
 
-	/**
-	 * This methods check if we want to show property in form (e.g.
-	 * failedLogins, fetchResult, lastFailedLoginTimestamp must be invisible)
-	 * 
-	 * @return
-	 * @deprecated will be implemented through annotations in schema
-	 */
-	@Deprecated
-	private boolean skipProperty(PrismPropertyDefinition def) {
-		final List<QName> names = new ArrayList<QName>();
-		names.add(PasswordType.F_FAILED_LOGINS);
-		names.add(PasswordType.F_LAST_FAILED_LOGIN);
-		names.add(PasswordType.F_LAST_SUCCESSFUL_LOGIN);
-		names.add(PasswordType.F_PREVIOUS_SUCCESSFUL_LOGIN);
-		names.add(ObjectType.F_FETCH_RESULT);
-		// activation
-		names.add(ActivationType.F_EFFECTIVE_STATUS);
-		names.add(ActivationType.F_VALIDITY_STATUS);
-		// user
-		names.add(UserType.F_RESULT);
-		// org and roles
-		names.add(OrgType.F_APPROVAL_PROCESS);
-		names.add(OrgType.F_APPROVER_EXPRESSION);
-		names.add(OrgType.F_AUTOMATICALLY_APPROVED);
-		names.add(OrgType.F_CONDITION);
-		
-
-		for (QName name : names) {
-			if (name.equals(def.getName())) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	public boolean isReadonly() {
-		PrismContainerDefinition def = getItemDefinition();
-		if (def != null) {
-			// todo take into account the containing object status (adding vs. modifying)
-			return (def.canRead() && !def.canAdd() && !def.canModify()); 
-		}
-		return readonly;
-	}
-
-	public void setReadonly(boolean readonly) {
-		this.readonly = readonly;
-	}
-
-	@Override
-	public List<ValueWrapper> getValues() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public boolean isVisible() {
-		// TODO Auto-generated method stub
-		return false;
-	}
-
-	@Override
-	public ContainerWrapper getContainer() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public void addValue() {
-		// TODO Auto-generated method stub
-
-	}
-
-	@Override
-	public String debugDump() {
-		return debugDump(0);
-	}
-
-	@Override
-	public String debugDump(int indent) {
-		StringBuilder sb = new StringBuilder();
-		DebugUtil.indentDebugDump(sb, indent);
-		sb.append("ContainerWrapper(\n");
-		DebugUtil.debugDumpWithLabel(sb, "displayName", displayName, indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "status", status == null?null:status.toString(), indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "main", main, indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "readonly", readonly, indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "showInheritedObjectAttributes", showInheritedObjectAttributes, indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "path", path == null?null:path.toString(), indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "containerDefinition", containerDefinition == null?null:containerDefinition.toString(), indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "container", container==null?null:container.toString(), indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "properties", properties, indent+1);
-		sb.append("\n");
-		DebugUtil.debugDumpWithLabel(sb, "result", result, indent+1);
-		sb.append("\n");
-		DebugUtil.indentDebugDump(sb, indent);
-		sb.append(")");
-		return sb.toString();
-	}
 }

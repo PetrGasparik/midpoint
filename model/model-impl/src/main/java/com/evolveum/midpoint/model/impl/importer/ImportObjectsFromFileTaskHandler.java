@@ -19,6 +19,7 @@ import com.evolveum.midpoint.model.impl.ModelConstants;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.PrismPropertyDefinition;
+import com.evolveum.midpoint.prism.PrismPropertyDefinitionImpl;
 import com.evolveum.midpoint.provisioning.api.ChangeNotificationDispatcher;
 import com.evolveum.midpoint.provisioning.api.ResourceObjectChangeListener;
 import com.evolveum.midpoint.schema.result.OperationConstants;
@@ -80,7 +81,7 @@ public class ImportObjectsFromFileTaskHandler implements TaskHandler {
 
     @PostConstruct
     private void initialize() {
-        filenamePropertyDefinition = new PrismPropertyDefinition(ModelConstants.FILENAME_PROPERTY_NAME,
+        filenamePropertyDefinition = new PrismPropertyDefinitionImpl(ModelConstants.FILENAME_PROPERTY_NAME,
                 DOMUtil.XSD_STRING, prismContext);          // must not be in the constructor, because prismContext is null at that time
         taskManager.registerHandler(HANDLER_URI, this);
     }
@@ -141,6 +142,7 @@ public class ImportObjectsFromFileTaskHandler implements TaskHandler {
         // the run(task) method.
         // Note: the thread may be actually started on a different node
         taskManager.switchToBackground(task, result);
+		result.setBackgroundTaskOid(task.getOid());
 
         LOGGER.trace("Import objects from file {} switched to background, control thread returning with task {}", input, task);
     }

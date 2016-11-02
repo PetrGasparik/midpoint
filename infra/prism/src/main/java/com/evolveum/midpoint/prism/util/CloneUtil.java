@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import com.evolveum.midpoint.prism.DefinitionImpl;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
@@ -97,8 +98,8 @@ public class CloneUtil {
 		if (orig instanceof ItemDelta<?,?>) {
 			return (T) ((ItemDelta<?,?>)orig).clone();
 		}
-		if (orig instanceof Definition) {
-			return (T) ((Definition)orig).clone();
+		if (orig instanceof DefinitionImpl) {
+			return (T) ((DefinitionImpl)orig).clone();
 		}
 		/*
 		 * In some environments we cannot clone XMLGregorianCalendar because of this:
@@ -126,8 +127,19 @@ public class CloneUtil {
 	}
 
 	public static <T> Collection<T> cloneCollectionMembers(Collection<T> collection) {
+		if (collection == null) {
+			return null;
+		}
 		List<T> clonedCollection = new ArrayList<>(collection.size());
 		for (T element : collection) {
+			clonedCollection.add(clone(element));
+		}
+		return clonedCollection;
+	}
+
+	public static <T> List<T> cloneListMembers(List<T> list) {
+		List<T> clonedCollection = new ArrayList<>(list.size());
+		for (T element : list) {
 			clonedCollection.add(clone(element));
 		}
 		return clonedCollection;

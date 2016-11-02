@@ -22,10 +22,8 @@ import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCaseType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -36,9 +34,6 @@ import java.util.Set;
  */
 @Component
 public class AccCertEventHelper implements AccessCertificationEventListener {
-
-    @Autowired
-    private CertificationManagerImpl certificationManager;
 
     private Set<AccessCertificationEventListener> listeners = new HashSet<>();
 
@@ -95,11 +90,11 @@ public class AccCertEventHelper implements AccessCertificationEventListener {
         }
     }
 
-    public Collection<String> getCurrentReviewers(AccessCertificationCampaignType campaign) {
+    public Collection<String> getCurrentReviewers(AccessCertificationCampaignType campaign, List<AccessCertificationCaseType> caseList) {
         Set<String> oids = new HashSet<>();
-        for (AccessCertificationCaseType aCase : campaign.getCase()) {
-            if (Boolean.TRUE.equals(aCase.isEnabled())) {
-                for (ObjectReferenceType reviewerRef : aCase.getReviewerRef()) {
+        for (AccessCertificationCaseType aCase : caseList) {
+            if (aCase.getCurrentStageNumber() == campaign.getStageNumber()) {
+                for (ObjectReferenceType reviewerRef : aCase.getCurrentReviewerRef()) {
                     oids.add(reviewerRef.getOid());
                 }
             }
@@ -107,18 +102,4 @@ public class AccCertEventHelper implements AccessCertificationEventListener {
         return oids;
     }
 
-    public List<AccessCertificationCaseType> getCasesForReviewer(AccessCertificationCampaignType campaign, String oid) {
-        List<AccessCertificationCaseType> rv = new ArrayList<>();
-        for (AccessCertificationCaseType aCase : campaign.getCase()) {
-            if (Boolean.TRUE.equals(aCase.isEnabled())) {
-                for (ObjectReferenceType reviewerRef : aCase.getReviewerRef()) {
-                    if (oid.equals(reviewerRef.getOid())) {
-                        rv.add(aCase.clone());
-                        break;
-                    }
-                }
-            }
-        }
-        return rv;
-    }
 }

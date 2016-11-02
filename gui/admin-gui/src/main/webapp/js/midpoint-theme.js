@@ -15,10 +15,15 @@
  */
 
 window.onload = initAjaxStatusSigns;
+
 function clickFuncWicket6(eventData) {
     var clickedElement = (window.event) ? event.srcElement : eventData.target;
-    if ((clickedElement.tagName.toUpperCase() == 'BUTTON' || clickedElement.tagName.toUpperCase() == 'A' || clickedElement.parentNode.tagName.toUpperCase() == 'A'
-        || (clickedElement.tagName.toUpperCase() == 'INPUT' && (clickedElement.type.toUpperCase() == 'BUTTON' || clickedElement.type.toUpperCase() == 'SUBMIT')))
+    if ((clickedElement.tagName.toUpperCase() == 'BUTTON' 
+        || clickedElement.tagName.toUpperCase() == 'A' 
+        || clickedElement.parentNode.tagName.toUpperCase() == 'A'
+        || (clickedElement.tagName.toUpperCase() == 'INPUT' 
+        && (clickedElement.type.toUpperCase() == 'BUTTON' 
+        || clickedElement.type.toUpperCase() == 'SUBMIT')))
         && clickedElement.parentNode.id.toUpperCase() != 'NOBUSY' ) {
         showAjaxStatusSign();
     }
@@ -43,14 +48,14 @@ function hideAjaxStatusSign() {
     document.getElementById('ajax_busy').style.display = 'none';
 }
 
-
 /**
  * InlineMenu initialization function
  */
 function initInlineMenu(menuId, hideByDefault) {
-    var menu = $('#' + menuId).find('ul.cog');
+    var cog = $('#' + menuId).find('ul.cog');
+    var menu = cog.children().find('ul.dropdown-menu');
 
-    var parent = menu.parent().parent();     //this is inline menu div
+    var parent = cog.parent().parent();     //this is inline menu div
     if (!hideByDefault && !isCogInTable(parent)) {
         return;
     }
@@ -63,15 +68,17 @@ function initInlineMenu(menuId, hideByDefault) {
     // we only want to hide inline menus that are in table <td> element,
     // inline menu in header must be visible all the time, or every menu
     // that has hideByDefault flag turned on
-    menu.hide();
+    cog.hide();
 
     parent.hover(function () {
         //over
-        menu.show();
+        cog.show();
     }, function () {
         //out
-        menu.hide();
-    })
+        if (!menu.is(':visible')) {
+            cog.hide();
+        }
+    });
 }
 
 function isCogInTable(inlineMenuDiv) {
@@ -96,7 +103,7 @@ function updateHeightReal(elementId, add, substract) {
 
     console.log("Document height: " + documentHeight + ", mainContainer: " + mainContainerHeight);
 
-    var height = documentHeight - mainContainerHeight - elementHeight;
+    var height = documentHeight - mainContainerHeight - elementHeight - 1;
     console.log("Height clean: " + height);
 
     if (substract instanceof Array) {
@@ -144,4 +151,98 @@ function initPageSizePopover(buttonId, popoverId, positionId) {
 
         popover.toggle();
     });
+}
+
+/**
+ * Used in SearchPanel for advanced search, if we want to store resized textarea dimensions.
+ * 
+ * @param textAreaId
+ */
+function storeTextAreaSize(textAreaId) {
+    console.log("storeTextAreaSize('" + textAreaId + "')");
+
+    var area = $('#' + textAreaId);
+    $.textAreaSize = [];
+    $.textAreaSize[textAreaId] = {
+        height: area.height(), 
+        width: area.width(),
+        position: area.prop('selectionStart')
+    }
+}
+
+/**
+ * Used in SearchPanel for advanced search, if we want to store resized textarea dimensions.
+ * 
+ * @param textAreaId
+ */
+function restoreTextAreaSize(textAreaId) {
+    console.log("restoreTextAreaSize('" + textAreaId + "')");
+
+    var area = $('#' + textAreaId);
+
+    var value = $.textAreaSize[textAreaId];
+
+    area.height(value.height);
+    area.width(value.width);
+    area.prop('selectionStart', value.position);
+
+    // resize also error message span
+    var areaPadding = 70;
+    area.siblings('.help-block').width(value.width + areaPadding);
+}
+
+/**
+ * Used in SearchPanel class
+ *
+ * @param buttonId
+ * @param popoverId
+ * @param paddingRight value which will shift popover to the left from center bottom position against button
+ */
+function toggleSearchPopover(buttonId, popoverId, paddingRight) {
+    console.log("Called toggleSearchPopover with buttonId=" + buttonId + ",popoverId="
+        + popoverId + ",paddingRight=" + paddingRight);
+
+    var button = $('#' + buttonId);
+    var popover = $('#' + popoverId);
+
+    var popovers = button.parents('.search-form').find('.popover:visible').each(function () {
+        var id = $(this).attr('id');
+        console.log("Found popover with id=" + id);
+
+        if (id != popoverId) {
+            $(this).hide(200);
+        }
+    });
+
+    var position = button.position();
+
+    var left = position.left - (popover.outerWidth() - button.outerWidth()) / 2 - paddingRight;
+    var top = position.top + button.outerHeight();
+
+    popover.css('top', top);
+    popover.css('left', left);
+
+    popover.toggle(200);
+
+    //this will set focus to first form field on search item popup
+    popover.find('input[type=text],textarea,select').filter(':visible:first').focus();
+
+    //this will catch ESC or ENTER and fake close or update button click
+    popover.find('input[type=text],textarea,select').off('keyup.search').on('keyup.search', function(e) {
+        if (e.keyCode == 27) {
+            popover.find('[data-type="close"]').click();
+        } else if (e.keyCode == 13) {
+            popover.find('[data-type="update"]').click();
+        }
+    });
+}
+
+/**
+ * used in DropDownMultiChoice.java
+ * 
+ * @param compId
+ * @param options
+ */
+function initDropdown(compId, options) {
+    $('#' + compId).multiselect(options);
 }

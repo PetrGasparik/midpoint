@@ -20,6 +20,7 @@ import com.evolveum.midpoint.audit.api.AuditEventRecord;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.PrismReferenceValue;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.repo.sql.data.common.enums.ROperationResultStatus;
 import com.evolveum.midpoint.repo.sql.data.common.other.RObjectType;
@@ -27,7 +28,6 @@ import com.evolveum.midpoint.repo.sql.util.ClassMapper;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.ObjectDeltaOperation;
-import com.evolveum.midpoint.schema.constants.ObjectTypes;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
@@ -36,7 +36,6 @@ import org.hibernate.annotations.Cascade;
 import org.hibernate.annotations.ForeignKey;
 
 import javax.persistence.*;
-import javax.xml.namespace.QName;
 
 import java.io.Serializable;
 import java.sql.Timestamp;
@@ -51,7 +50,7 @@ import java.util.Set;
  */
 @Entity
 @Table(name = RAuditEventRecord.TABLE_NAME, indexes = {
-        @Index(name = "iTimestampValue", columnList = RAuditEventRecord.COLUMN_TIMESTAMP)})
+        @Index(name = "iTimestampValue", columnList = RAuditEventRecord.COLUMN_TIMESTAMP)})       // TODO correct index name
 public class RAuditEventRecord implements Serializable {
 
     public static final String TABLE_NAME = "m_audit_event";
@@ -372,12 +371,11 @@ public class RAuditEventRecord implements Serializable {
 
         try {
             if (record.getTarget() != null) {
-                PrismObject target = record.getTarget();
+                PrismReferenceValue target = record.getTarget();
                 repo.setTargetName(getOrigName(target));
                 repo.setTargetOid(target.getOid());
 
-                QName type = ObjectTypes.getObjectType(target.getCompileTimeClass()).getTypeQName();
-                repo.setTargetType(ClassMapper.getHQLTypeForQName(type));
+                repo.setTargetType(ClassMapper.getHQLTypeForQName(target.getTargetType()));
             }
             if (record.getTargetOwner() != null) {
                 PrismObject targetOwner = record.getTargetOwner();
@@ -463,6 +461,14 @@ public class RAuditEventRecord implements Serializable {
 
 	private static String getOrigName(PrismObject object) {
         PolyString name = (PolyString) object.getPropertyRealValue(ObjectType.F_NAME, PolyString.class);
+        return name != null ? name.getOrig() : null;
+    }
+	
+	private static String getOrigName(PrismReferenceValue refval) {
+		if (refval.getObject() != null) {
+			return getOrigName(refval.getObject());
+		}
+        PolyString name = refval.getTargetName();
         return name != null ? name.getOrig() : null;
     }
 }

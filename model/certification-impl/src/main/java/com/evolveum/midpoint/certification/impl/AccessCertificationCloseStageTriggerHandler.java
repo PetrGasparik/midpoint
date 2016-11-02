@@ -16,7 +16,6 @@
 package com.evolveum.midpoint.certification.impl;
 
 import com.evolveum.midpoint.certification.api.CertificationManager;
-import com.evolveum.midpoint.model.api.PolicyViolationException;
 import com.evolveum.midpoint.model.impl.trigger.TriggerHandler;
 import com.evolveum.midpoint.model.impl.trigger.TriggerHandlerRegistry;
 import com.evolveum.midpoint.prism.PrismObject;
@@ -24,9 +23,6 @@ import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.CertCampaignTypeUtil;
 import com.evolveum.midpoint.schema.util.ObjectTypeUtil;
 import com.evolveum.midpoint.task.api.Task;
-import com.evolveum.midpoint.util.exception.CommunicationException;
-import com.evolveum.midpoint.util.exception.ConfigurationException;
-import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -76,15 +72,13 @@ public class AccessCertificationCloseStageTriggerHandler implements TriggerHandl
 			AccessCertificationCampaignType campaign = (AccessCertificationCampaignType) object;
 			LOGGER.info("Automatically closing current stage of {}", ObjectTypeUtil.toShortString(campaign));
 
-			int currentStageNumber = campaign.getCurrentStageNumber();
+			int currentStageNumber = campaign.getStageNumber();
 			certificationManager.closeCurrentStage(campaign.getOid(), currentStageNumber, task, result);
 			if (currentStageNumber < CertCampaignTypeUtil.getNumberOfStages(campaign)) {
 				LOGGER.info("Automatically opening next stage of {}", ObjectTypeUtil.toShortString(campaign));
 				certificationManager.openNextStage(campaign.getOid(), currentStageNumber + 1, task, result);
 			}
-		} catch (SchemaException|ObjectNotFoundException|ExpressionEvaluationException|CommunicationException|
-				ObjectAlreadyExistsException|ConfigurationException|PolicyViolationException|
-				SecurityViolationException|RuntimeException e) {
+		} catch (SchemaException|ObjectNotFoundException|ObjectAlreadyExistsException|SecurityViolationException|RuntimeException e) {
 			LoggingUtils.logException(LOGGER, "Couldn't close current campaign and possibly advance to the next one", e);
 		}
 	}

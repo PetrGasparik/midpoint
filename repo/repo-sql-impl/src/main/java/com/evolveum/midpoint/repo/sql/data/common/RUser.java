@@ -23,6 +23,7 @@ import com.evolveum.midpoint.repo.sql.data.common.enums.ROperationResultStatus;
 import com.evolveum.midpoint.repo.sql.query.definition.JaxbName;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.IdGeneratorResult;
+import com.evolveum.midpoint.repo.sql.util.MidPointJoinedPersister;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.GetOperationOptions;
 import com.evolveum.midpoint.schema.SelectorOptions;
@@ -31,6 +32,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 import org.hibernate.annotations.Cascade;
 import org.hibernate.annotations.ForeignKey;
 import org.hibernate.annotations.Index;
+import org.hibernate.annotations.Persister;
 
 import javax.persistence.*;
 
@@ -43,11 +45,12 @@ import java.util.Set;
 @Entity
 @Table(uniqueConstraints = @UniqueConstraint(name="uc_user_name", columnNames = {"name_norm"}))
 @org.hibernate.annotations.Table(appliesTo = "m_user",
-        indexes = {@Index(name = "iFullName", columnNames = "fullName_orig"),
+        indexes = {@Index(name = "iFullName", columnNames = "fullName_orig"),           // TODO correct indices names
                 @Index(name = "iFamilyName", columnNames = "familyName_orig"),
                 @Index(name = "iGivenName", columnNames = "givenName_orig"),
                 @Index(name = "iLocality", columnNames = "locality_orig")})
 @ForeignKey(name = "fk_user")
+@Persister(impl = MidPointJoinedPersister.class)
 public class RUser extends RFocus<UserType> implements OperationResult {
 
     private RPolyString name;
@@ -141,7 +144,7 @@ public class RUser extends RFocus<UserType> implements OperationResult {
         return localityUser;
     }
 
-    @Index(name = "iEmployeeNumber")
+    @Index(name = "iEmployeeNumber")            // TODO correct index name
     public String getEmployeeNumber() {
         return employeeNumber;
     }

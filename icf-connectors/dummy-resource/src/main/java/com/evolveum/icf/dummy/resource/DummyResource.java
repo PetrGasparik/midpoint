@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import com.evolveum.midpoint.util.exception.SystemException;
 
@@ -72,16 +71,22 @@ import com.evolveum.midpoint.util.logging.TraceManager;
 public class DummyResource implements DebugDumpable {
 	
 	private static final Trace LOGGER = TraceManager.getTrace(DummyResource.class);
+	
+	public static final String ATTRIBUTE_CONNECTOR_TO_STRING = "connectorToString";
+	public static final String ATTRIBUTE_CONNECTOR_STATIC_VAL = "connectorStaticVal";
+	public static final String ATTRIBUTE_CONNECTOR_CONFIGURATION_TO_STRING = "connectorConfigurationToString";
 
 	private String instanceName;
 	private Map<String,DummyObject> allObjects;
 	private Map<String,DummyAccount> accounts;
 	private Map<String,DummyGroup> groups;
 	private Map<String,DummyPrivilege> privileges;
+	private Map<String,DummyOrg> orgs;
 	private List<ScriptHistoryEntry> scriptHistory;
 	private DummyObjectClass accountObjectClass;
 	private DummyObjectClass groupObjectClass;
 	private DummyObjectClass privilegeObjectClass;
+	private final Map<String,DummyObjectClass> auxiliaryObjectClassMap = new HashMap<>();
 	private DummySyncStyle syncStyle;
 	private List<DummyDelta> deltas;
 	private int latestSyncToken;
@@ -100,9 +105,13 @@ public class DummyResource implements DebugDumpable {
 	private BreakMode addBreakMode = BreakMode.NONE;
 	private BreakMode modifyBreakMode = BreakMode.NONE;
 	private BreakMode deleteBreakMode = BreakMode.NONE;
+	
+	private boolean blockOperations = false;
 
 	private boolean generateAccountDescriptionOnCreate = false;		   // simulates volatile behavior (on create)
 	private boolean generateAccountDescriptionOnUpdate = false;        // simulates volatile behavior (on update)
+	
+	private boolean disableNameHintChecks = false;
 
 	// Following two properties are just copied from the connector
 	// configuration and can be checked later. They are otherwise
@@ -117,12 +126,13 @@ public class DummyResource implements DebugDumpable {
 		accounts = Collections.synchronizedMap(new LinkedHashMap<String, DummyAccount>());
 		groups = Collections.synchronizedMap(new LinkedHashMap<String, DummyGroup>());
 		privileges = Collections.synchronizedMap(new LinkedHashMap<String, DummyPrivilege>());
+		orgs = Collections.synchronizedMap(new LinkedHashMap<String, DummyOrg>());
 		scriptHistory = new ArrayList<ScriptHistoryEntry>();
 		accountObjectClass = new DummyObjectClass();
 		groupObjectClass = new DummyObjectClass();
 		privilegeObjectClass = new DummyObjectClass();
 		syncStyle = DummySyncStyle.NONE;
-		deltas = new ArrayList<DummyDelta>();
+		deltas = Collections.synchronizedList(new ArrayList<DummyDelta>());
 		latestSyncToken = 0;
 	}
 	
@@ -134,6 +144,7 @@ public class DummyResource implements DebugDumpable {
 		accounts.clear();
 		groups.clear();
 		privileges.clear();
+		orgs.clear();
 		scriptHistory.clear();
 		accountObjectClass = new DummyObjectClass();
 		groupObjectClass = new DummyObjectClass();
@@ -250,6 +261,14 @@ public class DummyResource implements DebugDumpable {
 		setBreakMode(BreakMode.NONE);
 	}
 
+	public boolean isBlockOperations() {
+		return blockOperations;
+	}
+
+	public void setBlockOperations(boolean blockOperations) {
+		this.blockOperations = blockOperations;
+	}
+
 	public String getUselessString() {
 		return uselessString;
 	}
@@ -298,6 +317,14 @@ public class DummyResource implements DebugDumpable {
 		this.generateAccountDescriptionOnUpdate = generateAccountDescriptionOnUpdate;
 	}
 
+	public boolean isDisableNameHintChecks() {
+		return disableNameHintChecks;
+	}
+
+	public void setDisableNameHintChecks(boolean disableNameHintChecks) {
+		this.disableNameHintChecks = disableNameHintChecks;
+	}
+
 	public Collection<String> getForbiddenNames() {
 		return forbiddenNames;
 	}
@@ -335,13 +362,17 @@ public class DummyResource implements DebugDumpable {
 		traceOperation("groupMembersRead", groupMembersReadCount);
 	}
 
-	public DummyObjectClass getAccountObjectClass() throws ConnectException, FileNotFoundException {
+	public DummyObjectClass getAccountObjectClass() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		if (schemaBreakMode == BreakMode.NONE) {
 			return accountObjectClass;
 		} else if (schemaBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("The schema is not available (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("The schema file not found (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error fetching schema (simulated error)");
@@ -354,7 +385,10 @@ public class DummyResource implements DebugDumpable {
 			// This is a real error. Use this strange thing to make sure it passes up
 			throw new RuntimeException("Unknown schema break mode "+schemaBreakMode);
 		}
-		
+	}
+
+	public DummyObjectClass getAccountObjectClassNoExceptions() {
+		return accountObjectClass;
 	}
 
 	public DummyObjectClass getGroupObjectClass() {
@@ -365,13 +399,26 @@ public class DummyResource implements DebugDumpable {
 		return privilegeObjectClass;
 	}
 
-	public Collection<DummyAccount> listAccounts() throws ConnectException, FileNotFoundException {
+	public Map<String,DummyObjectClass> getAuxiliaryObjectClassMap() {
+		return auxiliaryObjectClassMap;
+	}
+
+	public void addAuxiliaryObjectClass(String name, DummyObjectClass objectClass) {
+		auxiliaryObjectClassMap.put(name, objectClass);
+	}
+
+	public Collection<DummyAccount> listAccounts() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (getBreakMode == BreakMode.NONE) {
 			return accounts.values();
 		} else if (schemaBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -386,7 +433,7 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	private <T extends DummyObject> T getObjectByName(Map<String,T> map, String name) throws ConnectException, FileNotFoundException {
+	private <T extends DummyObject> T getObjectByName(Map<String,T> map, String name) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		if (!enforceUniqueName) {
 			throw new IllegalStateException("Attempt to search object by name while resource is in non-unique name mode");
 		}
@@ -396,6 +443,10 @@ public class DummyResource implements DebugDumpable {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -410,19 +461,23 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	public DummyAccount getAccountByUsername(String username) throws ConnectException, FileNotFoundException {
+	public DummyAccount getAccountByUsername(String username) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectByName(accounts, username);
 	}
 	
-	public DummyGroup getGroupByName(String name) throws ConnectException, FileNotFoundException {
+	public DummyGroup getGroupByName(String name) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectByName(groups, name);
 	}
 	
-	public DummyPrivilege getPrivilegeByName(String name) throws ConnectException, FileNotFoundException {
+	public DummyPrivilege getPrivilegeByName(String name) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectByName(privileges, name);
 	}
 	
-	private <T extends DummyObject> T getObjectById(Class<T> expectedClass, String id) throws ConnectException, FileNotFoundException {
+	public DummyOrg getOrgByName(String name) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		return getObjectByName(orgs, name);
+	}
+	
+	private <T extends DummyObject> T getObjectById(Class<T> expectedClass, String id) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		if (getBreakMode == BreakMode.NONE) {
 			DummyObject dummyObject = allObjects.get(id);
 			if (dummyObject == null) {
@@ -436,6 +491,10 @@ public class DummyResource implements DebugDumpable {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -450,25 +509,34 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	public DummyAccount getAccountById(String id) throws ConnectException, FileNotFoundException {
+	public DummyAccount getAccountById(String id) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectById(DummyAccount.class, id);
 	}
 	
-	public DummyGroup getGroupById(String id) throws ConnectException, FileNotFoundException {
+	public DummyGroup getGroupById(String id) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectById(DummyGroup.class, id);
 	}
 	
-	public DummyPrivilege getPrivilegeById(String id) throws ConnectException, FileNotFoundException {
+	public DummyPrivilege getPrivilegeById(String id) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		return getObjectById(DummyPrivilege.class, id);
 	}
+	
+	public DummyOrg getOrgById(String id) throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		return getObjectById(DummyOrg.class, id);
+	}
 
-	public Collection<DummyGroup> listGroups() throws ConnectException, FileNotFoundException {
+	public Collection<DummyGroup> listGroups() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (getBreakMode == BreakMode.NONE) {
 			return groups.values();
 		} else if (schemaBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -483,13 +551,18 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	public Collection<DummyPrivilege> listPrivileges() throws ConnectException, FileNotFoundException {
+	public Collection<DummyPrivilege> listPrivileges() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (getBreakMode == BreakMode.NONE) {
 			return privileges.values();
 		} else if (schemaBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (schemaBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (schemaBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -504,13 +577,44 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	private synchronized <T extends DummyObject> String addObject(Map<String,T> map, T newObject) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+	public Collection<DummyOrg> listOrgs() throws ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
+		if (getBreakMode == BreakMode.NONE) {
+			return orgs.values();
+		} else if (schemaBreakMode == BreakMode.NETWORK) {
+			throw new ConnectException("Network error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.IO) {
+			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (schemaBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
+		} else if (schemaBreakMode == BreakMode.GENERIC) {
+			// The connector will react with generic exception
+			throw new IllegalArgumentException("Generic error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.RUNTIME) {
+			// The connector will just pass this up
+			throw new IllegalStateException("Generic error (simulated error)");
+		} else if (schemaBreakMode == BreakMode.UNSUPPORTED) {
+			throw new UnsupportedOperationException("Not supported (simulated error)");
+		} else {
+			// This is a real error. Use this strange thing to make sure it passes up
+			throw new RuntimeException("Unknown schema break mode "+schemaBreakMode);
+		}
+	}
+	
+	private synchronized <T extends DummyObject> String addObject(Map<String,T> map, T newObject) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (addBreakMode == BreakMode.NONE) {
 			// just go on
 		} else if (addBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error during add (simulated error)");
 		} else if (addBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error during add (simulated error)");
+		} else if (addBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation during add (simulated error)");
+		} else if (addBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict during add (simulated error)");
 		} else if (addBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error during add (simulated error)");
@@ -568,13 +672,18 @@ public class DummyResource implements DebugDumpable {
 	}
 	
 
-	private synchronized <T extends DummyObject> void deleteObjectByName(Class<T> type, Map<String,T> map, String name) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException {
+	private synchronized <T extends DummyObject> void deleteObjectByName(Class<T> type, Map<String,T> map, String name) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (deleteBreakMode == BreakMode.NONE) {
 			// go on
 		} else if (deleteBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (deleteBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (deleteBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (deleteBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict during (simulated error)");
 		} else if (deleteBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -610,25 +719,34 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 	
-	public void deleteAccountById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException {
+	public void deleteAccountById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException, SchemaViolationException, ConflictException {
 		deleteObjectById(DummyAccount.class, accounts, id);
 	}
 
-	public void deleteGroupById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException {
+	public void deleteGroupById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException, SchemaViolationException, ConflictException {
 		deleteObjectById(DummyGroup.class, groups, id);
 	}
 
-	public void deletePrivilegeById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException {
+	public void deletePrivilegeById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException, SchemaViolationException, ConflictException {
 		deleteObjectById(DummyPrivilege.class, privileges, id);
 	}
+	
+	public void deleteOrgById(String id) throws ConnectException, FileNotFoundException, ObjectDoesNotExistException, SchemaViolationException, ConflictException {
+		deleteObjectById(DummyOrg.class, orgs, id);
+	}
 
-	private synchronized <T extends DummyObject> void deleteObjectById(Class<T> type, Map<String,T> map, String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException {
+	private synchronized <T extends DummyObject> void deleteObjectById(Class<T> type, Map<String,T> map, String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (deleteBreakMode == BreakMode.NONE) {
 			// go on
 		} else if (deleteBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (deleteBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (deleteBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (deleteBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (deleteBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -674,13 +792,18 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 
-	private <T extends DummyObject> void renameObject(Class<T> type, Map<String,T> map, String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException {
+	private <T extends DummyObject> void renameObject(Class<T> type, Map<String,T> map, String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		checkBlockOperations();
 		if (modifyBreakMode == BreakMode.NONE) {
 			// go on
 		} else if (modifyBreakMode == BreakMode.NETWORK) {
 			throw new ConnectException("Network error (simulated error)");
 		} else if (modifyBreakMode == BreakMode.IO) {
 			throw new FileNotFoundException("IO error (simulated error)");
+		} else if (modifyBreakMode == BreakMode.SCHEMA) {
+			throw new SchemaViolationException("Schema violation (simulated error)");
+		} else if (modifyBreakMode == BreakMode.CONFLICT) {
+			throw new ConflictException("Conflict (simulated error)");
 		} else if (modifyBreakMode == BreakMode.GENERIC) {
 			// The connector will react with generic exception
 			throw new IllegalArgumentException("Generic error (simulated error)");
@@ -715,19 +838,19 @@ public class DummyResource implements DebugDumpable {
 			changeDescriptionIfNeeded((DummyAccount) existingObject);
 		}
 	}
-	
-	public String addAccount(DummyAccount newAccount) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+
+	public String addAccount(DummyAccount newAccount) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		if (generateAccountDescriptionOnCreate && newAccount.getAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME) == null) {
 			newAccount.addAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME, "Description of " + newAccount.getName());
 		}
 		return addObject(accounts, newAccount);
 	}
 	
-	public void deleteAccountByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException {
+	public void deleteAccountByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		deleteObjectByName(DummyAccount.class, accounts, id);
 	}
 
-	public void renameAccount(String id, String oldUsername, String newUsername) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+	public void renameAccount(String id, String oldUsername, String newUsername) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, SchemaViolationException, ConflictException {
 		renameObject(DummyAccount.class, accounts, id, oldUsername, newUsername);
 		for (DummyGroup group : groups.values()) {
 			if (group.containsMember(oldUsername)) {
@@ -737,7 +860,7 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 
-	public void changeDescriptionIfNeeded(DummyAccount account) {
+	public void changeDescriptionIfNeeded(DummyAccount account) throws SchemaViolationException, ConflictException {
 		if (generateAccountDescriptionOnCreate) {
 			try {
 				account.replaceAttributeValue(DummyAccount.ATTR_DESCRIPTION_NAME, "Updated description of " + account.getName());
@@ -747,28 +870,40 @@ public class DummyResource implements DebugDumpable {
 		}
 	}
 
-	public String addGroup(DummyGroup newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+	public String addGroup(DummyGroup newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, SchemaViolationException, ConflictException {
 		return addObject(groups, newGroup);
 	}
 	
-	public void deleteGroupByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException {
+	public void deleteGroupByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		deleteObjectByName(DummyGroup.class, groups, id);
 	}
 
-	public void renameGroup(String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException {
+	public void renameGroup(String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		renameObject(DummyGroup.class, groups, id, oldName, newName);
 	}
 	
-	public String addPrivilege(DummyPrivilege newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException {
+	public String addPrivilege(DummyPrivilege newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, SchemaViolationException, ConflictException {
 		return addObject(privileges, newGroup);
 	}
 	
-	public void deletePrivilegeByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException {
+	public void deletePrivilegeByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		deleteObjectByName(DummyPrivilege.class, privileges, id);
 	}
 
-	public void renamePrivilege(String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException {
+	public void renamePrivilege(String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
 		renameObject(DummyPrivilege.class, privileges, id, oldName, newName);
+	}
+	
+	public String addOrg(DummyOrg newGroup) throws ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, SchemaViolationException, ConflictException {
+		return addObject(orgs, newGroup);
+	}
+	
+	public void deleteOrgByName(String id) throws ObjectDoesNotExistException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		deleteObjectByName(DummyOrg.class, orgs, id);
+	}
+
+	public void renameOrg(String id, String oldName, String newName) throws ObjectDoesNotExistException, ObjectAlreadyExistsException, ConnectException, FileNotFoundException, SchemaViolationException, ConflictException {
+		renameObject(DummyOrg.class, orgs, id, oldName, newName);
 	}
 	
 	void recordModify(DummyObject dObject) {
@@ -856,6 +991,28 @@ public class DummyResource implements DebugDumpable {
 		return result;
 	}
 	
+	private synchronized void checkBlockOperations() {
+		if (blockOperations) {
+			try {
+				LOGGER.info("Thread {} blocked", Thread.currentThread().getName());
+				this.wait();
+				LOGGER.info("Thread {} unblocked", Thread.currentThread().getName());
+			} catch (InterruptedException e) {
+				LOGGER.debug("Wait interrupted", e);
+			}
+		}
+	}
+	
+	public synchronized void unblock() {
+		LOGGER.info("Unblocking");
+		this.notify();
+	}
+	
+	public synchronized void unblockAll() {
+		LOGGER.info("Unblocking all");
+		this.notifyAll();
+	}
+	
 	private void traceOperation(String opName, long counter) {
 		LOGGER.info("MONITOR dummy '{}' {} ({})", instanceName, opName, counter);
 		if (LOGGER.isDebugEnabled()) {
@@ -905,6 +1062,20 @@ public class DummyResource implements DebugDumpable {
 			sb.append(": ");
 			sb.append(entry.getValue());
 		}
+		sb.append("\nPrivileges:");
+		for (Entry<String, DummyPrivilege> entry: privileges.entrySet()) {
+			sb.append("\n  ");
+			sb.append(entry.getKey());
+			sb.append(": ");
+			sb.append(entry.getValue());
+		}
+		sb.append("\nOrgs:");
+		for (Entry<String, DummyOrg> entry: orgs.entrySet()) {
+			sb.append("\n  ");
+			sb.append(entry.getKey());
+			sb.append(": ");
+			sb.append(entry.getValue());
+		}
 		sb.append("\nDeltas:");
 		for (DummyDelta delta: deltas) {
 			sb.append("\n  ");
@@ -916,7 +1087,7 @@ public class DummyResource implements DebugDumpable {
 
 	@Override
 	public String toString() {
-		return "DummyResource("+accounts.size()+" accounts, "+groups.size()+" groups)";
+		return "DummyResource("+instanceName+": "+accounts.size()+" accounts, "+groups.size()+" groups, "+privileges.size()+" privileges, "+orgs.size()+" orgs)";
 	}
 
 }

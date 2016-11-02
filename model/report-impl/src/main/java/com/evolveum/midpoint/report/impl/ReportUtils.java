@@ -20,10 +20,10 @@ import com.evolveum.midpoint.prism.Item;
 import com.evolveum.midpoint.prism.PrismContainerValue;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.PrismReferenceValue;
-import com.evolveum.midpoint.prism.PrismReference;
+import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.prism.path.ItemPathSegment;
 import com.evolveum.midpoint.prism.path.NameItemPathSegment;
-import com.evolveum.midpoint.prism.polystring.PolyString;
+
 import java.io.File;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
@@ -35,6 +35,7 @@ import java.util.ResourceBundle;
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
 
+import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationResponseType;
 import org.apache.commons.lang.StringUtils;
 
 import com.evolveum.midpoint.util.PrettyPrinter;
@@ -83,6 +84,22 @@ public class ReportUtils {
         }
 
         return timestamp;
+    }
+
+    public static String prettyPrintForReport(XMLGregorianCalendar dateTime) {
+        if (dateTime == null) {
+            return "";
+        }
+        SimpleDateFormat formatDate = new SimpleDateFormat();
+        return formatDate.format(new Date(dateTime.toGregorianCalendar().getTimeInMillis()));
+    }
+
+    public static String prettyPrintForReport(Date date) {
+        if (date == null) {
+            return "";
+        }
+        SimpleDateFormat formatDate = new SimpleDateFormat();
+        return formatDate.format(date);
     }
 
     public static String getDateTime() {
@@ -157,7 +174,7 @@ public class ReportUtils {
         String val = (defaultValue == null) ? key : defaultValue;
         ResourceBundle bundle;
         try {
-            bundle = ResourceBundle.getBundle("localization/Midpoint", new Locale("en", "US"));
+            bundle = ResourceBundle.getBundle("localization/schema", new Locale("en", "US"));
         } catch (MissingResourceException e) {
             return (defaultValue != null) ? defaultValue : key; //workaround for Jasper Studio
         }
@@ -213,13 +230,54 @@ public class ReportUtils {
     }
 
     public static String prettyPrintForReport(PrismReferenceValue prv) {
+        return prettyPrintForReport(prv, true);
+    }
+
+    public static String prettyPrintForReport(PrismReferenceValue prv, boolean showType) {
         StringBuilder sb = new StringBuilder();
-        sb.append(prettyPrintForReport(prv.getTargetType()));
-        sb.append(": ");
+        if (showType) {
+            sb.append(getTypeDisplayName(prv.getTargetType()));
+            sb.append(": ");
+        }
         if (prv.getTargetName() != null) {
             sb.append(prv.getTargetName());
         } else {
             sb.append(prv.getOid());
+        }
+        return sb.toString();
+    }
+
+    public static String prettyPrintForReport(ObjectReferenceType prv) {
+        return prettyPrintForReport(prv, true);
+    }
+
+    public static String prettyPrintForReport(ObjectReferenceType prv, boolean showType) {
+        if (prv == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (showType || prv.getTargetName() == null) {
+            sb.append(getTypeDisplayName(prv.getType()));
+            sb.append(": ");
+        }
+        if (prv.getTargetName() != null) {
+            sb.append(prv.getTargetName());
+        } else {
+            sb.append(prv.getOid());
+        }
+        return sb.toString();
+    }
+
+    public static String prettyPrintUsersForReport(List<ObjectReferenceType> userRefList) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (ObjectReferenceType userRef : userRefList) {
+            if (first) {
+                first = false;
+            } else {
+                sb.append(", ");
+            }
+            sb.append(prettyPrintForReport(userRef, false));
         }
         return sb.toString();
     }
@@ -515,4 +573,53 @@ public class ReportUtils {
         return sb.toString();
     }
 
+    public static String join(Collection<String> strings) {
+        return StringUtils.join(strings, ", ");
+    }
+
+    public static Object getItemRealValue(PrismContainerValue containerValue, String itemName) {
+        Item item = containerValue.findItem(new QName(itemName));
+        if (item == null || item.size() == 0) {
+            return null;
+        }
+        if (item.size() > 1) {
+            throw new IllegalStateException("More than one value in item " + item);
+        }
+        PrismValue value = item.getValue(0);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof PrismPropertyValue) {
+            return ((PrismPropertyValue) value).getValue();
+        } else if (value instanceof PrismReferenceValue) {
+            ObjectReferenceType ort = new ObjectReferenceType();
+            ort.setupReferenceValue((PrismReferenceValue) value);
+            return ort;
+        } else if (value instanceof PrismContainerValue) {
+            return ((PrismContainerValue) value).asContainerable();     // questionable
+        } else {
+            throw new IllegalStateException("Unknown PrismValue: " + value);
+        }
+    }
+
+    public static String prettyPrintForReport(AccessCertificationResponseType response) {
+        if (response == null || response == AccessCertificationResponseType.NO_RESPONSE) {
+            return "";
+        }
+        return getPropertyString("AccessCertificationResponseType."+response.name());
+    }
+
+    public static String prettyPrintForReport(Enum e) {
+        if (e == null) {
+            return "";
+        }
+        return getPropertyString(e.getClass().getSimpleName()+"."+e.name(), e.name());
+    }
+
+    public static String getTypeDisplayName(QName typeName) {
+        if (typeName == null) {
+            return null;
+        }
+        return getPropertyString("ObjectType." + typeName.getLocalPart(), typeName.getLocalPart());
+    }
 }

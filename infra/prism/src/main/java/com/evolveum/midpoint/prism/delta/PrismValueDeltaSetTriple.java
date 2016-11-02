@@ -15,30 +15,21 @@
  */
 package com.evolveum.midpoint.prism.delta;
 
-import com.evolveum.midpoint.prism.ConsistencyCheckScope;
 import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.Itemable;
 import com.evolveum.midpoint.prism.Objectable;
-import com.evolveum.midpoint.prism.PrismContext;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.prism.OriginType;
 import com.evolveum.midpoint.prism.Visitable;
 import com.evolveum.midpoint.prism.Visitor;
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.util.Cloner;
 import com.evolveum.midpoint.util.DebugDumpable;
-import com.evolveum.midpoint.util.DebugUtil;
-import com.evolveum.midpoint.util.MiscUtil;
+import com.evolveum.midpoint.util.Processor;
 import com.evolveum.midpoint.util.exception.SchemaException;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Iterator;
-
-import javax.xml.namespace.QName;
 
 /**
  * DeltaSetTriple that is limited to hold prism values. By limiting to the PrismValue descendants we gain advantage to be
@@ -238,6 +229,16 @@ public class PrismValueDeltaSetTriple<V extends PrismValue> extends DeltaSetTrip
 			}
 		};
 		accept(visitor);
+		
+		Processor<V> processor = new Processor<V>() {
+			@Override
+			public void process(V pval) {
+				if (pval.getParent() != null) {
+					throw new IllegalStateException("Value "+pval+" in triple "+PrismValueDeltaSetTriple.this+" has parent, looks like it was not cloned properly");
+				}
+			}
+		};
+		foreach(processor);
 	}
 	
 	@Override

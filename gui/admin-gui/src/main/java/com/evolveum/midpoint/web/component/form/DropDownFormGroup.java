@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@
 
 package com.evolveum.midpoint.web.component.form;
 
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
 import com.evolveum.midpoint.web.util.InfoTooltipBehavior;
+
 import org.apache.commons.lang.StringUtils;
+import org.apache.wicket.Component;
 import org.apache.wicket.behavior.AttributeAppender;
 import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
 import org.apache.wicket.markup.html.WebMarkupContainer;
@@ -36,14 +38,16 @@ import java.util.List;
 /**
  * @author lazyman
  */
-public class DropDownFormGroup<T> extends SimplePanel<T> {
+public class DropDownFormGroup<T> extends BasePanel<T> {
 
     private static final String ID_SELECT = "select";
     private static final String ID_SELECT_WRAPPER = "selectWrapper";
     private static final String ID_LABEL_CONTAINER = "labelContainer";
     private static final String ID_LABEL = "label";
     private static final String ID_TOOLTIP = "tooltip";
+    private static final String ID_REQUIRED = "required";
     private static final String ID_FEEDBACK = "feedback";
+    private static final String ID_ADDITIONAL_INFO = "additionalInfo";
 
     public DropDownFormGroup(String id, IModel<T> value, IModel<List<T>> choices, IChoiceRenderer<T> renderer,
                              IModel<String> label, String labelSize, String textSize, boolean required) {
@@ -58,7 +62,7 @@ public class DropDownFormGroup<T> extends SimplePanel<T> {
     }
 
     private void initLayout(IModel<List<T>> choices, IChoiceRenderer<T> renderer, IModel<String> label, final String tooltipKey,
-                            boolean isTooltipInModal, String labelSize, String textSize, boolean required) {
+                            boolean isTooltipInModal, String labelSize, String textSize, final boolean required) {
         WebMarkupContainer labelContainer = new WebMarkupContainer(ID_LABEL_CONTAINER);
         add(labelContainer);
 
@@ -69,13 +73,13 @@ public class DropDownFormGroup<T> extends SimplePanel<T> {
         labelContainer.add(l);
 
 		Label tooltipLabel = new Label(ID_TOOLTIP, new Model<>());
-        tooltipLabel.add(new AttributeAppender("data-original-title", new AbstractReadOnlyModel<String>() {
+		tooltipLabel.add(new AttributeAppender("data-original-title", new AbstractReadOnlyModel<String>() {
 
-            @Override
-            public String getObject() {
-                return getString(tooltipKey);
-		}
-        }));
+			@Override
+			public String getObject() {
+				return getString(tooltipKey);
+			}
+		}));
 		tooltipLabel.add(new InfoTooltipBehavior(isTooltipInModal));
 		tooltipLabel.add(new VisibleEnableBehaviour() {
 
@@ -87,6 +91,15 @@ public class DropDownFormGroup<T> extends SimplePanel<T> {
 		tooltipLabel.setOutputMarkupId(true);
 		tooltipLabel.setOutputMarkupPlaceholderTag(true);
 		labelContainer.add(tooltipLabel);
+
+		WebMarkupContainer requiredContainer = new WebMarkupContainer(ID_REQUIRED);
+		requiredContainer.add(new VisibleEnableBehaviour() {
+			@Override
+			public boolean isVisible() {
+				return required;
+			}
+		});
+		labelContainer.add(requiredContainer);
 
         WebMarkupContainer selectWrapper = new WebMarkupContainer(ID_SELECT_WRAPPER);
         if (StringUtils.isNotEmpty(textSize)) {
@@ -101,11 +114,25 @@ public class DropDownFormGroup<T> extends SimplePanel<T> {
         FeedbackPanel feedback = new FeedbackPanel(ID_FEEDBACK, new ComponentFeedbackMessageFilter(select));
         feedback.setOutputMarkupId(true);
         selectWrapper.add(feedback);
+
+		Component additionalInfo = createAdditionalInfoComponent(ID_ADDITIONAL_INFO);
+		if (additionalInfo == null) {
+			additionalInfo = new Label(ID_ADDITIONAL_INFO, "");
+		}
+		selectWrapper.add(additionalInfo);
     }
 
-    protected DropDownChoice createDropDown(String id, IModel<List<T>> choices, IChoiceRenderer<T> renderer,
+	protected Component createAdditionalInfoComponent(String id) {
+		return null;
+	}
+
+	public Component getAdditionalInfoComponent() {
+		return get(createComponentPath(ID_SELECT_WRAPPER, ID_ADDITIONAL_INFO));
+	}
+
+	protected DropDownChoice<T> createDropDown(String id, IModel<List<T>> choices, IChoiceRenderer<T> renderer,
                                             boolean required) {
-        DropDownChoice choice =  new DropDownChoice<T>(id, getModel(), choices, renderer){
+        DropDownChoice choice = new DropDownChoice<T>(id, getModel(), choices, renderer){
 
             @Override
             protected String getNullValidDisplayValue() {
@@ -117,7 +144,7 @@ public class DropDownFormGroup<T> extends SimplePanel<T> {
         return choice;
     }
 
-    public DropDownChoice getInput() {
-        return (DropDownChoice) get(createComponentPath(ID_SELECT_WRAPPER, ID_SELECT));
+    public DropDownChoice<T> getInput() {
+        return (DropDownChoice<T>) get(createComponentPath(ID_SELECT_WRAPPER, ID_SELECT));
     }
 }

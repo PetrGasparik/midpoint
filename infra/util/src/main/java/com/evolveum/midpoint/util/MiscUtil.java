@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.evolveum.midpoint.util;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
@@ -28,7 +27,6 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,8 +41,6 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeConstants;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
-
-import org.apache.commons.collections.CollectionUtils;
 
 /**
  * @author semancik
@@ -504,5 +500,32 @@ public class MiscUtil {
 					+ Character.digit(hex.charAt(i + 1), 16));
 		}
 		return bytes;
+	}
+
+	public static <T> void addAllIfNotPresent(List<T> receivingList, List<T> supplyingList) {
+		if (supplyingList == null) {
+			return;
+		}
+		for (T supplyingElement: supplyingList) {
+			addIfNotPresent(receivingList, supplyingElement);
+		}
+	}
+	
+	public static <T> void addIfNotPresent(List<T> receivingList, T supplyingElement) {
+		if (!receivingList.contains(supplyingElement)) {
+			receivingList.add(supplyingElement);
+		}
+	}
+
+	public static boolean nullableCollectionsEqual(Collection<?> c1, Collection<?> c2) {
+		boolean empty1 = c1 == null || c1.isEmpty();
+		boolean empty2 = c2 == null || c2.isEmpty();
+		if (empty1) {
+			return empty2;
+		} else if (empty2) {
+			return false;
+		} else {
+			return c1.equals(c2);
+		}
 	}
 }

@@ -45,6 +45,7 @@
 			</xsd:documentation>
 			<xsd:appinfo>
 				<a:container/>
+				<a:ignoredNamespace>http://midpoint.evolveum.com/</a:ignoredNamespace>
 			</xsd:appinfo>
 		</xsd:annotation>
 		<xsd:sequence>
@@ -55,6 +56,7 @@
 		<xsd:annotation>
 			<xsd:appinfo>
 				<a:maxOccurs>1</a:maxOccurs>
+                <a:displayOrder>100</a:displayOrder>
 			</xsd:appinfo>
 		</xsd:annotation>
 	</xsd:element>
@@ -115,6 +117,7 @@
 			</xsd:documentation>
 			<xsd:appinfo>
 				<a:maxOccurs>1</a:maxOccurs>
+                <a:displayOrder>200</a:displayOrder>
 			</xsd:appinfo>
 		</xsd:annotation>
 	</xsd:element>
@@ -137,7 +140,8 @@
 			</xsd:documentation>
 			<xsd:appinfo>
 				<a:maxOccurs>1</a:maxOccurs>
-			</xsd:appinfo>
+                <a:displayOrder>300</a:displayOrder>
+            </xsd:appinfo>
 		</xsd:annotation>
 	</xsd:element>
 		
@@ -200,6 +204,10 @@
                     <xsd:documentation>
                         TODO
                     </xsd:documentation>
+                    <xsd:appinfo>
+                        <a:displayOrder>200</a:displayOrder>
+                        <a:help>enableNormalizingResultsHandlerHelp</a:help>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
             <xsd:element name="enableFilteredResultsHandler" type="xsd:boolean" minOccurs="0">
@@ -207,6 +215,10 @@
                     <xsd:documentation>
                         TODO
                     </xsd:documentation>
+                    <xsd:appinfo>
+                        <a:displayOrder>100</a:displayOrder>
+                        <a:help>enableFilteredResultsHandlerHelp</a:help>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
             <xsd:element name="filteredResultsHandlerInValidationMode" type="xsd:boolean" minOccurs="0">
@@ -214,6 +226,10 @@
                     <xsd:documentation>
                         TODO
                     </xsd:documentation>
+                    <xsd:appinfo>
+                        <a:displayOrder>110</a:displayOrder>
+                        <a:help>filteredResultsHandlerInValidationModeHelp</a:help>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
             <xsd:element name="enableCaseInsensitiveFilter" type="xsd:boolean" minOccurs="0">
@@ -221,6 +237,10 @@
                     <xsd:documentation>
                         TODO
                     </xsd:documentation>
+                    <xsd:appinfo>
+                        <a:displayOrder>120</a:displayOrder>
+                        <a:help>enableCaseInsensitiveFilterHelp</a:help>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
             <xsd:element name="enableAttributesToGetSearchResultsHandler" type="xsd:boolean" minOccurs="0">
@@ -228,6 +248,10 @@
                     <xsd:documentation>
                         TODO
                     </xsd:documentation>
+                    <xsd:appinfo>
+                        <a:displayOrder>300</a:displayOrder>
+                        <a:help>enableAttributesToGetSearchResultsHandlerHelp</a:help>
+                    </xsd:appinfo>
                 </xsd:annotation>
             </xsd:element>
         </xsd:sequence>
@@ -240,6 +264,7 @@
             </xsd:documentation>
             <xsd:appinfo>
                 <a:maxOccurs>1</a:maxOccurs>
+                <a:displayOrder>400</a:displayOrder>
             </xsd:appinfo>
         </xsd:annotation>
     </xsd:element>

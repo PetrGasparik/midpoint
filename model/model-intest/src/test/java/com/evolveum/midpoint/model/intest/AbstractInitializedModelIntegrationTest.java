@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,13 @@
  */
 package com.evolveum.midpoint.model.intest;
 
-import static com.evolveum.midpoint.test.util.TestUtil.assertSuccess;
 import static com.evolveum.midpoint.test.IntegrationTestTools.display;
 import static org.testng.AssertJUnit.assertEquals;
-import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertNull;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.net.ConnectException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import com.evolveum.midpoint.prism.query.OrgFilter;
@@ -33,17 +30,13 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationSitua
 
 import org.springframework.beans.factory.annotation.Autowired;
 
-import com.evolveum.icf.dummy.resource.DummyGroup;
 import com.evolveum.icf.dummy.resource.DummyResource;
+import com.evolveum.midpoint.model.api.ProgressListener;
 import com.evolveum.midpoint.model.common.mapping.MappingFactory;
 import com.evolveum.midpoint.model.impl.lens.Clockwork;
-import com.evolveum.midpoint.model.impl.lens.LensDebugListener;
+import com.evolveum.midpoint.model.intest.util.CheckingProgressListener;
 import com.evolveum.midpoint.model.intest.util.ProfilingLensDebugListener;
 import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismObjectDefinition;
-import com.evolveum.midpoint.prism.PrismReferenceValue;
-import com.evolveum.midpoint.prism.delta.ItemDelta;
-import com.evolveum.midpoint.prism.delta.ReferenceDelta;
 import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.ResultHandler;
@@ -66,9 +59,8 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.OrgType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.RoleType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SecurityPolicyType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ServiceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SystemObjectsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -91,6 +83,7 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 	protected Clockwork clockwork;
 	
 	protected ProfilingLensDebugListener lensDebugListener;
+	protected CheckingProgressListener checkingProgressListener;
 	
 	protected UserType userTypeJack;
 	protected UserType userTypeBarbossa;
@@ -111,7 +104,12 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 	protected DummyResourceContoller dummyResourceCtlBlue;
 	protected ResourceType resourceDummyBlueType;
 	protected PrismObject<ResourceType> resourceDummyBlue;
-	
+
+	protected DummyResource dummyResourceCyan;
+	protected DummyResourceContoller dummyResourceCtlCyan;
+	protected ResourceType resourceDummyCyanType;
+	protected PrismObject<ResourceType> resourceDummyCyan;
+
 	protected DummyResource dummyResourceWhite;
 	protected DummyResourceContoller dummyResourceCtlWhite;
 	protected ResourceType resourceDummyWhiteType;
@@ -126,6 +124,11 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 	protected DummyResourceContoller dummyResourceCtlGreen;
 	protected ResourceType resourceDummyGreenType;
 	protected PrismObject<ResourceType> resourceDummyGreen;
+	
+	protected static DummyResource dummyResourceEmerald;
+	protected static DummyResourceContoller dummyResourceCtlEmerald;
+	protected ResourceType resourceDummyEmeraldType;
+	protected PrismObject<ResourceType> resourceDummyEmerald;
 	
 	protected DummyResource dummyResourceBlack;
 	protected DummyResourceContoller dummyResourceCtlBlack;
@@ -157,6 +160,7 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		mappingFactory.setProfiling(true);
 		lensDebugListener = new ProfilingLensDebugListener();
 		clockwork.setDebugListener(lensDebugListener);
+		checkingProgressListener = new CheckingProgressListener();
 		
 		// Resources
 				
@@ -181,7 +185,14 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		dummyResourceBlue = dummyResourceCtlBlue.getDummyResource();
 		resourceDummyBlue = importAndGetObjectFromFile(ResourceType.class, getResourceDummyBlueFile(), RESOURCE_DUMMY_BLUE_OID, initTask, initResult); 
 		resourceDummyBlueType = resourceDummyBlue.asObjectable();
-		dummyResourceCtlBlue.setResource(resourceDummyBlue);		
+		dummyResourceCtlBlue.setResource(resourceDummyBlue);
+		
+		dummyResourceCtlCyan = DummyResourceContoller.create(RESOURCE_DUMMY_CYAN_NAME, resourceDummyBlue);
+		dummyResourceCtlCyan.extendSchemaPirate();
+		dummyResourceCyan = dummyResourceCtlCyan.getDummyResource();
+		resourceDummyCyan = importAndGetObjectFromFile(ResourceType.class, RESOURCE_DUMMY_CYAN_FILE, RESOURCE_DUMMY_CYAN_OID, initTask, initResult); 
+		resourceDummyCyanType = resourceDummyCyan.asObjectable();
+		dummyResourceCtlCyan.setResource(resourceDummyCyan);		
 		
 		dummyResourceCtlWhite = DummyResourceContoller.create(RESOURCE_DUMMY_WHITE_NAME, resourceDummyWhite);
 		dummyResourceCtlWhite.extendSchemaPirate();
@@ -203,6 +214,14 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		resourceDummyGreen = importAndGetObjectFromFile(ResourceType.class, getResourceDummyGreenFile(), RESOURCE_DUMMY_GREEN_OID, initTask, initResult);
 		resourceDummyGreenType = resourceDummyGreen.asObjectable();
 		dummyResourceCtlGreen.setResource(resourceDummyGreen);
+		
+		dummyResourceCtlEmerald = DummyResourceContoller.create(RESOURCE_DUMMY_EMERALD_NAME, resourceDummyEmerald);
+		dummyResourceCtlEmerald.extendSchemaPirate();
+		dummyResourceCtlEmerald.extendSchemaPosix();
+		dummyResourceEmerald = dummyResourceCtlEmerald.getDummyResource();
+		resourceDummyEmerald = importAndGetObjectFromFile(ResourceType.class, getResourceDummyEmeraldFile(), RESOURCE_DUMMY_EMERALD_OID, initTask, initResult); 
+		resourceDummyEmeraldType = resourceDummyEmerald.asObjectable();
+		dummyResourceCtlEmerald.setResource(resourceDummyEmerald);
 		
 		dummyResourceCtlBlack = DummyResourceContoller.create(RESOURCE_DUMMY_BLACK_NAME, resourceDummyBlack);
 		dummyResourceCtlBlack.extendSchemaPirate();
@@ -247,7 +266,8 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		
 		// User Templates
 		repoAddObjectFromFile(USER_TEMPLATE_FILENAME, ObjectTemplateType.class, initResult);
-		repoAddObjectFromFile(USER_TEMPLATE_COMPLEX_FILENAME, ObjectTemplateType.class, initResult);
+		repoAddObjectFromFile(USER_TEMPLATE_COMPLEX_FILE, ObjectTemplateType.class, initResult);
+		repoAddObjectFromFile(USER_TEMPLATE_INBOUNDS_FILENAME, ObjectTemplateType.class, initResult);
 		repoAddObjectFromFile(USER_TEMPLATE_COMPLEX_INCLUDE_FILENAME, ObjectTemplateType.class, initResult);
         repoAddObjectFromFile(USER_TEMPLATE_ORG_ASSIGNMENT_FILENAME, ObjectTemplateType.class, initResult);
 
@@ -266,6 +286,8 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		
 		// Roles
 		repoAddObjectFromFile(ROLE_PIRATE_FILE, RoleType.class, initResult);
+		repoAddObjectFromFile(ROLE_PIRATE_GREEN_FILE, RoleType.class, initResult);
+		repoAddObjectFromFile(ROLE_BUCCANEER_GREEN_FILE, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_NICE_PIRATE_FILENAME, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_CAPTAIN_FILENAME, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_JUDGE_FILE, RoleType.class, initResult);
@@ -273,11 +295,16 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		repoAddObjectFromFile(ROLE_THIEF_FILE, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_EMPTY_FILE, RoleType.class, initResult);
 		repoAddObjectFromFile(ROLE_SAILOR_FILE, RoleType.class, initResult);
+		repoAddObjectFromFile(ROLE_RED_SAILOR_FILE, RoleType.class, initResult);
+		repoAddObjectFromFile(ROLE_CYAN_SAILOR_FILE, RoleType.class, initResult);
 		
 		// Orgstruct
 		if (doAddOrgstruct()) {
 			repoAddObjectsFromFile(ORG_MONKEY_ISLAND_FILE, OrgType.class, initResult);
 		}
+		
+		// Services
+		repoAddObjectFromFile(SERVICE_SHIP_SEA_MONKEY_FILE, ServiceType.class, initResult);
 
 	}
 	
@@ -296,17 +323,21 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 	protected File getResourceDummyGreenFile() {
 		return RESOURCE_DUMMY_GREEN_FILE;
 	}
+	
+	protected File getResourceDummyEmeraldFile() {
+		return RESOURCE_DUMMY_EMERALD_FILE;
+	}
 
 	protected void postInitDummyResouce() {
 		// Do nothing be default. Concrete tests may override this.
 	}
 
 	protected void assertUserJack(PrismObject<UserType> user) {
-		assertUserJack(user, "Jack Sparrow", "Jack", "Sparrow");
+		assertUserJack(user, USER_JACK_FULL_NAME, USER_JACK_GIVEN_NAME, USER_JACK_FAMILY_NAME);
 	}
 	
 	protected void assertUserJack(PrismObject<UserType> user, String fullName) {
-		assertUserJack(user, fullName, "Jack", "Sparrow");
+		assertUserJack(user, fullName, USER_JACK_GIVEN_NAME, USER_JACK_FAMILY_NAME);
 	}
 	
 	protected void assertUserJack(PrismObject<UserType> user, String fullName, String givenName, String familyName) {
@@ -328,8 +359,9 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 			PrismAsserts.assertEqualsPolyString("Wrong jack locality", locality, userType.getLocality());
 		}
 	}
+	
 	protected void assertUserJack(PrismObject<UserType> user, String fullName, String givenName, String familyName, String locality) {
-		assertUserJack(user, "jack", fullName, givenName, familyName, locality);
+		assertUserJack(user, USER_JACK_USERNAME, fullName, givenName, familyName, locality);
 	}
 	
 	protected void assertDummyAccountShadowRepo(PrismObject<ShadowType> accountShadow, String oid, String username) throws SchemaException {
@@ -355,23 +387,7 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 		
 	protected void setDefaultUserTemplate(String userTemplateOid)
 			throws ObjectNotFoundException, SchemaException, ObjectAlreadyExistsException {
-
-		PrismObjectDefinition<SystemConfigurationType> objectDefinition = prismContext.getSchemaRegistry()
-				.findObjectDefinitionByCompileTimeClass(SystemConfigurationType.class);
-
-		PrismReferenceValue userTemplateRefVal = new PrismReferenceValue(userTemplateOid);
-		
-		Collection<? extends ItemDelta> modifications = ReferenceDelta.createModificationReplaceCollection(
-						SystemConfigurationType.F_DEFAULT_USER_TEMPLATE_REF,
-						objectDefinition, userTemplateRefVal);
-
-		OperationResult result = new OperationResult("Aplying default user template");
-
-		repositoryService.modifyObject(SystemConfigurationType.class,
-				SystemObjectsType.SYSTEM_CONFIGURATION.value(), modifications, result);
-		display("Aplying default user template result", result);
-		result.computeStatus();
-		TestUtil.assertSuccess("Aplying default user template failed (result)", result);
+		setDefaultObjectTemplate(UserType.COMPLEX_TYPE, userTemplateOid);
 	}
 
 	protected void assertMonkeyIslandOrgSanity() throws ObjectNotFoundException, SchemaException, SecurityViolationException, CommunicationException, ConfigurationException {
@@ -429,5 +445,9 @@ public class AbstractInitializedModelIntegrationTest extends AbstractConfiguredM
 			assert actualTimestamp >= timeBeforeSync : "Synchronization timestamp was not updated in shadow " + shadow;
 		}
 		// TODO: assert sync description
+	}
+	
+	protected Collection<ProgressListener> getCheckingProgressListenerCollection() {
+		return Collections.singleton((ProgressListener)checkingProgressListener);
 	}
 }

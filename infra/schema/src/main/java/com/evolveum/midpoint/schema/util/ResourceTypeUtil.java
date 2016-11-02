@@ -15,47 +15,49 @@
  */
 package com.evolveum.midpoint.schema.util;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import javax.xml.namespace.QName;
+
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.w3c.dom.Element;
+
 import com.evolveum.midpoint.prism.PrismContainer;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismProperty;
+import com.evolveum.midpoint.prism.PrismReference;
 import com.evolveum.midpoint.schema.CapabilityUtil;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
 import com.evolveum.midpoint.util.exception.SchemaException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.AvailabilityStatusType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.CapabilityCollectionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorConfigurationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ConnectorType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectSynchronizationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDefinitionType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDependencyStrictnessType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceObjectTypeDependencyType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SchemaHandlingType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SynchronizationType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.XmlSchemaType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationLockoutStatusCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationStatusCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ActivationValidityCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.AddRemoveAttributeValuesCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.AuxiliaryObjectClassesCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.CapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.CountObjectsCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.CreateCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.CredentialsCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.DeleteCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.LiveSyncCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.PagedSearchCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.PasswordCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ReadCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.ScriptCapabilityType;
+import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.TestConnectionCapabilityType;
 import com.evolveum.midpoint.xml.ns._public.resource.capabilities_3.UpdateCapabilityType;
 import com.evolveum.prism.xml.ns._public.types_3.SchemaDefinitionType;
-
-import org.w3c.dom.Element;
-
-import javax.xml.namespace.QName;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Methods that would belong to the ResourceType class but cannot go there
@@ -78,7 +80,7 @@ public class ResourceTypeUtil {
 			return null;
 		}
 	}
-
+	
 	/**
 	 * The usage of "resolver" is experimental. Let's see if it will be
 	 * practical ...
@@ -94,6 +96,15 @@ public class ResourceTypeUtil {
 		} else {
 			return null;
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	public static PrismObject<ConnectorType> getConnectorIfPresent(PrismObject<ResourceType> resource) {
+		PrismReference existingConnectorRef = resource.findReference(ResourceType.F_CONNECTOR_REF);
+		if (existingConnectorRef == null || existingConnectorRef.isEmpty()) {
+			return null;
+		}
+		return (PrismObject<ConnectorType>) existingConnectorRef.getValue().getObject();
 	}
 
 	public static Element getResourceXsdSchema(ResourceType resource) {
@@ -186,6 +197,7 @@ public class ResourceTypeUtil {
 	/**
 	 * Assumes that native capabilities are already cached. 
 	 */
+	@Nullable
 	public static <T extends CapabilityType> T getEffectiveCapability(ResourceType resource, Class<T> capabilityClass) {
 		return getEffectiveCapability(resource, null, capabilityClass);
 	}
@@ -238,95 +250,157 @@ public class ResourceTypeUtil {
 	public static <T extends CapabilityType> boolean hasEffectiveCapability(ResourceType resource, Class<T> capabilityClass) {
 		return getEffectiveCapability(resource, capabilityClass) != null;
 	}
-	
+
+	/**
+	 * Assumes that native capabilities are already cached.
+	 */
+	public static List<Object> getAllCapabilities(ResourceType resource) throws SchemaException {
+		return getEffectiveCapabilities(resource, true);
+	}
+
 	/**
 	 * Assumes that native capabilities are already cached. 
 	 */
 	public static List<Object> getEffectiveCapabilities(ResourceType resource) throws SchemaException {
-		if (resource.getCapabilities() == null) {
-			return new ArrayList<Object>();
-		}
-		if (resource.getCapabilities().getConfigured() != null) {
-			List<Object> effectiveCapabilities = new ArrayList<Object>();
-			for (Object configuredCapability: resource.getCapabilities().getConfigured().getAny()) {
-				if (CapabilityUtil.isCapabilityEnabled(configuredCapability)) {
-					effectiveCapabilities.add(configuredCapability);
-				}
-			}
-			if (resource.getCapabilities().getNative() != null) {
-				for (Object nativeCapability: resource.getCapabilities().getNative().getAny()) {
-					if (CapabilityUtil.isCapabilityEnabled(nativeCapability) && 
-							!CapabilityUtil.containsCapabilityWithSameElementName(resource.getCapabilities().getConfigured().getAny(), nativeCapability)) {
-						effectiveCapabilities.add(nativeCapability);
-					}
-				}
-			}
-			return effectiveCapabilities;
-		} else if (resource.getCapabilities().getNative() != null) {
-			return resource.getCapabilities().getNative().getAny();
-		} else {
-			return new ArrayList<Object>();
-		}		
+		return getEffectiveCapabilities(resource, false);
 	}
 
-	public static boolean hasActivationCapability(ResourceType resource) {
-		return (getEffectiveCapability(resource, ActivationCapabilityType.class)!=null);
+	private static List<Object> getEffectiveCapabilities(ResourceType resource, boolean includeDisabled) throws SchemaException {
+		List<Object> rv = new ArrayList<>();
+		if (resource.getCapabilities() == null) {
+			return rv;
+		}
+		List<Object> configuredCaps = resource.getCapabilities().getConfigured() != null ? resource.getCapabilities().getConfigured().getAny() : Collections.emptyList();
+		List<Object> nativeCaps = resource.getCapabilities().getNative() != null ? resource.getCapabilities().getNative().getAny() : Collections.emptyList();
+		for (Object configuredCapability : configuredCaps) {
+			if (includeDisabled || CapabilityUtil.isCapabilityEnabled(configuredCapability)) {
+				rv.add(configuredCapability);
+			}
+		}
+		for (Object nativeCapability: nativeCaps) {
+			if (!CapabilityUtil.containsCapabilityWithSameElementName(configuredCaps, nativeCapability)) {
+				if (includeDisabled || CapabilityUtil.isCapabilityEnabled(nativeCapability)) {
+					rv.add(nativeCapability);
+				}
+			}
+		}
+		return rv;
+	}
+
+	public static boolean isActivationCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, ActivationCapabilityType.class) != null;
 	}
 	
-	public static boolean hasCredentialsCapability(ResourceType resource) {
-		return (getEffectiveCapability(resource, CredentialsCapabilityType.class)!=null);
+	public static boolean isActivationLockoutStatusCapabilityEnabled(ResourceType resource) {
+		return getEffectiveActivationLockoutStatusCapability(resource) != null;
+	}
+
+	public static ActivationLockoutStatusCapabilityType getEffectiveActivationLockoutStatusCapability(ResourceType resource) {
+		ActivationCapabilityType act = getEffectiveCapability(resource, ActivationCapabilityType.class);
+		if (act == null || act.getLockoutStatus() == null || Boolean.FALSE.equals(act.getLockoutStatus().isEnabled())) {
+			return null;
+		} else {
+			return act.getLockoutStatus();
+		}
+	}
+
+	public static ActivationStatusCapabilityType getEffectiveActivationStatusCapability(ResourceType resource) {
+		ActivationCapabilityType act = getEffectiveCapability(resource, ActivationCapabilityType.class);
+		if (act == null || act.getStatus() == null || Boolean.FALSE.equals(act.getStatus().isEnabled())) {
+			return null;
+		} else {
+			return act.getStatus();
+		}
+	}
+
+	public static boolean isActivationStatusCapabilityEnabled(ResourceType resource) {
+		return getEffectiveActivationStatusCapability(resource) != null;
+	}
+
+	public static ActivationValidityCapabilityType getEffectiveActivationValidFromCapability(ResourceType resource) {
+		ActivationCapabilityType act = getEffectiveCapability(resource, ActivationCapabilityType.class);
+		if (act == null || act.getValidFrom() == null || Boolean.FALSE.equals(act.getValidFrom().isEnabled())) {
+			return null;
+		} else {
+			return act.getValidFrom();
+		}
+	}
+
+	public static ActivationValidityCapabilityType getEffectiveActivationValidToCapability(ResourceType resource) {
+		ActivationCapabilityType act = getEffectiveCapability(resource, ActivationCapabilityType.class);
+		if (act == null || act.getValidTo() == null || Boolean.FALSE.equals(act.getValidTo().isEnabled())) {
+			return null;
+		} else {
+			return act.getValidTo();
+		}
+	}
+
+	public static boolean isActivationValidityCapabilityEnabled(ResourceType resource) {
+		return getEffectiveActivationValidFromCapability(resource) != null || getEffectiveActivationValidToCapability(resource) != null;
 	}
 	
-	public static boolean hasReadCapability(ResourceType resource){
-		ReadCapabilityType readCap = getEffectiveCapability(resource, ReadCapabilityType.class);
-		if (readCap == null){
-			return false;
-		}
-		
-		if (readCap.isEnabled() == null){
-			return true;
-		}
-		
-		return readCap.isEnabled();
+	public static boolean isCredentialsCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, CredentialsCapabilityType.class) != null;
 	}
 	
-	public static boolean hasCreateCapability(ResourceType resource){
-		CreateCapabilityType createCap = getEffectiveCapability(resource, CreateCapabilityType.class);
-		if (createCap == null){
-			return false;
-		}
-		
-		if (createCap.isEnabled() == null){
-			return true;
-		}
-		
-		return createCap.isEnabled();
-	}
-	public static boolean hasUpdateCapability(ResourceType resource){
-		UpdateCapabilityType updateCap = getEffectiveCapability(resource, UpdateCapabilityType.class);
-		if (updateCap == null){
-			return false;
-		}
-		
-		if (updateCap.isEnabled() == null){
-			return true;
-		}
-		
-		return updateCap.isEnabled();
-	}
-	public static boolean hasDeleteCapability(ResourceType resource){
-		DeleteCapabilityType deleteCap = getEffectiveCapability(resource, DeleteCapabilityType.class);
-		if (deleteCap == null){
-			return false;
-		}
-		
-		if (deleteCap.isEnabled() == null){
-			return true;
-		}
-		
-		return deleteCap.isEnabled();
+	public static boolean isCreateCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, CreateCapabilityType.class) != null;
 	}
 	
+	public static boolean isCountObjectsCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, CountObjectsCapabilityType.class) != null;
+	}
+	
+	public static boolean isPasswordCapabilityEnabled(ResourceType resource){
+		return getEffectivePasswordCapability(resource) != null;
+	}
+
+	public static PasswordCapabilityType getEffectivePasswordCapability(ResourceType resource) {
+		CredentialsCapabilityType cct = getEffectiveCapability(resource, CredentialsCapabilityType.class);
+		if (cct == null || cct.getPassword() == null || Boolean.FALSE.equals(cct.getPassword().isEnabled())) {
+			return null;
+		} else {
+			return cct.getPassword();
+		}
+	}
+
+	public static boolean isLiveSyncCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, LiveSyncCapabilityType.class) != null;
+	}
+	
+	public static boolean isScriptCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, ScriptCapabilityType.class) != null;
+	}
+	
+	public static boolean isTestConnectionCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, TestConnectionCapabilityType.class) != null;
+	}
+	
+	public static boolean isAuxiliaryObjectClassCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, AuxiliaryObjectClassesCapabilityType.class) != null;
+	}
+	
+	public static boolean isPagedSearchCapabilityEnabled(ResourceType resource) {
+		return getEffectiveCapability(resource, PagedSearchCapabilityType.class) != null;
+	}
+	
+	public static boolean isReadCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, ReadCapabilityType.class) != null;
+	}
+	
+	public static boolean isUpdateCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, UpdateCapabilityType.class) != null;
+	}
+	
+	public static boolean isAddRemoveAttributesValuesCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, AddRemoveAttributeValuesCapabilityType.class) != null;
+	}
+	
+	public static boolean isDeleteCapabilityEnabled(ResourceType resource){
+		return getEffectiveCapability(resource, DeleteCapabilityType.class) != null;
+	}
+	
+
 	public static boolean hasResourceNativeActivationCapability(ResourceType resource) {
 		ActivationCapabilityType activationCapability = null;
 		// check resource native capabilities. if resource cannot do
@@ -347,16 +421,7 @@ public class ResourceTypeUtil {
 			activationCapability = CapabilityUtil.getCapability(resource.getCapabilities().getNative().getAny(),
 					ActivationCapabilityType.class);
 		}
-		if (activationCapability == null) {
-			return false;
-		}
-		
-		ActivationStatusCapabilityType status = activationCapability.getStatus();
-		if (status == null) {
-			return false;
-		}
-		
-		return true;
+		return CapabilityUtil.getEffectiveActivationStatus(activationCapability) != null;
 	}
 	
 	public static boolean hasResourceNativeActivationLockoutCapability(ResourceType resource) {
@@ -367,16 +432,7 @@ public class ResourceTypeUtil {
 			activationCapability = CapabilityUtil.getCapability(resource.getCapabilities().getNative().getAny(),
 					ActivationCapabilityType.class);
 		}
-		if (activationCapability == null) {
-			return false;
-		}
-		
-		ActivationLockoutStatusCapabilityType lockoutStatus = activationCapability.getLockoutStatus();
-		if (lockoutStatus == null) {
-			return false;
-		}
-		
-		return true;
+		return CapabilityUtil.getEffectiveActivationLockoutStatus(activationCapability) != null;
 	}
 	
 	public static boolean hasResourceConfiguredActivationCapability(ResourceType resource) {
@@ -485,6 +541,19 @@ public class ResourceTypeUtil {
 	public static boolean isDown(ResourceType resource){
 		return (resource.getOperationalState() != null && AvailabilityStatusType.DOWN == resource.getOperationalState().getLastAvailabilityStatus());
 	}
+	
+	public static AvailabilityStatusType getLastAvailabilityStatus(ResourceType resource){
+		if (resource.getOperationalState() == null) {
+			return null;
+		}
+		
+		if (resource.getOperationalState().getLastAvailabilityStatus() == null) {
+			return null;
+		}
+		
+		return resource.getOperationalState().getLastAvailabilityStatus();
+		
+	}
 
 	public static boolean isAvoidDuplicateValues(ResourceType resource) {
 		if (resource.getConsistency() == null) {
@@ -522,4 +591,56 @@ public class ResourceTypeUtil {
 		return resource.getBusiness().getApproverRef();
 	}
 
+	@NotNull
+	public static Collection<Class<? extends CapabilityType>> getNativeCapabilityClasses(ResourceType resource) {
+		Set<Class<? extends CapabilityType>> rv = new HashSet<>();
+		if (resource.getCapabilities() == null || resource.getCapabilities().getNative() == null) {
+			return rv;
+		}
+		for (Object o : resource.getCapabilities().getNative().getAny()) {
+			rv.add(CapabilityUtil.asCapabilityType(o).getClass());
+		}
+		return rv;
+	}
+
+	@NotNull
+	public static ShadowKindType fillDefault(ShadowKindType kind) {
+		return kind != null ? kind : ShadowKindType.ACCOUNT;
+	}
+
+	@NotNull
+	public static String fillDefault(String intent) {
+		return intent != null ? intent : SchemaConstants.INTENT_DEFAULT;
+	}
+
+	public static ResourceObjectTypeDefinitionType findObjectTypeDefinition(PrismObject<ResourceType> resourceObject, @Nullable ShadowKindType kind,
+			@Nullable String intent) {
+		if (resourceObject == null || resourceObject.asObjectable().getSchemaHandling() == null) {
+			return null;
+		}
+		for (ResourceObjectTypeDefinitionType def : resourceObject.asObjectable().getSchemaHandling().getObjectType()) {
+			if (fillDefault(kind).equals(fillDefault(def.getKind())) && fillDefault(intent).equals(fillDefault(def.getIntent()))) {
+				return def;
+			}
+		}
+		return null;
+	}
+
+	@Nullable
+	public static ObjectSynchronizationType findObjectSynchronization(@Nullable ResourceType resource, @Nullable ShadowKindType kind, @Nullable String intent) {
+		if (resource == null || resource.getSynchronization() == null) {
+			return null;
+		}
+		for (ObjectSynchronizationType def : resource.getSynchronization().getObjectSynchronization()) {
+			if (fillDefault(kind).equals(fillDefault(def.getKind())) && fillDefault(intent).equals(fillDefault(def.getIntent()))) {
+				return def;
+			}
+		}
+		return null;
+	}
+
+	@NotNull
+	public static QName fillDefaultFocusType(QName focusType) {
+		return focusType != null ? focusType : UserType.COMPLEX_TYPE;
+	}
 }

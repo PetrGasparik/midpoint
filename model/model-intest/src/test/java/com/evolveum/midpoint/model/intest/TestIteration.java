@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,12 +26,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import com.evolveum.icf.dummy.connector.DummyConnector;
 import com.evolveum.midpoint.model.api.PolicyViolationException;
-import com.evolveum.midpoint.prism.delta.ContainerDelta;
 import com.evolveum.midpoint.prism.delta.ItemDelta;
 import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.prism.polystring.PolyString;
+import com.evolveum.midpoint.prism.query.builder.QueryBuilder;
 import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectAlreadyExistsException;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AssignmentType;
@@ -49,10 +48,11 @@ import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.ContextConfiguration;
 import org.testng.annotations.Test;
 
+import com.evolveum.icf.dummy.resource.ConflictException;
 import com.evolveum.icf.dummy.resource.DummyAccount;
 import com.evolveum.icf.dummy.resource.DummyResource;
 import com.evolveum.icf.dummy.resource.DummySyncStyle;
-import com.evolveum.midpoint.model.test.AbstractModelIntegrationTest;
+import com.evolveum.icf.dummy.resource.SchemaViolationException;
 import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.delta.ChangeType;
 import com.evolveum.midpoint.prism.delta.ObjectDelta;
@@ -62,7 +62,6 @@ import com.evolveum.midpoint.prism.util.PrismAsserts;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.schema.util.ObjectQueryUtil;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.test.DummyResourceContoller;
 import com.evolveum.midpoint.test.util.TestUtil;
@@ -92,26 +91,31 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 	protected static final File USER_XAVIER_FILE = new File(TEST_DIR, "user-xavier.xml");
 	protected static final String USER_XAVIER_OID = "c0c010c0-d34d-b33f-f00d-11111111aaa1";
 	
+	// Plain iteration, no iteration expressions
 	protected static final File RESOURCE_DUMMY_PINK_FILE = new File(TEST_DIR, "resource-dummy-pink.xml");
 	protected static final String RESOURCE_DUMMY_PINK_OID = "10000000-0000-0000-0000-00000000a104";
 	protected static final String RESOURCE_DUMMY_PINK_NAME = "pink";
 	protected static final String RESOURCE_DUMMY_PINK_NAMESPACE = MidPointConstants.NS_RI;
 	
+	// Iteration with token expression, pre-iteration condition and post-iteration condition
 	protected static final File RESOURCE_DUMMY_VIOLET_FILE = new File(TEST_DIR, "resource-dummy-violet.xml");
 	protected static final String RESOURCE_DUMMY_VIOLET_OID = "10000000-0000-0000-0000-00000000a204";
 	protected static final String RESOURCE_DUMMY_VIOLET_NAME = "violet";
 	protected static final String RESOURCE_DUMMY_VIOLET_NAMESPACE = MidPointConstants.NS_RI;
 	
+	// similar to violet but it works in the inbound direction
 	protected static final File RESOURCE_DUMMY_DARK_VIOLET_FILE = new File(TEST_DIR, "resource-dummy-dark-violet.xml");
 	protected static final String RESOURCE_DUMMY_DARK_VIOLET_OID = "10000000-0000-0000-0000-0000000da204";
 	protected static final String RESOURCE_DUMMY_DARK_VIOLET_NAME = "darkViolet";
 	protected static final String RESOURCE_DUMMY_DARK_VIOLET_NAMESPACE = MidPointConstants.NS_RI;
 	
+	// iteration, token expression, post-iteration condition that invokes isUniquAccountValue()
 	protected static final File RESOURCE_DUMMY_MAGENTA_FILE = new File(TEST_DIR, "resource-dummy-magenta.xml");
 	protected static final String RESOURCE_DUMMY_MAGENTA_OID = "10000000-0000-0000-0000-00000000a304";
 	protected static final String RESOURCE_DUMMY_MAGENTA_NAME = "magenta";
 	protected static final String RESOURCE_DUMMY_MAGENTA_NAMESPACE = MidPointConstants.NS_RI;
 
+	// Plain iteration (no expressions). Has synchronization block.
 	protected static final File RESOURCE_DUMMY_FUCHSIA_FILE = new File(TEST_DIR, "resource-dummy-fuchsia.xml");
 	protected static final String RESOURCE_DUMMY_FUCHSIA_OID = "10000000-0000-0000-0000-0000000dd204";
 	protected static final String RESOURCE_DUMMY_FUCHSIA_NAME = "fuchsia";
@@ -120,11 +124,17 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 	protected static final File TASK_LIVE_SYNC_DUMMY_DARK_VIOLET_FILE = new File(TEST_DIR, "task-dumy-dark-violet-livesync.xml");
 	protected static final String TASK_LIVE_SYNC_DUMMY_DARK_VIOLET_OID = "10000000-0000-0000-5555-555500da0204";
 	
+	// Iteration with token expression and pre- and post-condition. Sequential suffix.
 	protected static final File USER_TEMPLATE_ITERATION_FILE = new File(TEST_DIR, "user-template-iteration.xml");
 	protected static final String USER_TEMPLATE_ITERATION_OID = "10000000-0000-0000-0000-0000000d0002";
 
+	// Iteration that generates random suffix. Token expression and post- and pre-conditions.
 	protected static final File USER_TEMPLATE_ITERATION_RANDOM_FILE = new File(TEST_DIR, "user-template-iteration-random.xml");
 	protected static final String USER_TEMPLATE_ITERATION_RANDOM_OID = "10000000-0000-0000-0000-0000000d0002"; // SAME OID as USER_TEMPLATE_ITERATION
+	
+	// Iteration with token expression (sequential) and post-condition that checks for e-mail uniquness.
+	protected static final File USER_TEMPLATE_ITERATION_UNIQUE_EMAIL_FILE = new File(TEST_DIR, "user-template-iteration-unique-email.xml");
+	protected static final String USER_TEMPLATE_ITERATION_UNIQUE_EMAIL_OID = "10000000-0000-0000-0000-0000000d0004";
 	
 	private static final String USER_ANGELICA_NAME = "angelica";
 	private static final String ACCOUNT_SPARROW_NAME = "sparrow";
@@ -160,6 +170,18 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 	private static final String USER_ALFRED_NAME = "alfred";
 
 	private static final String USER_BOB_NAME = "bob";
+
+	private static final String USER_ALFREDO_FETTUCINI_USERNAME = "afettucini";
+	private static final String USER_ALFREDO_FETTUCINI_GIVEN_NAME = "Alfredo";
+	private static final String USER_ALFREDO_FETTUCINI_FAMILY_NAME = "Fettucini";
+
+	private static final String USER_BILL_FETTUCINI_USERNAME = "bfettucini";
+	private static final String USER_BILL_FETTUCINI_GIVEN_NAME = "Bill";
+	private static final String USER_BILL_FETTUCINI_FAMILY_NAME = "Fettucini";
+
+	private static final String USER_FETTUCINI_NICKNAME = "fetty";
+
+	private static final String EMAIL_SUFFIX = "@example.com";
 
 	protected String jupiterUserOid;
 
@@ -232,6 +254,7 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		dummyResourceCtlFuchsia.setResource(resourceDummyFuchsia);
 
 		addObject(USER_TEMPLATE_ITERATION_FILE);
+		addObject(USER_TEMPLATE_ITERATION_UNIQUE_EMAIL_FILE);
 
 		addObject(USER_LARGO_FILE);
 
@@ -529,8 +552,8 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		dummyResourcePink.addAccount(account);
 
 		PrismObject<UserType> userScrooge = createUser("scrooge", "Scrooge McDuck", true);
-		ShadowType newPinkyShadow = createShadow(resourceDummyPinkType.asPrismObject(), null, null).asObjectable();
-		userScrooge.asObjectable().getLink().add(newPinkyShadow);
+		PrismObject<ShadowType> newPinkyShadow = createShadow(resourceDummyPinkType.asPrismObject(), null, null);
+		userScrooge.asObjectable().getLink().add(newPinkyShadow.asObjectable());
 
 		Collection<ObjectDelta<? extends ObjectType>> deltas = new ArrayList<ObjectDelta<? extends ObjectType>>();
 		deltas.add(ObjectDelta.createAddDelta(userScrooge));
@@ -577,8 +600,8 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		dummyAuditService.clear();
 
 		PrismObject<UserType> userJoeHacker = createUser("hacker", "Joe Hacker", true);
-		ShadowType newPinkyShadow = createShadow(resourceDummyPinkType.asPrismObject(), null, null).asObjectable();
-		userJoeHacker.asObjectable().getLink().add(newPinkyShadow);
+		PrismObject<ShadowType> newPinkyShadow = createShadow(resourceDummyPinkType.asPrismObject(), null, null);
+		userJoeHacker.asObjectable().getLink().add(newPinkyShadow.asObjectable());
 
 		Collection<ObjectDelta<? extends ObjectType>> deltas = new ArrayList<ObjectDelta<? extends ObjectType>>();
 		deltas.add(ObjectDelta.createAddDelta(userJoeHacker));
@@ -745,7 +768,7 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		cleanUpJupiter(TEST_NAME);
 	}
 
-	protected void cleanUpJupiter(String TEST_NAME) throws SchemaException, ObjectAlreadyExistsException, ObjectNotFoundException, ExpressionEvaluationException, CommunicationException, ConfigurationException, PolicyViolationException, SecurityViolationException {
+	protected void cleanUpJupiter(String TEST_NAME) throws SchemaException, ObjectAlreadyExistsException, ObjectNotFoundException, ExpressionEvaluationException, CommunicationException, ConfigurationException, PolicyViolationException, SecurityViolationException, SchemaViolationException, ConflictException {
 		TestUtil.displayTestTile(this, TEST_NAME);
 
 		// GIVEN
@@ -1966,6 +1989,40 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		assertUserNick(USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME+".1");
 	}
 	
+	/*
+	 * Create yet another account with fullname barbossa. We already have two barbossa users,
+	 * so the next one is barbossa.2. But there is a post-iteration condition that refuses that
+	 * name. It also refuses barbossa.3. So the result should be barbossa.4.
+	 * MID-3338
+	 */
+	@Test
+    public void test732DarkVioletAddBarbossa() throws Exception {
+		final String TEST_NAME = "test732DarkVioletAddBarbossa";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestIteration.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        dummyAuditService.clear();
+        
+        DummyAccount account = new DummyAccount("YA" + USER_BARBOSSA_USERNAME);
+		account.setEnabled(true);
+		account.addAttributeValues(DummyResourceContoller.DUMMY_ACCOUNT_ATTRIBUTE_FULLNAME_NAME, USER_BARBOSSA_USERNAME);
+        
+		// WHEN
+		TestUtil.displayWhen(TEST_NAME);
+		
+        display("Adding dummy account", account.debugDump());
+		dummyResourceDarkViolet.addAccount(account);
+		
+		waitForTaskNextRunAssertSuccess(TASK_LIVE_SYNC_DUMMY_DARK_VIOLET_OID, true);
+        
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+		assertUserNick(USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME+".1");
+		assertUserNick("YA" + USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME, USER_BARBOSSA_USERNAME+".4");
+	}
+	
 	@Test
     public void test750DarkVioletAddMatusalem() throws Exception {
 		final String TEST_NAME = "test750DarkVioletAddMatusalem";
@@ -2181,6 +2238,91 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 		assertUserNick(ACCOUNT_MILLONARIO_USERNAME, RON_FULLNAME, RON_FULLNAME, "Northern Peru");
 		assertNoUserNick(ACCOUNT_MILLONARIO_USERNAME, RUM_FULLNAME, RUM_FULLNAME+iterationTokenMillonario);
 	}
+	
+	
+	/**
+	 * MID-2887
+	 */
+	@Test
+    public void test800UniqeEmailAddUserAlfredoFettucini() throws Exception {
+		final String TEST_NAME = "test800UniqeEmailAddUserAlfredoFettucini";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestIteration.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        dummyAuditService.clear();
+        
+        setDefaultObjectTemplate(UserType.COMPLEX_TYPE, USER_TEMPLATE_ITERATION_UNIQUE_EMAIL_OID);
+        
+        PrismObject<UserType> user = createUser(USER_ALFREDO_FETTUCINI_USERNAME, USER_ALFREDO_FETTUCINI_GIVEN_NAME, USER_ALFREDO_FETTUCINI_FAMILY_NAME,
+        		USER_FETTUCINI_NICKNAME, true);
+        
+		// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        addObject(user, task, result);
+		
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+		PrismObject<UserType> userAfter = getUser(user.getOid());
+		display("User after change execution", userAfter);
+		assertUser(userAfter, user.getOid(), USER_ALFREDO_FETTUCINI_USERNAME, 
+				USER_ALFREDO_FETTUCINI_GIVEN_NAME + " " + USER_ALFREDO_FETTUCINI_FAMILY_NAME,
+				USER_ALFREDO_FETTUCINI_GIVEN_NAME, USER_ALFREDO_FETTUCINI_FAMILY_NAME);
+	
+		PrismAsserts.assertEqualsPolyString("Wrong "+user+" nickname", USER_FETTUCINI_NICKNAME, userAfter.asObjectable().getNickName());
+		
+		assertEquals("Wrong "+user+" emailAddress", USER_FETTUCINI_NICKNAME + EMAIL_SUFFIX, userAfter.asObjectable().getEmailAddress());
+	}
+	
+	/**
+	 * MID-2887
+	 */
+	@Test
+    public void test802UniqeEmailAddUserBillFettucini() throws Exception {
+		final String TEST_NAME = "test802UniqeEmailAddUserBillFettucini";
+        TestUtil.displayTestTile(this, TEST_NAME);
+
+        // GIVEN
+        Task task = taskManager.createTaskInstance(TestIteration.class.getName() + "." + TEST_NAME);
+        OperationResult result = task.getResult();
+        dummyAuditService.clear();
+        
+        setDefaultObjectTemplate(UserType.COMPLEX_TYPE, USER_TEMPLATE_ITERATION_UNIQUE_EMAIL_OID);
+        
+        PrismObject<UserType> user = createUser(USER_BILL_FETTUCINI_USERNAME, USER_BILL_FETTUCINI_GIVEN_NAME, 
+        		USER_BILL_FETTUCINI_FAMILY_NAME, USER_FETTUCINI_NICKNAME, true);
+        
+		// WHEN
+        TestUtil.displayWhen(TEST_NAME);
+        addObject(user, task, result);
+		
+		// THEN
+		TestUtil.displayThen(TEST_NAME);
+		result.computeStatus();
+        TestUtil.assertSuccess(result);
+        
+		PrismObject<UserType> userAfter = getUser(user.getOid());
+		display("User after change execution", userAfter);
+		assertUser(userAfter, user.getOid(), USER_BILL_FETTUCINI_USERNAME, 
+				USER_BILL_FETTUCINI_GIVEN_NAME + " " + USER_BILL_FETTUCINI_FAMILY_NAME,
+				USER_BILL_FETTUCINI_GIVEN_NAME, USER_BILL_FETTUCINI_FAMILY_NAME);
+	
+		PrismAsserts.assertEqualsPolyString("Wrong "+user+" nickname", USER_FETTUCINI_NICKNAME, userAfter.asObjectable().getNickName());
+		
+		assertEquals("Wrong "+user+" emailAddress", USER_FETTUCINI_NICKNAME + ".1" + EMAIL_SUFFIX, userAfter.asObjectable().getEmailAddress());
+	}
+	
+
+	private PrismObject<UserType> createUser(String username, String givenName,
+			String familyName, String nickname, boolean enabled) throws SchemaException {
+		PrismObject<UserType> user = createUser(username, givenName, familyName, enabled);
+		user.asObjectable().setNickName(PrismTestUtil.createPolyStringType(nickname));
+		return user;
+	}
 
 	private void assertUserLargo(PrismObject<UserType> userLargo) {
 		assertUser(userLargo, USER_LARGO_OID, USER_LARGO_NAME, null, "Largo", "LaGrande", null);
@@ -2213,8 +2355,9 @@ public class TestIteration extends AbstractInitializedModelIntegrationTest {
 	private String lookupIterationTokenByAdditionalName(String additionalName) throws SchemaException, ObjectNotFoundException, SecurityViolationException, CommunicationException, ConfigurationException {
 		Task task = taskManager.createTaskInstance(TestIteration.class.getName() + ".lookupIterationTokenByAdditionalName");
         OperationResult result = task.getResult();
-        EqualFilter filter = EqualFilter.createEqual(UserType.F_ADDITIONAL_NAME, UserType.class, prismContext, null, PrismTestUtil.createPolyString(additionalName));
-        ObjectQuery query = ObjectQuery.createObjectQuery(filter);
+		ObjectQuery query = QueryBuilder.queryFor(UserType.class, prismContext)
+				.item(UserType.F_ADDITIONAL_NAME).eq(PrismTestUtil.createPolyString(additionalName))
+				.build();
 		List<PrismObject<UserType>> objects = modelService.searchObjects(UserType.class, query, null, task, result);
 		if (objects.isEmpty()) {
 			return null;

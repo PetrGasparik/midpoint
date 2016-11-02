@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,13 @@
 
 package com.evolveum.midpoint.web.component;
 
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.schema.result.OperationResult;
-import com.evolveum.midpoint.util.logging.Trace;
-import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.web.component.util.LoadableModel;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
-import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
-import com.evolveum.midpoint.web.page.admin.configuration.component.ObjectPolicyDialog;
-import com.evolveum.midpoint.web.page.admin.configuration.dto.ObjectPolicyConfigurationTypeDto;
-import com.evolveum.midpoint.web.util.WebMiscUtil;
-import com.evolveum.midpoint.web.util.WebModelUtils;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectTemplateType;
+import java.util.Iterator;
+import java.util.List;
+
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
 import org.apache.wicket.behavior.AttributeAppender;
-import org.apache.wicket.extensions.ajax.markup.html.modal.ModalWindow;
 import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
 import org.apache.wicket.markup.html.WebMarkupContainer;
 import org.apache.wicket.markup.html.basic.Label;
@@ -44,22 +33,27 @@ import org.apache.wicket.markup.html.panel.FeedbackPanel;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 
-import java.util.Iterator;
-import java.util.List;
+import com.evolveum.midpoint.gui.api.component.BasePanel;
+import com.evolveum.midpoint.gui.api.model.LoadableModel;
+import com.evolveum.midpoint.gui.api.util.WebComponentUtil;
+import com.evolveum.midpoint.util.logging.Trace;
+import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.midpoint.web.component.util.VisibleEnableBehaviour;
+import com.evolveum.midpoint.web.page.admin.configuration.component.ObjectPolicyPanel;
+import com.evolveum.midpoint.web.page.admin.configuration.dto.ObjectPolicyConfigurationTypeDto;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 
 /**
  *  @author shood
  */
 
-public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPolicyConfigurationTypeDto>> {
+public class ObjectPolicyConfigurationEditor extends BasePanel<List<ObjectPolicyConfigurationTypeDto>> {
 
-    private static final Trace LOGGER = TraceManager.getTrace(ObjectPolicyConfigurationEditor.class);
+	private static final long serialVersionUID = 1L;
 
-    private static final String DOT_CLASS = ObjectPolicyConfigurationEditor.class.getName() + ".";
 
-    private static final String OPERATION_LOAD_OBJECT_TEMPLATE = DOT_CLASS + "loadObjectTemplate";
+	private static final Trace LOGGER = TraceManager.getTrace(ObjectPolicyConfigurationEditor.class);
 
-    private static final String ID_TEMPLATE_CONFIG_MODAL = "templateConfigModal";
 
     private static final String ID_LABEL = "label";
     private static final String ID_REPEATER = "repeater";
@@ -78,22 +72,25 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         super(id, model);
 
         setOutputMarkupId(true);
+        
+        initLayout();
     }
 
-    @Override
     protected void initLayout(){
 
         final Label label = new Label(ID_LABEL, createStringResource("objectPolicyConfigurationEditor.label"));
         add(label);
 
-        ListView repeater = new ListView<ObjectPolicyConfigurationTypeDto>(ID_REPEATER, getModel()) {
+        ListView<ObjectPolicyConfigurationTypeDto> repeater = new ListView<ObjectPolicyConfigurationTypeDto>(ID_REPEATER, getModel()) {
+        	private static final long serialVersionUID = 1L;
 
             @Override
-            protected void populateItem(final ListItem item) {
+            protected void populateItem(final ListItem<ObjectPolicyConfigurationTypeDto> item) {
                 WebMarkupContainer textWrapper = new WebMarkupContainer(ID_TEXT_WRAPPER);
                 textWrapper.add(AttributeAppender.prepend("class", new AbstractReadOnlyModel<String>(){
+					private static final long serialVersionUID = 1L;
 
-                    @Override
+					@Override
                     public String getObject(){
                         if(item.getIndex() > 0){
                             return OFFSET_CLASS + " " + CLASS_MULTI_VALUE;
@@ -104,9 +101,11 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
                 }));
                 item.add(textWrapper);
 
-                TextField name = new TextField<>(ID_NAME, createNameModel(item.getModel()));
+                TextField<String> name = new TextField<>(ID_NAME, createNameModel(item.getModel()));
                 name.setOutputMarkupId(true);
-                name.add(new AjaxFormComponentUpdatingBehavior("onblur") {
+                name.add(new AjaxFormComponentUpdatingBehavior("blur") {
+                	private static final long serialVersionUID = 1L;
+                	
                     @Override
                     protected void onUpdate(AjaxRequestTarget target) {}
                 });
@@ -117,7 +116,8 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
                 FeedbackPanel feedback = new FeedbackPanel(ID_FEEDBACK, new ComponentFeedbackMessageFilter(name));
                 textWrapper.add(feedback);
 
-                AjaxLink edit = new AjaxLink(ID_BUTTON_EDIT) {
+                AjaxLink<String> edit = new AjaxLink<String>(ID_BUTTON_EDIT) {
+                	private static final long serialVersionUID = 1L;
 
                     @Override
                     public void onClick(AjaxRequestTarget target) {
@@ -128,6 +128,7 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
 
                 WebMarkupContainer buttonGroup = new WebMarkupContainer(ID_BUTTON_GROUP);
                 buttonGroup.add(AttributeAppender.append("class", new AbstractReadOnlyModel<String>() {
+                	private static final long serialVersionUID = 1L;
 
                     @Override
                     public String getObject() {
@@ -143,27 +144,27 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
             }
         };
 
-        initDialog();
+//        initDialog();
         repeater.setOutputMarkupId(true);
         add(repeater);
     }
 
-    private void initDialog(){
-        ModalWindow editor = new ObjectPolicyDialog(ID_TEMPLATE_CONFIG_MODAL, null){
-
-            @Override
-            protected void savePerformed(AjaxRequestTarget target){
-                ObjectPolicyConfigurationTypeDto oldConfig = getModel().getObject().getConfig();
-                ObjectPolicyConfigurationTypeDto newConfig = getModel().getObject().preparePolicyConfig();
-
-                ObjectPolicyConfigurationEditor.this.replace(oldConfig, newConfig);
-
-                target.add(ObjectPolicyConfigurationEditor.this);
-                close(target);
-            }
-        };
-        add(editor);
-    }
+//    private void initDialog(){
+//        ModalWindow editor = new ObjectPolicyPanel(ID_TEMPLATE_CONFIG_MODAL, null){
+//
+//            @Override
+//            protected void savePerformed(AjaxRequestTarget target){
+//                ObjectPolicyConfigurationTypeDto oldConfig = getModel().getObject().getConfig();
+//                ObjectPolicyConfigurationTypeDto newConfig = getModel().getObject().preparePolicyConfig();
+//
+//                ObjectPolicyConfigurationEditor.this.replace(oldConfig, newConfig);
+//
+//                target.add(ObjectPolicyConfigurationEditor.this);
+//                close(target);
+//            }
+//        };
+//        add(editor);
+//    }
 
     private void replace(ObjectPolicyConfigurationTypeDto old, ObjectPolicyConfigurationTypeDto newC){
         boolean added = false;
@@ -174,6 +175,7 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
                 o.setConstraints(newC.getConstraints());
                 o.setTemplateRef(newC.getTemplateRef());
                 o.setType(newC.getType());
+                o.setSubtype(newC.getSubtype());
                 added = true;
             }
         }
@@ -183,8 +185,9 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         }
     }
 
-    private void initButtons(WebMarkupContainer buttonGroup, final ListItem item){
-        AjaxLink add = new AjaxLink(ID_BUTTON_ADD) {
+    private void initButtons(WebMarkupContainer buttonGroup, final ListItem<ObjectPolicyConfigurationTypeDto> item){
+        AjaxLink<String> add = new AjaxLink<String>(ID_BUTTON_ADD) {
+        	private static final long serialVersionUID = 1L;
 
             @Override
             public void onClick(AjaxRequestTarget target) {
@@ -192,6 +195,7 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
             }
         };
         add.add(new VisibleEnableBehaviour() {
+        	private static final long serialVersionUID = 1L;
 
             @Override
             public boolean isVisible() {
@@ -200,7 +204,8 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         });
         buttonGroup.add(add);
 
-        AjaxLink remove = new AjaxLink(ID_BUTTON_REMOVE) {
+        AjaxLink<String> remove = new AjaxLink<String>(ID_BUTTON_REMOVE) {
+        	private static final long serialVersionUID = 1L;
 
             @Override
             public void onClick(AjaxRequestTarget target) {
@@ -208,7 +213,8 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
             }
         };
         remove.add(new VisibleEnableBehaviour() {
-
+        	private static final long serialVersionUID = 1L;
+        	
             @Override
             public boolean isVisible() {
                 return isRemoveButtonVisible();
@@ -217,7 +223,7 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         buttonGroup.add(remove);
     }
 
-    protected boolean isAddButtonVisible(ListItem item) {
+    protected boolean isAddButtonVisible(ListItem<ObjectPolicyConfigurationTypeDto> item) {
        int size = getModelObject().size();
         if (size <= 1) {
             return true;
@@ -240,10 +246,10 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
 
     private IModel<String> createNameModel(final IModel<ObjectPolicyConfigurationTypeDto> model){
         return new LoadableModel<String>() {
+			private static final long serialVersionUID = 1L;
 
-            @Override
+			@Override
             public String load() {
-                OperationResult result = new OperationResult(OPERATION_LOAD_OBJECT_TEMPLATE);
                 StringBuilder sb = new StringBuilder();
                 ObjectPolicyConfigurationTypeDto config = model.getObject();
 
@@ -251,11 +257,15 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
                     ObjectReferenceType ref = config.getTemplateRef();
 
                     if(ref != null){
-                    	sb.append(WebMiscUtil.getOrigStringFromPoly(ref.getTargetName())).append(": ");
+                    	sb.append(WebComponentUtil.getOrigStringFromPoly(ref.getTargetName())).append(": ");
                     }
 
                     if(config.getType() != null){
                         sb.append(config.getType().getLocalPart());
+                    }
+                    
+                    if (config.getSubtype() != null) {
+                    	sb.append("(").append(config.getSubtype()).append(")");
                     }
                 }
 
@@ -271,7 +281,7 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         target.add(this);
     }
 
-    private void removePerformed(AjaxRequestTarget target, ListItem item){
+    private void removePerformed(AjaxRequestTarget target, ListItem<ObjectPolicyConfigurationTypeDto> item){
         List<ObjectPolicyConfigurationTypeDto> list = getModelObject();
         Iterator<ObjectPolicyConfigurationTypeDto> iterator = list.iterator();
 
@@ -291,10 +301,25 @@ public class ObjectPolicyConfigurationEditor extends SimplePanel<List<ObjectPoli
         target.add(this);
     }
 
-    private void editPerformed(AjaxRequestTarget target, ListItem item){
-        ObjectPolicyDialog window = (ObjectPolicyDialog) get(ID_TEMPLATE_CONFIG_MODAL);
-        window.updateModel(target, (ObjectPolicyConfigurationTypeDto)item.getModelObject());
-        window.show(target);
+    private void editPerformed(AjaxRequestTarget target, ListItem<ObjectPolicyConfigurationTypeDto> item){
+    	ObjectPolicyPanel objectPolicyPanel = new ObjectPolicyPanel(getPageBase().getMainPopupBodyId(), item.getModelObject()) {
+    		private static final long serialVersionUID = 1L;
+
+			@Override
+             protected void savePerformed(AjaxRequestTarget target){
+                 ObjectPolicyConfigurationTypeDto oldConfig = getModel().getObject().getConfig();
+                 ObjectPolicyConfigurationTypeDto newConfig = getModel().getObject().preparePolicyConfig();
+
+                 ObjectPolicyConfigurationEditor.this.replace(oldConfig, newConfig);
+                 ObjectPolicyConfigurationEditor.this.getPageBase().hideMainPopup(target);
+                 target.add(ObjectPolicyConfigurationEditor.this);
+             }
+    	};
+    	objectPolicyPanel.setOutputMarkupId(true);
+    	getPageBase().showMainPopup(objectPolicyPanel, target);
+//        ObjectPolicyPanel window = (ObjectPolicyPanel) get(ID_TEMPLATE_CONFIG_MODAL);
+//        window.updateModel(target, (ObjectPolicyConfigurationTypeDto)item.getModelObject());
+//        window.show(target);
     }
 
 }

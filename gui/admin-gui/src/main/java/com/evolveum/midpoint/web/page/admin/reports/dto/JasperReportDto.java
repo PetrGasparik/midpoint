@@ -1,13 +1,13 @@
 package com.evolveum.midpoint.web.page.admin.reports.dto;
 
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
 import net.sf.jasperreports.engine.JRException;
 import net.sf.jasperreports.engine.JRField;
 import net.sf.jasperreports.engine.JRParameter;
-import net.sf.jasperreports.engine.base.JRBaseParameter;
 import net.sf.jasperreports.engine.design.JRDesignField;
 import net.sf.jasperreports.engine.design.JRDesignParameter;
 import net.sf.jasperreports.engine.design.JRDesignQuery;
@@ -16,7 +16,6 @@ import net.sf.jasperreports.engine.xml.JRXmlWriter;
 
 import org.apache.commons.codec.binary.Base64;
 
-import com.evolveum.midpoint.prism.path.ItemPath;
 import com.evolveum.midpoint.schema.util.ReportTypeUtil;
 //import com.evolveum.midpoint.report.impl.ReportUtils;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -125,50 +124,49 @@ public class JasperReportDto implements Serializable{
 			design.getParametersList().clear();
             design.getFieldsMap().clear();
             design.getParametersMap().clear();
-            for (JasperReportFieldDto field : fields){
-			if (field.isEmpty()){
-				continue;
+            for (JasperReportFieldDto field : fields) {
+				if (field.isEmpty()){
+					continue;
+				}
+				JRDesignField f = new JRDesignField();
+				f.setValueClassName(field.getTypeAsString());
+				f.setValueClass(Class.forName(field.getTypeAsString()));
+				f.setName(field.getName());
+				design.addField(f);
 			}
-			JRDesignField f = new JRDesignField();
-			f.setValueClassName(field.getTypeAsString());
-			f.setValueClass(Class.forName(field.getTypeAsString()));
-			f.setName(field.getName());
-			design.addField(f);
-		}
-		
-		for (JasperReportParameterDto param : parameters){
-			if (param.isEmpty()){
-				continue;
+
+			for (JasperReportParameterDto param : parameters) {
+				if (param.isEmpty()) {
+					continue;
+				}
+				JRDesignParameter p = new JRDesignParameter();
+				p.setValueClassName(param.getTypeAsString());
+				p.setValueClass(Class.forName(param.getTypeAsString()));
+				p.setName(param.getName());
+				p.setForPrompting(param.isForPrompting());
+				p.setDescription(param.getDescription());
+				p.setNestedType(param.getNestedType());
+				p.getPropertiesMap().setBaseProperties(param.getProperties());
+				//			p.getPropertiesMap().setProperty(propName, value);
+				design.addParameter(p);
 			}
-			JRDesignParameter p = new JRDesignParameter();
-			p.setValueClassName(param.getTypeAsString());
-			p.setValueClass(Class.forName(param.getTypeAsString()));
-			p.setName(param.getName());
-			p.setForPrompting(param.isForPrompting());
-			p.setDescription(param.getDescription());
-			p.setNestedType(param.getNestedType());
-			p.getPropertiesMap().setBaseProperties(param.getProperties());
-//			p.getPropertiesMap().setProperty(propName, value);
-			design.addParameter(p);
-		}
-		
-		
-		JasperDesign oldDesign = ReportTypeUtil.loadJasperDesign(jasperReportXml);
-		oldDesign.getParametersList().clear();
-		oldDesign.getParametersList().addAll(design.getParametersList());
-		
-		oldDesign.getFieldsList().clear();
-		oldDesign.getFieldsList().addAll(design.getFieldsList());
-		
-		JRDesignQuery q = new JRDesignQuery();
-		q.setLanguage("mql");
-		q.setText(query);
-		oldDesign.setQuery(q);
-		
-		String reportAsString = JRXmlWriter.writeReport(oldDesign, "UTF-8");
-		return Base64.encodeBase64(reportAsString.getBytes());
-		
-		} catch (JRException | ClassNotFoundException | SchemaException ex){
+
+			JasperDesign oldDesign = ReportTypeUtil.loadJasperDesign(jasperReportXml);
+			oldDesign.getParametersList().clear();
+			oldDesign.getParametersList().addAll(design.getParametersList());
+
+			oldDesign.getFieldsList().clear();
+			oldDesign.getFieldsList().addAll(design.getFieldsList());
+
+			JRDesignQuery q = new JRDesignQuery();
+			q.setLanguage("mql");
+			q.setText(query);
+			oldDesign.setQuery(q);
+
+			String reportAsString = JRXmlWriter.writeReport(oldDesign, "UTF-8");
+			return Base64.encodeBase64(reportAsString.getBytes("UTF-8"));
+
+		} catch (JRException | ClassNotFoundException | SchemaException | UnsupportedEncodingException ex) {
 			throw new IllegalStateException(ex.getMessage(), ex.getCause());
 		}
 		

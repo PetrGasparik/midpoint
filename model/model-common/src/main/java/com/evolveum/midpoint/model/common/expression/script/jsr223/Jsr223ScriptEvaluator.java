@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.script.Bindings;
@@ -30,36 +29,26 @@ import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
 import javax.xml.namespace.QName;
 
-import com.evolveum.midpoint.common.monitor.InternalMonitor;
 import com.evolveum.midpoint.model.common.expression.ExpressionSyntaxException;
 import com.evolveum.midpoint.model.common.expression.ExpressionUtil;
 import com.evolveum.midpoint.model.common.expression.ExpressionVariables;
 import com.evolveum.midpoint.model.common.expression.functions.FunctionLibrary;
 import com.evolveum.midpoint.model.common.expression.script.ScriptEvaluator;
-import com.evolveum.midpoint.prism.Containerable;
 import com.evolveum.midpoint.prism.ItemDefinition;
-import com.evolveum.midpoint.prism.PrismContainerDefinition;
-import com.evolveum.midpoint.prism.PrismContainerValue;
 import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
 import com.evolveum.midpoint.prism.PrismProperty;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
 import com.evolveum.midpoint.prism.PrismPropertyValue;
-import com.evolveum.midpoint.prism.PrismReferenceDefinition;
 import com.evolveum.midpoint.prism.PrismValue;
 import com.evolveum.midpoint.prism.crypto.Protector;
-import com.evolveum.midpoint.prism.polystring.PolyString;
 import com.evolveum.midpoint.prism.xml.XsdTypeMapper;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
+import com.evolveum.midpoint.schema.internals.InternalMonitor;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
 import com.evolveum.midpoint.task.api.Task;
 import com.evolveum.midpoint.util.exception.ExpressionEvaluationException;
 import com.evolveum.midpoint.util.exception.ObjectNotFoundException;
-import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ScriptExpressionEvaluatorType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ScriptExpressionReturnTypeType;
 
@@ -139,59 +128,25 @@ public class Jsr223ScriptEvaluator implements ScriptEvaluator {
         
 		List<V> pvals = new ArrayList<V>();
 		
-		// TODO: cleanup copy&paste block..and what about PrismContianer and
+		// TODO: what about PrismContainer and
 		// PrismReference? Shouldn't they be processed in the same way as
 		// PrismProperty?
 		if (evalRawResult instanceof Collection) {
-			for(Object evalRawResultElement : (Collection)evalRawResult) {
+			for (Object evalRawResultElement : (Collection)evalRawResult) {
 				T evalResult = convertScalarResult(javaReturnType, evalRawResultElement, contextDescription);
-				V pval = null;
-				if (allowEmptyValues || !isEmpty(evalResult)) {
-					if (outputDefinition instanceof PrismReferenceDefinition){
-						pval = (V) ((ObjectReferenceType)evalResult).asReferenceValue();
-					} else if (outputDefinition instanceof PrismContainerDefinition){
-						try {
-							prismContext.adopt((Containerable)evalResult);
-							((Containerable)evalResult).asPrismContainerValue().applyDefinition(outputDefinition);
-						} catch (SchemaException e) {
-							throw new ExpressionEvaluationException(e.getMessage() + " " + contextDescription, e);
-						}
-						pval = (V) ((Containerable)evalResult).asPrismContainerValue();
-					} else {
-						pval = (V) new PrismPropertyValue<T>(evalResult);
-					}
-					pvals.add(pval);
+				if (allowEmptyValues || !ExpressionUtil.isEmpty(evalResult)) {
+					pvals.add((V) ExpressionUtil.convertToPrismValue(evalResult, outputDefinition, contextDescription, prismContext));
 				}
 			}
 		} else if (evalRawResult instanceof PrismProperty<?>) {
 			pvals.addAll((Collection<? extends V>) PrismPropertyValue.cloneCollection(((PrismProperty<T>)evalRawResult).getValues()));
 		} else {
 			T evalResult = convertScalarResult(javaReturnType, evalRawResult, contextDescription);
-			V pval = null;
-			if (allowEmptyValues || !isEmpty(evalResult)) {
-				if (outputDefinition instanceof PrismReferenceDefinition){
-					pval = (V) ((ObjectReferenceType)evalResult).asReferenceValue();
-				} else if (outputDefinition instanceof PrismContainerDefinition){
-					try {
-						prismContext.adopt((Containerable)evalResult);
-						((Containerable)evalResult).asPrismContainerValue().applyDefinition(outputDefinition);
-					} catch (SchemaException e) {
-						throw new ExpressionEvaluationException(e.getMessage() + " " + contextDescription, e);
-					}
-					
-					pval = (V) ((Containerable)evalResult).asPrismContainerValue();
-				} else {
-					pval = (V) new PrismPropertyValue<T>(evalResult);
-				}
-				pvals.add(pval);
+			if (allowEmptyValues || !ExpressionUtil.isEmpty(evalResult)) {
+				pvals.add((V) ExpressionUtil.convertToPrismValue(evalResult, outputDefinition, contextDescription, prismContext));
 			}
 		}
 		
-//		ScriptExpressionReturnTypeType definedReturnType = expressionType.getReturnType();
-//		if (definedReturnType == ScriptExpressionReturnTypeType.LIST) {
-//			
-//		}
-				
 		return pvals;
 	}
 	
@@ -250,90 +205,12 @@ public class Jsr223ScriptEvaluator implements ScriptEvaluator {
 		}
 	}
 	
-	private <T> boolean isEmpty(T val) {
-		if (val == null) {
-			return true;
-		}
-		if (val instanceof String && ((String)val).isEmpty()) {
-			return true;
-		}
-		if (val instanceof PolyString && ((PolyString)val).isEmpty()) {
-			return true;
-		}
-		return false;
-	}
-	
 	private Bindings convertToBindings(ExpressionVariables variables, ObjectResolver objectResolver,
 									   Collection<FunctionLibrary> functions,
 									   String contextDescription, Task task, OperationResult result) throws ExpressionSyntaxException, ObjectNotFoundException {
 		Bindings bindings = scriptEngine.createBindings();
-		// Functions
-		if (functions != null) {
-			for (FunctionLibrary funcLib: functions) {
-				bindings.put(funcLib.getVariableName(), funcLib.getGenericFunctions());
-			}
-		}
-		// Variables
-		if (variables != null) {
-			for (Entry<QName, Object> variableEntry: variables.entrySet()) {
-				if (variableEntry.getKey() == null) {
-					// This is the "root" node. We have no use for it in JSR223, just skip it
-					continue;
-				}
-				String variableName = variableEntry.getKey().getLocalPart();
-				Object variableValue = convertVariableValue(variableEntry.getValue(), variableName, objectResolver, contextDescription, task, result);
-				bindings.put(variableName, variableValue);
-			}
-		}
+		bindings.putAll(ExpressionUtil.prepareScriptVariables(variables, objectResolver, functions, contextDescription, prismContext, task, result));
 		return bindings;
-	}
-
-	private Object convertVariableValue(Object originalValue, String variableName, ObjectResolver objectResolver,
-										String contextDescription, Task task, OperationResult result) throws ExpressionSyntaxException, ObjectNotFoundException {
-		if (originalValue instanceof ObjectReferenceType) {
-			originalValue = resolveReference((ObjectReferenceType)originalValue, objectResolver, variableName, 
-					contextDescription, task, result);
-		}
-		if (originalValue instanceof PrismObject<?>) {
-			return ((PrismObject<?>)originalValue).asObjectable();
-		}
-		if (originalValue instanceof PrismContainerValue<?>) {
-			return ((PrismContainerValue<?>)originalValue).asContainerable();
-		}
-		if (originalValue instanceof PrismPropertyValue<?>) {
-			return ((PrismPropertyValue<?>)originalValue).getValue();
-		}
-		if (originalValue instanceof PrismProperty<?>) {
-			PrismProperty<?> prop = (PrismProperty<?>)originalValue;
-			PrismPropertyDefinition<?> def = prop.getDefinition();
-			if (def != null) {
-				if (def.isSingleValue()) {
-					return prop.getRealValue();
-				} else {
-					return prop.getRealValues();
-				}
-			} else {
-				return prop.getValues();
-			}
-		}
-		return originalValue;
-	}
-
-	private Object resolveReference(ObjectReferenceType ref, ObjectResolver objectResolver, String name, String contextDescription,
-									Task task, OperationResult result) throws ExpressionSyntaxException, ObjectNotFoundException {
-		if (ref.getOid() == null) {
-    		throw new ExpressionSyntaxException("Null OID in reference in variable "+name+" in "+contextDescription);
-    	} else {
-	    	try {
-	    		
-				return objectResolver.resolve(ref, ObjectType.class, null, contextDescription, task, result);
-				
-			} catch (ObjectNotFoundException e) {
-				throw new ObjectNotFoundException("Object not found during variable "+name+" resolution in "+contextDescription+": "+e.getMessage(),e, ref.getOid());
-			} catch (SchemaException e) {
-				throw new ExpressionSyntaxException("Schema error during variable "+name+" resolution in "+contextDescription+": "+e.getMessage(), e);
-			}
-    	}
 	}
 
 	/* (non-Javadoc)

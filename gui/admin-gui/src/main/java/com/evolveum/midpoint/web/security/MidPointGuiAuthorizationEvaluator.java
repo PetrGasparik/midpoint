@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ import com.evolveum.midpoint.security.api.MidPointPrincipal;
 import com.evolveum.midpoint.security.api.ObjectSecurityConstraints;
 import com.evolveum.midpoint.security.api.OwnerResolver;
 import com.evolveum.midpoint.security.api.SecurityEnforcer;
-import com.evolveum.midpoint.security.api.SecurityUtil;
 import com.evolveum.midpoint.security.api.UserProfileService;
 import com.evolveum.midpoint.util.DisplayableValue;
+import com.evolveum.midpoint.util.Producer;
 import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.logging.Trace;
@@ -44,12 +44,11 @@ import org.springframework.security.access.SecurityConfig;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.FilterInvocation;
-import org.springframework.security.web.util.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Set;
 
 public class MidPointGuiAuthorizationEvaluator implements SecurityEnforcer {
 	
@@ -143,8 +142,19 @@ public class MidPointGuiAuthorizationEvaluator implements SecurityEnforcer {
         if (guiConfigAttr.isEmpty()) {
         	configAttributesToUse = configAttributes;
         }
-
-    	securityEnforcer.decide(authentication, object, configAttributesToUse);
+        
+        try {
+        	securityEnforcer.decide(authentication, object, configAttributesToUse);
+        	
+        	if (LOGGER.isTraceEnabled()) {
+            	LOGGER.trace("DECIDE: authentication={}, object={}, configAttributesToUse={}: OK", authentication, object, configAttributesToUse);
+            }
+        } catch (AccessDeniedException | InsufficientAuthenticationException e) {
+        	if (LOGGER.isTraceEnabled()) {
+            	LOGGER.trace("DECIDE: authentication={}, object={}, configAttributesToUse={}: {}", authentication, object, configAttributesToUse, e);
+            }
+        	throw e;
+        }
     }
 
     private void addSecurityConfig(FilterInvocation filterInvocation, Collection<ConfigAttribute> guiConfigAttr,
@@ -154,7 +164,7 @@ public class MidPointGuiAuthorizationEvaluator implements SecurityEnforcer {
         if (!matcher.matches(filterInvocation.getRequest()) || actions == null) {
             return;
         }
-
+        
         for (DisplayableValue<String> action : actions) {
             String actionUri = action.getValue();
             if (StringUtils.isBlank(actionUri)) {
@@ -166,7 +176,10 @@ public class MidPointGuiAuthorizationEvaluator implements SecurityEnforcer {
                 return;
             }
 
-            guiConfigAttr.add(new SecurityConfig(actionUri));
+            SecurityConfig config = new SecurityConfig(actionUri);
+			if (!guiConfigAttr.contains(config)) {
+				guiConfigAttr.add(config);
+			}
         }
     }
 
@@ -181,6 +194,14 @@ public class MidPointGuiAuthorizationEvaluator implements SecurityEnforcer {
 			Class<T> objectType, PrismObject<O> object, ObjectFilter origFilter) throws SchemaException {
 		return securityEnforcer.preProcessObjectFilter(operationUrl, phase, objectType, object, origFilter);
 	}
-    
-    
+
+	@Override
+	public <T> T runAs(Producer<T> producer, PrismObject<UserType> user) {
+		return securityEnforcer.runAs(producer, user);
+	}
+
+	@Override
+	public <T> T runPrivileged(Producer<T> producer) {
+		return securityEnforcer.runPrivileged(producer);
+	}
 }

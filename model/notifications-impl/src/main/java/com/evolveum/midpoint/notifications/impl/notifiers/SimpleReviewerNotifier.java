@@ -17,7 +17,6 @@
 package com.evolveum.midpoint.notifications.impl.notifiers;
 
 import com.evolveum.midpoint.model.api.expr.MidpointFunctions;
-import com.evolveum.midpoint.notifications.api.events.CertCampaignEvent;
 import com.evolveum.midpoint.notifications.api.events.CertReviewEvent;
 import com.evolveum.midpoint.notifications.api.events.Event;
 import com.evolveum.midpoint.notifications.impl.helpers.CertHelper;
@@ -31,14 +30,12 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationC
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationStageDefinitionType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationStageType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.GeneralNotifierType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.SimpleCampaignNotifierType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.SimpleReviewerNotifierType;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
-import java.util.Date;
 
 /**
  * Various reviewer-level notifications.
@@ -113,9 +110,9 @@ public class SimpleReviewerNotifier extends GeneralNotifier {
         AccessCertificationStageType stage = CertCampaignTypeUtil.getCurrentStage(campaign);
         if (stage != null) {
             body.append("Stage start time: ").append(XmlTypeConverter.toDate(stage.getStart()));
-            body.append("\nStage end time: ").append(XmlTypeConverter.toDate(stage.getEnd()));
-            if (stage.getEnd() != null) {
-                long delta = XmlTypeConverter.toMillis(stage.getEnd()) - System.currentTimeMillis();
+            body.append("\nStage deadline: ").append(XmlTypeConverter.toDate(stage.getDeadline()));
+            if (stage.getDeadline() != null) {
+                long delta = XmlTypeConverter.toMillis(stage.getDeadline()) - System.currentTimeMillis();
                 if (delta > 0) {
                     if (reviewEvent.isModify()) {
                         body.append("\n\nThis is to notify you that the stage ends in ");
@@ -124,7 +121,7 @@ public class SimpleReviewerNotifier extends GeneralNotifier {
                     }
                     body.append(DurationFormatUtils.formatDurationWords(delta, true, true));
                 } else if (delta < 0) {
-                    body.append("\n\nThe stage ended ");
+                    body.append("\n\nThe stage should have ended ");
                     body.append(DurationFormatUtils.formatDurationWords(-delta, true, true));
                     body.append(" ago");
                 }

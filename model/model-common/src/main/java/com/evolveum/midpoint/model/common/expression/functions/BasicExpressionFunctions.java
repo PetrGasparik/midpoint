@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import javax.naming.InvalidNameException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.directory.Attribute;
@@ -34,6 +38,8 @@ import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
 import javax.xml.datatype.XMLGregorianCalendar;
 
+import com.evolveum.midpoint.prism.*;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.*;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.time.DateUtils;
@@ -42,9 +48,6 @@ import org.w3c.dom.Node;
 
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpression;
 import com.evolveum.midpoint.model.common.expression.script.ScriptExpressionEvaluationContext;
-import com.evolveum.midpoint.prism.PrismContainer;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismProperty;
 import com.evolveum.midpoint.prism.crypto.EncryptionException;
 import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.prism.path.ItemPath;
@@ -60,10 +63,6 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
-import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowType;
 import com.evolveum.prism.xml.ns._public.types_3.PolyStringType;
 import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 
@@ -82,6 +81,10 @@ public class BasicExpressionFunctions {
 	public static final String NAME_SEPARATOR = " ";
 	
 	public static final Trace LOGGER = TraceManager.getTrace(BasicExpressionFunctions.class);
+	
+	private static String STRING_PATTERN_WHITESPACE = "\\s+";
+	private static String STRING_PATTERN_HONORIFIC_PREFIX_ENDS_WITH_DOT = "^(\\S+\\.)$";
+	private static Pattern PATTERN_NICK_NAME = Pattern.compile("^([^\"]*)\"([^\"]+)\"([^\"]*)$");
 	
 	private PrismContext prismContext;
 	private Protector protector;
@@ -351,6 +354,10 @@ public class BasicExpressionFunctions {
 		return getExtensionPropertyValue(object, new javax.xml.namespace.QName(namespace, localPart));
 	}
 	
+	public Referencable getExtensionReferenceValue(ObjectType object, String namespace, String localPart) throws SchemaException {
+		return getExtensionReferenceValue(object, new javax.xml.namespace.QName(namespace, localPart));
+	}
+	
 	public <T> T getExtensionPropertyValue(ObjectType object, groovy.xml.QName propertyQname) throws SchemaException {
 		return getExtensionPropertyValue(object, propertyQname.getNamespaceURI(), propertyQname.getLocalPart());
 	}
@@ -360,6 +367,14 @@ public class BasicExpressionFunctions {
 			return null;
 		}
 		Collection<T> values = ObjectTypeUtil.getExtensionPropertyValues(object, propertyQname);
+		return toSingle(values, "a multi-valued extension property "+propertyQname);
+	}
+	
+	public Referencable getExtensionReferenceValue(ObjectType object, javax.xml.namespace.QName propertyQname) throws SchemaException {
+		if (object == null) {
+			return null;
+		}
+		Collection<Referencable> values = ObjectTypeUtil.getExtensionReferenceValues(object, propertyQname);
 		return toSingle(values, "a multi-valued extension property "+propertyQname);
 	}
 	
@@ -431,7 +446,7 @@ public class BasicExpressionFunctions {
 		if (shadow == null) {
 			return null;
 		}
-		Collection<ResourceAttribute<?>> identifiers = ShadowUtil.getIdentifiers(shadow);
+		Collection<ResourceAttribute<?>> identifiers = ShadowUtil.getPrimaryIdentifiers(shadow);
 		if (identifiers.size() == 0) {
 			return null;
 		}
@@ -639,6 +654,139 @@ public class BasicExpressionFunctions {
     	return XmlTypeConverter.createXMLGregorianCalendar(System.currentTimeMillis());
     }
     
+    private ParsedFullName parseFullName(String fullName) {
+    	if (StringUtils.isBlank(fullName)) {
+    		return null;
+    	}
+    	String root = fullName.trim();
+    	ParsedFullName p = new ParsedFullName();
+    	
+//    	LOGGER.trace("(1) root=", root);
+    	
+    	Matcher m = PATTERN_NICK_NAME.matcher(root);
+    	if (m.matches()) {
+    		String nickName = m.group(2).trim();
+    		p.setNickName(nickName);
+    		root = m.group(1) + " " + m.group(3);
+//    		LOGGER.trace("nick={}, root={}", nickName, root);
+    	}
+    	
+    	String[] words = root.split(STRING_PATTERN_WHITESPACE);
+    	int i = 0;
+    	
+//    	LOGGER.trace("(2) i={}, words={}", i, Arrays.toString(words));
+    	
+    	StringBuilder honorificPrefixBuilder = new StringBuilder();
+    	while (i < words.length && words[i].matches(STRING_PATTERN_HONORIFIC_PREFIX_ENDS_WITH_DOT)) {
+    		honorificPrefixBuilder.append(words[i]);
+    		honorificPrefixBuilder.append(" ");
+    		i++;
+    	}
+    	if (honorificPrefixBuilder.length() > 0) {
+    		honorificPrefixBuilder.setLength(honorificPrefixBuilder.length() - 1);
+    		p.setHonorificPrefix(honorificPrefixBuilder.toString());
+    	}
+    	
+//    	LOGGER.trace("(3) i={}, words={}", i, Arrays.toString(words));
+    	
+    	List<String> rootNameWords = new ArrayList<>();
+    	while (i < words.length && !words[i].endsWith(",")) {
+    		rootNameWords.add(words[i]);
+    		i++;
+    	}
+    		
+    	if (i < words.length && words[i].endsWith(",")) {
+    		String word = words[i];
+    		i++;
+    		if (!word.equals(",")) {
+    			word = word.substring(0, word.length() - 1);
+    			rootNameWords.add(word);
+    		}
+    	}
+    	
+//    	LOGGER.trace("(4) i={}, words={}", i, Arrays.toString(words));
+//    	LOGGER.trace("(4) rootNameWords={}", rootNameWords);
+    	
+    	if (rootNameWords.size() > 1) {
+    		p.setFamilyName(rootNameWords.get(rootNameWords.size() - 1)); 
+    		rootNameWords.remove(rootNameWords.size() - 1);
+    		p.setGivenName(rootNameWords.get(0));
+    		rootNameWords.remove(0);
+    		p.setAdditionalName(StringUtils.join(rootNameWords, " "));
+    	} else if (rootNameWords.size() == 1) {
+    		p.setFamilyName(rootNameWords.get(0)); 
+    	}
+    	
+    	StringBuilder honorificSuffixBuilder = new StringBuilder();
+    	while (i < words.length) {
+    		honorificSuffixBuilder.append(words[i]);
+    		honorificSuffixBuilder.append(" ");
+    		i++;
+    	}
+    	if (honorificSuffixBuilder.length() > 0) {
+    		honorificSuffixBuilder.setLength(honorificSuffixBuilder.length() - 1);
+    		p.setHonorificSuffix(honorificSuffixBuilder.toString());
+    	}
+
+    	LOGGER.trace("Parsed full name '{}' as {}", fullName, p);
+    	
+    	return p;
+    }
+    
+    public String parseGivenName(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getGivenName();
+    	}
+    }
+        
+    public String parseFamilyName(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getFamilyName();
+    	}
+    }
+    
+    public String parseAdditionalName(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getAdditionalName();
+    	}
+    }
+    
+    public String parseNickName(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getNickName();
+    	}
+    }
+    
+    public String parseHonorificPrefix(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getHonorificPrefix();
+    	}
+    }
+    
+    public String parseHonorificSuffix(Object fullName) {
+    	ParsedFullName p = parseFullName(stringify(fullName));
+    	if (p == null) {
+    		return null;
+    	} else {
+    		return p.getHonorificSuffix();
+    	}
+    }
+    
     public String decrypt(ProtectedStringType protectedString) {
     	try {
 			return protector.decryptString(protectedString);
@@ -653,6 +801,110 @@ public class BasicExpressionFunctions {
 		} catch (EncryptionException e) {
 			throw new SystemException(e.getMessage(), e);
 		}
+    }
+    
+    /**
+     * Creates a valid LDAP distinguished name from the wide range of components. The method
+     * can be invoked in many ways, e.g.:
+     * 
+     * composeDn("cn","foo","o","bar")
+	 * composeDn("cn","foo",new Rdn("o","bar"))
+     * composeDn(new Rdn("cn","foo"),"ou","baz",new Rdn("o","bar"))
+     * composeDn(new Rdn("cn","foo"),"ou","baz","o","bar")
+	 * composeDn(new Rdn("cn","foo"),new LdapName("ou=baz,o=bar"))
+     * composeDn("cn","foo",new LdapName("ou=baz,o=bar"))
+     * 
+     * Note: the DN is not normalized. The case of the attribute names and white spaces are
+     * preserved.
+     */
+    public static String composeDn(Object... components) throws InvalidNameException {
+    	if (components == null) {
+    		return null;
+    	}
+    	if (components.length == 0) {
+    		return null;
+    	}
+    	if (components.length == 1 && components[0] == null) {
+    		return null;
+    	}
+    	if (components.length == 1 && (components[0] instanceof String) && StringUtils.isBlank((String)(components[0]))) {
+    		return null;
+    	}
+    	LinkedList<Rdn> rdns = new LinkedList<>();
+    	String attrName = null;
+    	for (Object component: components) {
+    		if (attrName != null && !(component instanceof String || component instanceof PolyString || component instanceof PolyStringType)) {
+    			throw new InvalidNameException("Invalid input to composeDn() function: expected string after '"+attrName+"' argument, but got "+component.getClass());
+    		}
+    		if (component instanceof Rdn) {
+    			rdns.addFirst((Rdn)component);
+    		} else if (component instanceof PolyString) {
+    			component = ((PolyString)component).toString();
+    		} else if (component instanceof PolyStringType) {
+    			component = ((PolyStringType)component).toString();
+    		}
+    		if (component instanceof String) {
+    			if (attrName == null) {
+    				attrName = (String)component;
+    			} else {
+					rdns.addFirst(new Rdn(attrName, (String)component));
+    				attrName = null;
+    			}
+    		} 
+    		if (component instanceof LdapName) {
+    			rdns.addAll(0,((LdapName)component).getRdns());
+    		}
+    	}
+    	LdapName dn = new LdapName(rdns);
+    	return dn.toString();
+    }
+    
+    /**
+     * Creates a valid LDAP distinguished name from the wide range of components assuming that
+     * the last component is a suffix. The method can be invoked in many ways, e.g.:
+     * 
+     * composeDn("cn","foo","o=bar")
+     * composeDn(new Rdn("cn","foo"),"ou=baz,o=bar")
+	 * composeDn(new Rdn("cn","foo"),new LdapName("ou=baz,o=bar"))
+     * composeDn("cn","foo",new LdapName("ou=baz,o=bar"))
+     * 
+     * The last element is a complete suffix represented either as String or LdapName.
+     * 
+     * Note: the DN is not normalized. The case of the attribute names and white spaces are
+     * preserved.
+     */
+    public static String composeDnWithSuffix(Object... components) throws InvalidNameException {
+    	if (components == null) {
+    		return null;
+    	}
+    	if (components.length == 0) {
+    		return null;
+    	}
+    	if (components.length == 1) {
+    		if (components[0] == null) {
+    			return null;
+    		}
+    		if ((components[0] instanceof String)) {
+    			if (StringUtils.isBlank((String)(components[0]))) {
+    				return null;
+    			} else {
+    				return (new LdapName((String)(components[0]))).toString();
+    			}
+    		} else if ((components[0] instanceof LdapName)) {
+    			return ((LdapName)(components[0])).toString();
+    		} else {
+    			throw new InvalidNameException("Invalid input to composeDn() function: expected suffix (last element) to be String or LdapName, but it was "+components[0].getClass());
+    		}
+    	}
+    	Object suffix = components[components.length - 1];
+    	if (suffix instanceof String) {
+    		suffix = new LdapName((String)suffix);
+    	}
+    	if (!(suffix instanceof LdapName)) {
+    		throw new InvalidNameException("Invalid input to composeDn() function: expected suffix (last element) to be String or LdapName, but it was "+suffix.getClass());
+    	}
+    	components[components.length - 1] = suffix;
+    	return composeDn(components);
     }
 	
 }

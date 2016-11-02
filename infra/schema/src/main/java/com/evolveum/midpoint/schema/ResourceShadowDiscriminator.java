@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,9 @@ import java.io.Serializable;
 
 import javax.xml.namespace.QName;
 
-import com.evolveum.midpoint.schema.constants.MidPointConstants;
 import com.evolveum.midpoint.schema.constants.SchemaConstants;
+import com.evolveum.midpoint.util.DebugDumpable;
+import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.PrettyPrinter;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ResourceType;
@@ -40,7 +41,7 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.ShadowKindType;
  * 
  * @author Radovan Semancik
  */
-public class ResourceShadowDiscriminator implements Serializable {
+public class ResourceShadowDiscriminator implements Serializable, DebugDumpable {
 	private static final long serialVersionUID = 346600684011645741L;
 	
 	private String resourceOid;
@@ -131,7 +132,11 @@ public class ResourceShadowDiscriminator implements Serializable {
 	}
 
 	/**
-	 * Thumbstone flag is true: the account no longer exists. The data we have are the latest metadata we were able to get. 
+	 * Thumbstone flag is true: the account no longer exists. The data we have are the latest metadata we were able to get.
+	 * The projection will be marked as thombstone if we discover that the associated resource object is gone. Or the shadow
+	 * is gone and we can no longer associate the resource object. In any way the thombstoned projection is marked for removal.
+	 * It will be eventually unlinked and the shadow will be deleted. The shadow may stay around in the "dead" state for
+	 * some time for reporting purposes.
 	 */
 	public boolean isThombstone() {
 		return thombstone;
@@ -272,4 +277,23 @@ public class ResourceShadowDiscriminator implements Serializable {
     	sb.append(")");
     	return sb.toString();
     }
+
+	@Override
+	public String debugDump() {
+		return debugDump(0);
+	}
+
+	@Override
+	public String debugDump(int indent) {
+		StringBuilder sb = new StringBuilder();
+		DebugUtil.indentDebugDump(sb, indent);
+		sb.append("ResourceShadowDiscriminator\n");
+		DebugUtil.debugDumpWithLabelLn(sb, "resourceOid", resourceOid, indent + 1);
+		DebugUtil.debugDumpWithLabelToStringLn(sb, "kind", kind, indent + 1);
+		DebugUtil.debugDumpWithLabelLn(sb, "intent", indent, indent + 1);
+		DebugUtil.debugDumpWithLabelLn(sb, "objectClass", objectClass, indent + 1);
+		DebugUtil.debugDumpWithLabelLn(sb, "thombstone", thombstone, indent + 1);
+		DebugUtil.debugDumpWithLabel(sb, "order", order, indent + 1);
+		return sb.toString();
+	}
 }

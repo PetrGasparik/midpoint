@@ -20,15 +20,21 @@ import com.evolveum.midpoint.audit.api.AuditEventStage;
 import com.evolveum.midpoint.audit.api.AuditEventType;
 import com.evolveum.midpoint.audit.api.AuditService;
 import com.evolveum.midpoint.prism.PrismObject;
+import com.evolveum.midpoint.prism.marshaller.XNodeProcessorEvaluationMode;
+import com.evolveum.midpoint.prism.query.NoneFilter;
+import com.evolveum.midpoint.prism.query.ObjectFilter;
+import com.evolveum.midpoint.prism.query.ObjectQuery;
 import com.evolveum.midpoint.repo.sql.data.audit.RAuditEventRecord;
 import com.evolveum.midpoint.repo.sql.data.audit.RAuditEventStage;
 import com.evolveum.midpoint.repo.sql.data.audit.RAuditEventType;
 import com.evolveum.midpoint.repo.sql.data.audit.RObjectDeltaOperation;
+import com.evolveum.midpoint.repo.sql.helpers.BaseHelper;
 import com.evolveum.midpoint.repo.sql.util.DtoTranslationException;
 import com.evolveum.midpoint.repo.sql.util.GetObjectResult;
 import com.evolveum.midpoint.repo.sql.util.RUtil;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.task.api.Task;
+import com.evolveum.midpoint.util.DebugUtil;
 import com.evolveum.midpoint.util.Holder;
 import com.evolveum.midpoint.util.MiscUtil;
 import com.evolveum.midpoint.util.exception.SchemaException;
@@ -36,6 +42,7 @@ import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CleanupPolicyType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 
 import org.apache.commons.lang.Validate;
 import org.hibernate.Query;
@@ -57,11 +64,15 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import org.hibernate.FlushMode;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * @author lazyman
  */
 public class SqlAuditServiceImpl extends SqlBaseService implements AuditService {
+
+	@Autowired
+	private BaseHelper baseHelper;
 
     private static final Trace LOGGER = TraceManager.getTrace(SqlAuditServiceImpl.class);
     private static final Integer CLEANUP_AUDIT_BATCH_SIZE = 500;
@@ -83,7 +94,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
                 auditAttempt(record);
                 return;
             } catch (RuntimeException ex) {
-                attempt = logOperationAttempt(null, operation, attempt, ex, null);
+                attempt = baseHelper.logOperationAttempt(null, operation, attempt, ex, null);
             }
         }
     }
@@ -97,7 +108,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
             try {
                 return listRecordsAttempt(query, params);
             } catch (RuntimeException ex) {
-                attempt = logOperationAttempt(null, operation, attempt, ex, null);
+                attempt = baseHelper.logOperationAttempt(null, operation, attempt, ex, null);
             }
         }
     }
@@ -105,28 +116,22 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
     private List<AuditEventRecord> listRecordsAttempt(String query, Map<String, Object> params) {
         Session session = null;
         List<AuditEventRecord> auditRecords = null;
+        
+        if (LOGGER.isTraceEnabled()) {
+        	LOGGER.trace("List records attempt\n  query: {}\n{}  params:\n{}", query, DebugUtil.debugDump(params, 2));
+        }
+        
         try {
-            session = beginTransaction();
+            session = baseHelper.beginTransaction();
             session.setFlushMode(FlushMode.MANUAL);
             Query q = session.createQuery(query);
-            Set<Entry<String, Object>> paramSet = params.entrySet();
-            for (Entry<String, Object> p : paramSet) {
-                if (p.getValue() == null) {
-                    q.setParameter(p.getKey(), null);
-                    continue;
-                }
-                if (XMLGregorianCalendar.class.isAssignableFrom(p.getValue().getClass())) {
-                    q.setParameter(p.getKey(), MiscUtil.asDate((XMLGregorianCalendar) p.getValue()));
-                } else if (p.getValue() instanceof AuditEventType) {
-                    q.setParameter(p.getKey(), RAuditEventType.toRepo((AuditEventType) p.getValue()));
-                } else if (p.getValue() instanceof AuditEventStage) {
-                    q.setParameter(p.getKey(), RAuditEventStage.toRepo((AuditEventStage) p.getValue()));
-                } else {
-                    q.setParameter(p.getKey(), p.getValue());
-                }
-            }
-
+            setParametersToQuery(q, params);
 //            q.setResultTransformer(Transformers.aliasToBean(RAuditEventRecord.class));
+            
+            if (LOGGER.isTraceEnabled()) {
+            	LOGGER.trace("List records attempt\n  processed query: {}", q);
+            }
+            
             List resultList = q.list();
 
             auditRecords = new ArrayList<>();
@@ -149,14 +154,48 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
             session.getTransaction().commit();
 
         } catch (DtoTranslationException | SchemaException ex) {
-            handleGeneralCheckedException(ex, session, null);
+			baseHelper.handleGeneralCheckedException(ex, session, null);
         } catch (RuntimeException ex) {
-            handleGeneralRuntimeException(ex, session, null);
+			baseHelper.handleGeneralRuntimeException(ex, session, null);
         } finally {
-            cleanupSessionAndResult(session, null);
+			baseHelper.cleanupSessionAndResult(session, null);
         }
+        
+        if (LOGGER.isTraceEnabled()) {
+        	LOGGER.trace("List records attempt returned {} records", auditRecords.size());
+        }
+        
         return auditRecords;
 
+    }
+
+    private void setParametersToQuery(Query q,  Map<String, Object> params){
+        if (params != null){
+            if (params.containsKey("setFirstResult")){
+                q.setFirstResult((int)params.get("setFirstResult"));
+                params.remove("setFirstResult");
+            }
+            if (params.containsKey("setMaxResults")){
+                q.setMaxResults((int)params.get("setMaxResults"));
+                params.remove("setMaxResults");
+            }
+        }
+        Set<Entry<String, Object>> paramSet = params.entrySet();
+        for (Entry<String, Object> p : paramSet) {
+            if (p.getValue() == null) {
+                q.setParameter(p.getKey(), null);
+                continue;
+            }
+            if (XMLGregorianCalendar.class.isAssignableFrom(p.getValue().getClass())) {
+                q.setParameter(p.getKey(), MiscUtil.asDate((XMLGregorianCalendar) p.getValue()));
+            } else if (p.getValue() instanceof AuditEventType) {
+                q.setParameter(p.getKey(), RAuditEventType.toRepo((AuditEventType) p.getValue()));
+            } else if (p.getValue() instanceof AuditEventStage) {
+                q.setParameter(p.getKey(), RAuditEventStage.toRepo((AuditEventStage) p.getValue()));
+            } else {
+                q.setParameter(p.getKey(), p.getValue());
+            }
+        }
     }
 
     private PrismObject resolve(Session session, String oid) throws SchemaException {
@@ -169,7 +208,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
         PrismObject result = null;
         if (object != null) {
             String xml = RUtil.getXmlFromByteArray(object.getFullObject(), getConfiguration().isUseZip());
-            result = getPrismContext().parseObject(xml);
+            result = getPrismContext().parserFor(xml).compat().parse();
         }
 
         return result;
@@ -178,18 +217,18 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
     private void auditAttempt(AuditEventRecord record) {
         Session session = null;
         try {
-            session = beginTransaction();
+            session = baseHelper.beginTransaction();
 
             RAuditEventRecord newRecord = RAuditEventRecord.toRepo(record, getPrismContext());
             session.save(newRecord);
 
             session.getTransaction().commit();
         } catch (DtoTranslationException ex) {
-            handleGeneralCheckedException(ex, session, null);
+			baseHelper.handleGeneralCheckedException(ex, session, null);
         } catch (RuntimeException ex) {
-            handleGeneralRuntimeException(ex, session, null);
+			baseHelper.handleGeneralRuntimeException(ex, session, null);
         } finally {
-            cleanupSessionAndResult(session, null);
+			baseHelper.cleanupSessionAndResult(session, null);
         }
     }
 
@@ -216,7 +255,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
         duration.addTo(minValue);
 
         // factored out because it produces INFO-level message
-        Dialect dialect = Dialect.getDialect(getSessionFactoryBean().getHibernateProperties());
+        Dialect dialect = Dialect.getDialect(baseHelper.getSessionFactoryBean().getHibernateProperties());
         if (!dialect.supportsTemporaryTables()) {
             LOGGER.error("Dialect {} doesn't support temporary tables, couldn't cleanup audit logs.", dialect);
             throw new SystemException("Dialect " + dialect + " doesn't support temporary tables, couldn't cleanup audit logs.");
@@ -240,7 +279,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
                     } while (count > 0);
                     return;
                 } catch (RuntimeException ex) {
-                    attempt = logOperationAttempt(null, operation, attempt, ex, parentResult);
+                    attempt = baseHelper.logOperationAttempt(null, operation, attempt, ex, parentResult);
                     pm.registerOperationNewTrial(opHandle, attempt);
                 }
             }
@@ -259,7 +298,7 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
 
         Session session = null;
         try {
-            session = beginTransaction();
+            session = baseHelper.beginTransaction();
 
             int count = cleanupAuditAttempt(minValue, session, dialect);
 
@@ -270,10 +309,10 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
             return count;
         } catch (RuntimeException ex) {
             LOGGER.debug("Audit cleanup batch finishing with exception in {} milliseconds; exception = {}", System.currentTimeMillis()-start, ex.getMessage());
-            handleGeneralRuntimeException(ex, session, subResult);
+			baseHelper.handleGeneralRuntimeException(ex, session, subResult);
             throw new AssertionError("We shouldn't get here.");         // just because of the need to return a value
         } finally {
-            cleanupSessionAndResult(session, subResult);
+			baseHelper.cleanupSessionAndResult(session, subResult);
         }
     }
 
@@ -369,4 +408,28 @@ public class SqlAuditServiceImpl extends SqlBaseService implements AuditService 
 
         return sb.toString();
     }
+
+    public long countObjects(String query, Map<String, Object> params) {
+        Session session = null;
+        long count = 0;
+        try {
+            session = baseHelper.beginTransaction();
+            session.setFlushMode(FlushMode.MANUAL);
+            Query q = session.createQuery(query);
+
+            setParametersToQuery(q, params);
+            count = (Long) q.uniqueResult();
+        }  catch (RuntimeException ex) {
+            baseHelper.handleGeneralRuntimeException(ex, session, null);
+        } finally {
+            baseHelper.cleanupSessionAndResult(session, null);
+        }
+        return count;
+    }
+
+	@Override
+	public boolean supportsRetrieval() {
+		return true;
+	}
+
 }

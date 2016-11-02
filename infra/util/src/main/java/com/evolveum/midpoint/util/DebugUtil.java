@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,30 @@
 
 package com.evolveum.midpoint.util;
 
-import java.io.BufferedReader;
-import java.io.StringReader;
-import java.util.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Collection;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.xml.namespace.QName;
+
+import org.springframework.util.ReflectionUtils;
+import org.springframework.util.ReflectionUtils.FieldCallback;
 
 /**
  *
  * @author semancik
  */
 public class DebugUtil {
-
-	private static int SHOW_LIST_MEMBERS = 3;
 	
 	private static boolean detailedDebugDump = false;
 	
@@ -84,6 +94,12 @@ public class DebugUtil {
 	public static String debugDump(Collection<?> dumpables, int indent) {
 		StringBuilder sb = new StringBuilder();
 		debugDump(sb, dumpables, indent, true);
+		return sb.toString();
+	}
+	
+	public static String debugDump(Map<?,?> dumpables, int indent) {
+		StringBuilder sb = new StringBuilder();
+		debugDumpMapMultiLine(sb, dumpables, indent, true);
 		return sb.toString();
 	}
 	
@@ -153,6 +169,8 @@ public class DebugUtil {
 		}
 		if (object instanceof DebugDumpable) {
 			return ((DebugDumpable)object).debugDump(indent);
+		} else if (object instanceof Map) {
+			return debugDump((Map)object, indent);
 		} else if (object instanceof Collection) {
 			return debugDump((Collection<?>)object, indent);
 		} else {
@@ -168,6 +186,11 @@ public class DebugUtil {
 		sb.append(label).append(":");
 	}
 	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, DebugDumpable dd, int indent) {
+		debugDumpWithLabel(sb,label,dd,indent);
+		sb.append("\n");
+	}
+	
 	public static void debugDumpWithLabel(StringBuilder sb, String label, DebugDumpable dd, int indent) {
 		debugDumpLabel(sb, label, indent);
 		if (dd == null) {
@@ -178,42 +201,94 @@ public class DebugUtil {
 		}
 	}
 	
+	public static void debugDumpWithLabelln(StringBuilder sb, String label, String val, int indent) {
+		debugDumpWithLabelln(sb,label,val,indent);
+		sb.append("\n");
+	}
+	
 	public static void debugDumpWithLabel(StringBuilder sb, String label, String val, int indent) {
 		debugDumpLabel(sb, label, indent);
 		sb.append(" ");
 		sb.append(val);
 	}
+	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, String val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
+	
+	public static void debugDumpWithLabel(StringBuilder sb, String label, QName val, int indent) {
+		debugDumpLabel(sb, label, indent);
+		sb.append(" ");
+		sb.append(PrettyPrinter.prettyPrint(val));
+	}
+	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, QName val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
 
-	public static void debugDumpWithLabel(StringBuilder sb, String label, boolean val, int indent) {
+	public static void debugDumpWithLabel(StringBuilder sb, String label, Boolean val, int indent) {
 		debugDumpLabel(sb, label, indent);
 		sb.append(" ");
 		sb.append(val);
 	}
 
-	public static void debugDumpWithLabel(StringBuilder sb, String label, int val, int indent) {
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, Boolean val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
+	
+	public static void debugDumpWithLabel(StringBuilder sb, String label, Integer val, int indent) {
 		debugDumpLabel(sb, label, indent);
 		sb.append(" ");
 		sb.append(val);
 	}
 
-	public static void debugDumpWithLabel(StringBuilder sb, String label, long val, int indent) {
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, Integer val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
+	
+	public static void debugDumpWithLabel(StringBuilder sb, String label, Long val, int indent) {
 		debugDumpLabel(sb, label, indent);
 		sb.append(" ");
 		sb.append(val);
 	}
+	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, Long val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
 
-	public static void debugDumpWithLabel(StringBuilder sb, String label, Collection<? extends DebugDumpable> dds, int indent) {
+	public static void debugDumpWithLabel(StringBuilder sb, String label, Class val, int indent) {
 		debugDumpLabel(sb, label, indent);
-		if (dds == null) {
+		sb.append(" ");
+		sb.append(val);
+	}
+	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, Class val, int indent) {
+		debugDumpWithLabel(sb, label, val, indent);
+		sb.append("\n");
+	}
+	
+	public static void debugDumpWithLabel(StringBuilder sb, String label, Collection<?> values, int indent) {
+		debugDumpLabel(sb, label, indent);
+		if (values == null) {
 			sb.append(" null");
-		} else if (dds.isEmpty()) {
+		} else if (values.isEmpty()) {
 			sb.append(" ");
-			sb.append(getCollectionOpeningSymbol(dds));
-			sb.append(getCollectionClosingSymbol(dds));
+			sb.append(getCollectionOpeningSymbol(values));
+			sb.append(getCollectionClosingSymbol(values));
 		} else {
 			sb.append("\n");
-			sb.append(debugDump(dds, indent + 1));
+			sb.append(debugDump(values, indent + 1));
 		}
+	}
+	
+	public static void debugDumpWithLabelLn(StringBuilder sb, String label, Collection<?> values, int indent) {
+		debugDumpWithLabel(sb, label, values, indent);
+		sb.append("\n");
 	}
 	
 	public static <K, V> void debugDumpWithLabel(StringBuilder sb, String label, Map<K, V> map, int indent) {
@@ -226,6 +301,11 @@ public class DebugUtil {
 		}
 	}
 	
+	public static <K, V> void debugDumpWithLabelLn(StringBuilder sb, String label, Map<K, V> map, int indent) {
+		debugDumpWithLabel(sb, label, map, indent);
+		sb.append("\n");
+	}
+	
 	public static void debugDumpWithLabelToString(StringBuilder sb, String label, Object object, int indent) {
 		debugDumpLabel(sb, label, indent);
 		if (object == null) {
@@ -235,7 +315,7 @@ public class DebugUtil {
 			sb.append(object.toString());
 		}
 	}
-	
+		
 	public static void debugDumpWithLabelToStringLn(StringBuilder sb, String label, Object object, int indent) {
 		debugDumpWithLabelToString(sb, label, object, indent);
 		sb.append("\n");
@@ -320,7 +400,7 @@ public class DebugUtil {
 				sb.append("\n");
 				sb.append(((DebugDumpable)value).debugDump(inindent+1));
 			} else {
-				sb.append(value);
+				sb.append(PrettyPrinter.prettyPrint(value));
 			}
 			if (i.hasNext()) {
 				sb.append("\n");
@@ -404,4 +484,63 @@ public class DebugUtil {
 		return s.replace(searchFor, System.lineSeparator() + indentationString);
 	}
 
+	public static int estimateObjectSize(Serializable o) {
+		if (o == null) {
+			return 0;
+		}
+		try {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			ObjectOutputStream oos = new ObjectOutputStream(baos);
+			oos.writeObject(o);
+			oos.close();
+			return baos.size();
+		} catch (IOException e) {
+			throw new IllegalStateException(e.getMessage(), e);
+		}
+	}
+	
+	public static void dumpObjectSizeEstimateLn(StringBuilder sb, String label, Serializable o, int indent) {
+		dumpObjectSizeEstimate(sb, label, o, indent);
+		sb.append("\n");
+	}
+	
+	public static void dumpObjectSizeEstimate(StringBuilder sb, String label, Serializable o, int indent) {
+		indentDebugDump(sb, indent);
+		sb.append(label).append(": ");
+		sb.append(estimateObjectSize(o));
+	}
+	
+	public static String dumpObjectFieldsSizeEstimate(final Serializable o) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append(o).append(": ").append(estimateObjectSize(o)).append("\n");
+		ReflectionUtils.doWithFields(o.getClass(), new FieldCallback() {
+			@Override
+			public void doWith(Field field) throws IllegalArgumentException, IllegalAccessException {
+				int mods = field.getModifiers();
+				if (Modifier.isStatic(mods) && Modifier.isFinal(mods)) {
+					return;
+				}
+				if (Modifier.isTransient(mods)) {
+					return;
+				}
+				field.setAccessible(true);
+				sb.append("\n");
+				DebugUtil.indentDebugDump(sb, 1);
+				sb.append(field.getName());
+				if (Modifier.isStatic(mods)) {
+					sb.append(" (static)");
+				}
+				sb.append(": ");
+				Object value = field.get(o);
+				if (value == null) {
+					sb.append("null");
+				} else if (value instanceof Serializable) {
+					sb.append(estimateObjectSize((Serializable)value));
+				} else {
+					sb.append("non-serializable ("+value.getClass()+")");
+				}
+			}
+		});
+		return sb.toString();
+	}
 }

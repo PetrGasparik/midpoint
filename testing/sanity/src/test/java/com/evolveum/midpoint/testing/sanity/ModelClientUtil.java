@@ -20,7 +20,6 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectDeltaOperationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
-import com.evolveum.prism.xml.ns._public.query_3.SearchFilterType;
 import com.evolveum.prism.xml.ns._public.types_3.ChangeTypeType;
 import com.evolveum.prism.xml.ns._public.types_3.ItemPathType;
 import com.evolveum.prism.xml.ns._public.types_3.ObjectDeltaType;
@@ -69,8 +68,6 @@ public class ModelClientUtil {
 				"com.evolveum.midpoint.xml.ns._public.connector.icf_1.connector_schema_3:" +
 				"com.evolveum.midpoint.xml.ns._public.connector.icf_1.resource_schema_3:" +
 				"com.evolveum.midpoint.xml.ns._public.resource.capabilities_3:" +
-				"com.evolveum.midpoint.xml.ns.model.workflow.common_forms_3:" +
-                "com.evolveum.midpoint.xml.ns.model.workflow.process_instance_state_3:" +
 				"com.evolveum.prism.xml.ns._public.annotation_3:" +
 				"com.evolveum.prism.xml.ns._public.query_3:" +
 				"com.evolveum.prism.xml.ns._public.types_3:" +

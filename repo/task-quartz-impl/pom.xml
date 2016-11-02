@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  ~ Copyright (c) 2010-2013 Evolveum
+  ~ Copyright (c) 2010-2016 Evolveum
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 	<parent>
 		<artifactId>repo</artifactId>
 		<groupId>com.evolveum.midpoint</groupId>
-		<version>3.3</version>
+		<version>3.5-SNAPSHOT</version>
 	</parent>
     <scm>
         <connection>https://github.com/Evolveum/midpoint.git</connection>
@@ -33,28 +33,65 @@
     </scm>
 	<dependencies>
 		<dependency>
-			<groupId>com.evolveum.midpoint.repo</groupId>
-			<artifactId>repo-api</artifactId>
-			<version>3.3</version>
+			<groupId>com.evolveum.midpoint.infra</groupId>
+			<artifactId>util</artifactId>
+			<version>3.5-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.midpoint.infra</groupId>
+			<artifactId>prism</artifactId>
+			<version>3.5-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.midpoint.infra</groupId>
+			<artifactId>schema</artifactId>
+			<version>3.5-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.midpoint.infra</groupId>
+			<artifactId>common</artifactId>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
-			<artifactId>repo-cache</artifactId>
-			<version>3.3</version>
+			<artifactId>repo-api</artifactId>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>task-api</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>security-api</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 		</dependency>
         <dependency>
-			<groupId>commons-pool</groupId>
-			<artifactId>commons-pool</artifactId>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-configuration</groupId>
+			<artifactId>commons-configuration</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-beans</artifactId>
+        </dependency>
+        <dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<scope>test</scope>
 		</dependency>
 		<dependency>
     		<groupId>org.quartz-scheduler</groupId>
@@ -64,9 +101,10 @@
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>repo-sql-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
+        
         <!--  Testing dependecies  -->
         <dependency>
 			<groupId>org.testng</groupId>
@@ -76,7 +114,13 @@
 		<dependency>
 			<groupId>com.evolveum.midpoint.tools</groupId>
 			<artifactId>test-ng</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.midpoint.infra</groupId>
+			<artifactId>test-util</artifactId>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -92,49 +136,30 @@
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>audit-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.evolveum.midpoint.repo</groupId>
             <artifactId>security-impl</artifactId>
-            <version>3.3</version>
+            <version>3.5-SNAPSHOT</version>
             <scope>test</scope>
         </dependency>
+        <dependency> <!-- needed as runtime dependency otherwise spring won't start --> 
+			<groupId>org.springframework</groupId> 
+			<artifactId>spring-aspects</artifactId>
+			<scope>test</scope> 
+		</dependency>
+        <dependency> <!-- needed as runtime dependency otherwise spring won't start --> 
+			<groupId>org.springframework</groupId> 
+			<artifactId>spring-aop</artifactId>
+			<scope>test</scope> 
+		</dependency>
 		
-        <!-- SPRING -->
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-aspects</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-aop</artifactId>
-        </dependency>
-
-        <!--
-        <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjtools</artifactId>
-            <version>${aspectj.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjrt</artifactId>
-            <version>${aspectj.version}</version>
-        </dependency> -->
-
-
-        <!--        <dependency>
-              <groupId>com.evolveum.midpoint.repo</groupId>
-              <artifactId>repo-sql-impl</artifactId>
-              <version>2.3-SNAPSHOT</version>
-              <scope>test</scope>
-          </dependency>-->
         <dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>repo-test-util</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -145,7 +170,13 @@
 		<dependency>
 			<groupId>com.evolveum.midpoint.repo</groupId>
 			<artifactId>system-init</artifactId>
-			<version>3.3</version>
+			<version>3.5-SNAPSHOT</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.evolveum.midpoint.repo</groupId>
+			<artifactId>repo-sql-impl-test</artifactId>
+			<version>3.5-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -159,31 +190,5 @@
 			<scope>test</scope>
 		</dependency>
     </dependencies>
-
-    <profiles>
-        <profile>
-            <id>aspectj</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>aspectj-maven-plugin</artifactId>
-                        <version>1.6</version>
-                        <configuration>
-                            <aspectLibraries>
-                                <aspectLibrary>
-                                    <groupId>com.evolveum.midpoint.infra</groupId>
-                                    <artifactId>util</artifactId>
-                                </aspectLibrary>
-                            </aspectLibraries>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 
 </project>

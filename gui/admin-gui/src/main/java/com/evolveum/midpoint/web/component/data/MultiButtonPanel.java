@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 package com.evolveum.midpoint.web.component.data;
 
+import com.evolveum.midpoint.gui.api.component.BasePanel;
 import com.evolveum.midpoint.web.component.AjaxButton;
 import com.evolveum.midpoint.web.component.data.column.DoubleButtonColumn;
-import com.evolveum.midpoint.web.component.util.SimplePanel;
+
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.behavior.AttributeAppender;
 import org.apache.wicket.markup.html.basic.Label;
@@ -29,7 +30,7 @@ import org.apache.wicket.model.IModel;
  * @author shood
  * @author mederly
  */
-public class MultiButtonPanel<T> extends SimplePanel<T> {
+public class MultiButtonPanel<T> extends BasePanel<T> {
 
     private static final String ID_BUTTONS = "buttons";
 
@@ -38,10 +39,10 @@ public class MultiButtonPanel<T> extends SimplePanel<T> {
     public MultiButtonPanel(String id, int numberOfButtons, IModel<T> model) {
         super(id, model);
         this.numberOfButtons = numberOfButtons;
-        createLayout();
+        initLayout();
     }
 
-    private void createLayout() {
+    private void initLayout() {
         RepeatingView buttons = new RepeatingView(ID_BUTTONS);
         add(buttons);
         for (int id = 0; id < numberOfButtons; id++) {
@@ -54,6 +55,10 @@ public class MultiButtonPanel<T> extends SimplePanel<T> {
                 @Override
                 public boolean isEnabled(){
                     return MultiButtonPanel.this.isButtonEnabled(finalId, MultiButtonPanel.this.getModel());
+                }
+                @Override
+                public boolean isVisible(){
+                    return MultiButtonPanel.this.isButtonVisible(finalId, MultiButtonPanel.this.getModel());
                 }
             };
             button.add(new AttributeAppender("class", getButtonCssClass(finalId)));
@@ -70,7 +75,12 @@ public class MultiButtonPanel<T> extends SimplePanel<T> {
         return true;
     }
 
-    private String getButtonCssClass(int id) {
+    public boolean isButtonVisible(int id, IModel<T> model) {
+        return true;
+    }
+
+
+    protected String getButtonCssClass(int id) {
         StringBuilder sb = new StringBuilder();
         sb.append(DoubleButtonColumn.BUTTON_BASE_CLASS).append(" ");
         sb.append(getButtonColorCssClass(id)).append(" ").append(getButtonSizeCssClass(id));

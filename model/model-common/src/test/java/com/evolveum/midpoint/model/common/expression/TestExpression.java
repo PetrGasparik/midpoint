@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Evolveum
+ * Copyright (c) 2013-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,26 +15,24 @@
  */
 package com.evolveum.midpoint.model.common.expression;
 
+import static org.testng.AssertJUnit.assertNotNull;
 import static org.testng.AssertJUnit.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
 
+import com.evolveum.midpoint.prism.*;
 import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.Test;
 import org.xml.sax.SAXException;
 
-import com.evolveum.midpoint.common.monitor.InternalMonitor;
-import com.evolveum.midpoint.prism.PrismContext;
-import com.evolveum.midpoint.prism.PrismObject;
-import com.evolveum.midpoint.prism.PrismPropertyDefinition;
-import com.evolveum.midpoint.prism.PrismPropertyValue;
 import com.evolveum.midpoint.prism.crypto.AESProtector;
 import com.evolveum.midpoint.prism.delta.PrismValueDeltaSetTriple;
 import com.evolveum.midpoint.prism.util.PrismTestUtil;
 import com.evolveum.midpoint.schema.MidPointPrismContextFactory;
 import com.evolveum.midpoint.schema.constants.ExpressionConstants;
 import com.evolveum.midpoint.schema.constants.MidPointConstants;
+import com.evolveum.midpoint.schema.internals.InternalMonitor;
 import com.evolveum.midpoint.schema.result.OperationResult;
 import com.evolveum.midpoint.schema.util.ObjectResolver;
 import com.evolveum.midpoint.test.util.DirectoryFileObjectResolver;
@@ -53,6 +51,12 @@ import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType;
 public class TestExpression {
     
 	private static final File TEST_DIR = new File("src/test/resources/expression/expression");
+	
+	private static final File USER_JACK_FILE = new File(TEST_DIR, "user-jack.xml");
+	
+	private static final File ACCOUNT_JACK_DUMMYFILE = new File(TEST_DIR, "account-jack-dummy.xml");
+	
+	private static final File EXPRESSION_ITERATION_CONDITION_FILE = new File(TEST_DIR, "iteration-condition.xml");
 	
     private PrismContext prismContext;
 
@@ -77,22 +81,21 @@ public class TestExpression {
     	
     	// GIVEN
     	OperationResult result = new OperationResult(TestExpression.class.getName()+"."+TEST_NAME);
-    	String filename = "iteration-condition.xml";
     	
     	rememberScriptExecutionCount();
     	
     	ExpressionType expressionType = PrismTestUtil.parseAtomicValue(
-                new File(TEST_DIR, filename), ExpressionType.COMPLEX_TYPE);
+    			EXPRESSION_ITERATION_CONDITION_FILE, ExpressionType.COMPLEX_TYPE);
 
-    	PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinition<Boolean>(ExpressionConstants.OUTPUT_ELMENT_NAME,
+    	PrismPropertyDefinition<Boolean> outputDefinition = new PrismPropertyDefinitionImpl<Boolean>(ExpressionConstants.OUTPUT_ELMENT_NAME,
 				DOMUtil.XSD_BOOLEAN, prismContext);
 		Expression<PrismPropertyValue<Boolean>,PrismPropertyDefinition<Boolean>> expression = expressionFactory.makeExpression(expressionType, outputDefinition , TEST_NAME, null, result);
 		
 		ExpressionVariables variables = new ExpressionVariables();
-		PrismObject<UserType> user = PrismTestUtil.parseObject(new File(TEST_DIR, "user-jack.xml"));
+		PrismObject<UserType> user = PrismTestUtil.parseObject(USER_JACK_FILE);
 		variables.addVariableDefinition(ExpressionConstants.VAR_FOCUS, user);
 		variables.addVariableDefinition(ExpressionConstants.VAR_USER, user);
-		PrismObject<ShadowType> account = PrismTestUtil.parseObject(new File(TEST_DIR, "account-jack-dummy.xml"));
+		PrismObject<ShadowType> account = PrismTestUtil.parseObject(ACCOUNT_JACK_DUMMYFILE);
 		variables.addVariableDefinition(ExpressionConstants.VAR_SHADOW, account);
 		variables.addVariableDefinition(ExpressionConstants.VAR_ITERATION, 1);
 		variables.addVariableDefinition(ExpressionConstants.VAR_ITERATION_TOKEN, "001");
@@ -103,6 +106,8 @@ public class TestExpression {
 		PrismValueDeltaSetTriple<PrismPropertyValue<Boolean>> outputTriple = expression.evaluate(expressionContext);
     	
 		// THEN
+		assertNotNull(outputTriple);
+		outputTriple.checkConsistence();
 		
 		// Make sure that the script is executed only once. There is no delta in the variables, no need to do it twice.
 		assertScriptExecutionIncrement(1);

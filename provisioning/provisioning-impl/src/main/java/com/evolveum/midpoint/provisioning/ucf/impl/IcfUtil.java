@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.net.ConnectException;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -40,6 +41,7 @@ import javax.naming.directory.SchemaViolationException;
 import com.evolveum.midpoint.util.exception.SystemException;
 import com.evolveum.midpoint.util.logging.LoggingUtils;
 
+import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
 import org.identityconnectors.framework.common.exceptions.ConnectionBrokenException;
@@ -49,6 +51,7 @@ import org.identityconnectors.framework.common.exceptions.ConnectorSecurityExcep
 import org.identityconnectors.framework.common.exceptions.InvalidCredentialException;
 import org.identityconnectors.framework.common.exceptions.OperationTimeoutException;
 import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
+import org.identityconnectors.framework.common.exceptions.RetryableException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.identityconnectors.framework.common.objects.Attribute;
 import org.identityconnectors.framework.common.objects.Uid;
@@ -57,10 +60,11 @@ import org.identityconnectors.framework.common.objects.filter.CompositeFilter;
 import org.identityconnectors.framework.common.objects.filter.Filter;
 
 import com.evolveum.midpoint.prism.PrismPropertyValue;
+import com.evolveum.midpoint.prism.crypto.EncryptionException;
+import com.evolveum.midpoint.prism.crypto.Protector;
 import com.evolveum.midpoint.provisioning.ucf.api.GenericFrameworkException;
 import com.evolveum.midpoint.schema.processor.ObjectClassComplexTypeDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttribute;
-import com.evolveum.midpoint.schema.processor.ResourceAttributeContainerDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceAttributeDefinition;
 import com.evolveum.midpoint.schema.processor.ResourceSchema;
 import com.evolveum.midpoint.schema.result.OperationResult;
@@ -72,6 +76,7 @@ import com.evolveum.midpoint.util.exception.SchemaException;
 import com.evolveum.midpoint.util.exception.SecurityViolationException;
 import com.evolveum.midpoint.util.logging.Trace;
 import com.evolveum.midpoint.util.logging.TraceManager;
+import com.evolveum.prism.xml.ns._public.types_3.ProtectedStringType;
 
 import org.identityconnectors.framework.impl.api.remote.RemoteWrappedException;
 
@@ -114,12 +119,12 @@ class IcfUtil {
 	 * 
 	 * @param icfException
 	 *            exception from the ICF
-	 * @param icfResult
+	 * @param connIdResult
 	 *            OperationResult to record failure
 	 * @return reasonable midPoint exception
 	 */
 	static Throwable processIcfException(Throwable icfException, String desc,
-			OperationResult icfResult) {
+			OperationResult connIdResult) {
 		// Whole exception handling in this case is a black magic.
 		// ICF does not define any exceptions and there is no "best practice"
 		// how to handle ICF errors
@@ -127,7 +132,7 @@ class IcfUtil {
 		// we can do.
 		
 		if (icfException == null) {
-			icfResult.recordFatalError("Null exception while processing ICF exception ");
+			connIdResult.recordFatalError("Null exception while processing ICF exception ");
 			throw new IllegalArgumentException("Null exception while processing ICF exception ");
 		}
 		
@@ -160,12 +165,12 @@ class IcfUtil {
 			// NPE with a message text is in fact not a NPE but an application exception
 			// this usually means that some parameter is missing
 			Exception newEx = new SchemaException(createMessageFromAllExceptions("Required attribute is missing",icfException));  
-			icfResult.recordFatalError("Required attribute is missing: "+icfException.getMessage(),newEx);
+			connIdResult.recordFatalError("Required attribute is missing: "+icfException.getMessage(),newEx);
 			return newEx;
 		} else if (icfException instanceof IllegalArgumentException) {
 			// Let's assume this must be a configuration problem
 			Exception newEx = new com.evolveum.midpoint.util.exception.ConfigurationException(createMessageFromInnermostException("Configuration error", icfException));
-			icfResult.recordFatalError("Configuration error: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Configuration error: "+icfException.getMessage(), newEx);
 			return newEx;
 		}
         //fix of MiD-2645
@@ -175,30 +180,30 @@ class IcfUtil {
             String exCauseClassName = icfException.getCause().getClass().getSimpleName();
             if (exCauseClassName.equals(CONNECTIONS_EXCEPTION_CLASS_NAME) ){
                 Exception newEx = new CommunicationException(createMessageFromAllExceptions("Connect error", icfException));
-                icfResult.recordFatalError("Connect error: " + icfException.getMessage(), newEx);
+                connIdResult.recordFatalError("Connect error: " + icfException.getMessage(), newEx);
                 return newEx;
             }
         }
 		if (icfException.getClass().getPackage().equals(NullPointerException.class.getPackage())) {
 			// There are java.lang exceptions, they are safe to pass through
-			icfResult.recordFatalError(icfException);
+			connIdResult.recordFatalError(icfException);
 			return icfException;
 		}
 		
 		if (icfException.getClass().getPackage().equals(SchemaException.class.getPackage())) {
 			// Common midPoint exceptions, pass through
-			icfResult.recordFatalError(icfException);
+			connIdResult.recordFatalError(icfException);
 			return icfException;
 		}
 		
-		if (icfResult == null) {
+		if (connIdResult == null) {
 			throw new IllegalArgumentException(createMessageFromAllExceptions("Null parent result while processing ICF exception",icfException));
 		}
 
 		// Introspect the inner exceptions and look for known causes
-		Exception knownCause = lookForKnownCause(icfException, icfException, icfResult);
+		Exception knownCause = lookForKnownCause(icfException, icfException, connIdResult);
 		if (knownCause != null) {
-			icfResult.recordFatalError(knownCause);
+			connIdResult.recordFatalError(knownCause);
 			return knownCause;
 		}
 
@@ -211,62 +216,67 @@ class IcfUtil {
 		if (icfException instanceof IllegalArgumentException) {
 			// This is most likely missing attribute or similar schema thing
 			Exception newEx = new SchemaException(createMessageFromAllExceptions("Schema violation (most likely)", icfException));
-			icfResult.recordFatalError("Schema violation: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Schema violation: "+icfException.getMessage(), newEx);
 			return newEx;
 			
 		} else if (icfException instanceof ConfigurationException) {
 			Exception newEx = new com.evolveum.midpoint.util.exception.ConfigurationException(createMessageFromInnermostException("Configuration error", icfException));
-			icfResult.recordFatalError("Configuration error: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Configuration error: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof AlreadyExistsException) {
 			Exception newEx = new ObjectAlreadyExistsException(createMessageFromAllExceptions(null, icfException));
-			icfResult.recordFatalError("Object already exists: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Object already exists: "+icfException.getMessage(), newEx);
 			return newEx;
 			
 		} else if (icfException instanceof PermissionDeniedException) {
 			Exception newEx = new SecurityViolationException(createMessageFromAllExceptions(null, icfException));
-			icfResult.recordFatalError("Security violation: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Security violation: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof ConnectionBrokenException) {
 			Exception newEx = new CommunicationException(createMessageFromAllExceptions("Connection broken", icfException));
-			icfResult.recordFatalError("Connection broken: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Connection broken: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof ConnectionFailedException) {
 			Exception newEx = new CommunicationException(createMessageFromAllExceptions("Connection failed", icfException));
-			icfResult.recordFatalError("Connection failed: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Connection failed: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof UnknownHostException) {
 			Exception newEx = new CommunicationException(createMessageFromAllExceptions("Unknown host", icfException));
-			icfResult.recordFatalError("Unknown host: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Unknown host: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof ConnectorIOException) {
 			Exception newEx = new CommunicationException(createMessageFromAllExceptions("IO error", icfException));
-			icfResult.recordFatalError("IO error: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("IO error: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof InvalidCredentialException) {
 			Exception newEx = new GenericFrameworkException(createMessageFromAllExceptions("Invalid credentials", icfException));
-			icfResult.recordFatalError("Invalid credentials: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Invalid credentials: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof OperationTimeoutException) {
 			Exception newEx = new CommunicationException(createMessageFromAllExceptions("Operation timed out", icfException));
-			icfResult.recordFatalError("Operation timed out: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Operation timed out: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof UnknownUidException) {
 			Exception newEx = new ObjectNotFoundException(createMessageFromAllExceptions(null, icfException));
-			icfResult.recordFatalError("Unknown UID: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Unknown UID: "+icfException.getMessage(), newEx);
 			return newEx;
 			
 		} else if (icfException instanceof InvalidAttributeValueException) {
 			Exception newEx = new SchemaException(createMessageFromAllExceptions(null, icfException));
-			icfResult.recordFatalError("Schema violation: "+icfException.getMessage(), newEx);
+			connIdResult.recordFatalError("Schema violation: "+icfException.getMessage(), newEx);
+			return newEx;
+			
+		} else if (icfException instanceof RetryableException) {
+			Exception newEx = new CommunicationException(createMessageFromAllExceptions(null, icfException));
+			connIdResult.recordFatalError("Retryable errror: "+icfException.getMessage(), newEx);
 			return newEx;
 
 		} else if (icfException instanceof ConnectorSecurityException) {
@@ -276,7 +286,7 @@ class IcfUtil {
 			
 			// Maybe we need special exception for security?
 			Exception newEx =  new SecurityViolationException(createMessageFromAllExceptions("Security violation",icfException));
-			icfResult.recordFatalError(
+			connIdResult.recordFatalError(
 					"Security violation: " + icfException.getMessage(), newEx);
 			return newEx;
 			
@@ -284,7 +294,7 @@ class IcfUtil {
 		
 		// Fallback
 		Exception newEx = new GenericFrameworkException(createMessageFromAllExceptions(null,icfException)); 
-		icfResult.recordFatalError(newEx);
+		connIdResult.recordFatalError(newEx);
 		return newEx;
 	}
 
@@ -447,7 +457,11 @@ class IcfUtil {
 		sb.append("(");
 		// Make sure that no non-printable chars shall pass
 		// e.g. AD LDAP produces non-printable chars in the messages
-		sb.append(ex.getMessage().replaceAll("\\p{C}", "?"));
+		if (ex.getMessage() == null) {
+			sb.append("null");
+		} else {
+			sb.append(ex.getMessage().replaceAll("\\p{C}", "?"));
+		}
 		sb.append(")");
 		if (ex.getCause() != null) {
 			sb.append("->");
@@ -474,39 +488,106 @@ class IcfUtil {
 	}
 	
 	public static ResourceAttributeDefinition<String> getUidDefinition(ObjectClassComplexTypeDefinition def, ResourceSchema schema) {
+		ObjectClassComplexTypeDefinition concreteObjectClassDefinition = getConcreteObjectClassDefinition(def, schema);
+		if (concreteObjectClassDefinition == null) {
+			return null;
+		} else {
+			return getUidDefinition(concreteObjectClassDefinition);
+		}
+	}
+	
+	public static ObjectClassComplexTypeDefinition getConcreteObjectClassDefinition(ObjectClassComplexTypeDefinition def, ResourceSchema schema) {
 		if (def == null) {
 			// Return definition from any structural object class. If there is no specific object class definition then
 			// the UID definition must be the same in all structural object classes and that means that we can use
 			// definition from any structural object class.
 			for (ObjectClassComplexTypeDefinition objectClassDefinition: schema.getObjectClassDefinitions()) {
 				if (!objectClassDefinition.isAuxiliary()) {
-					return getUidDefinition(objectClassDefinition);
+					return objectClassDefinition;
 				}
 			}
 			return null;
 		} else {
-			return getUidDefinition(def);
+			return def;
 		}
 	}
 	
-	
 	public static ResourceAttributeDefinition<String> getUidDefinition(ObjectClassComplexTypeDefinition def) {
-		Collection<? extends ResourceAttributeDefinition> identifiers = def.getIdentifiers();
-		if (identifiers.size() > 1) {
+		Collection<? extends ResourceAttributeDefinition> primaryIdentifiers = def.getPrimaryIdentifiers();
+		if (primaryIdentifiers.size() > 1) {
 			throw new UnsupportedOperationException("Multiple primary identifiers are not supported");
 		}
-		if (identifiers.size() == 1) {
-			return identifiers.iterator().next();
+		if (primaryIdentifiers.size() == 1) {
+			return primaryIdentifiers.iterator().next();
 		} else {
 			// fallback, compatibility
 			return def.findAttributeDefinition(ConnectorFactoryIcfImpl.ICFS_UID);
 		}
 	}
 	
-	public static ResourceAttribute<String> createUidAttribute(Uid uid, ResourceAttributeDefinition uidDefinition) {
+	public static ResourceAttributeDefinition<String> getNameDefinition(ObjectClassComplexTypeDefinition def) {
+		Collection<? extends ResourceAttributeDefinition> secondaryIdentifiers = def.getSecondaryIdentifiers();
+		if (secondaryIdentifiers.size() > 1) {
+			throw new UnsupportedOperationException("Multiple secondary identifiers are not supported");
+		}
+		if (secondaryIdentifiers.size() == 1) {
+			return secondaryIdentifiers.iterator().next();
+		} else {
+			// fallback, compatibility
+			return def.findAttributeDefinition(ConnectorFactoryIcfImpl.ICFS_NAME);
+		}
+	}
+	
+	public static Collection<ResourceAttribute<?>> convertToIdentifiers(Uid uid, 
+			ObjectClassComplexTypeDefinition ocDef, ResourceSchema resourceSchema) throws SchemaException {
+		ObjectClassComplexTypeDefinition concreteObjectClassDefinition = getConcreteObjectClassDefinition(ocDef, resourceSchema);
+		if (concreteObjectClassDefinition == null) {
+			throw new SchemaException("Concrete object class of "+ocDef+" cannot be found");
+		}
+		ResourceAttributeDefinition<String> uidDefinition = getUidDefinition(concreteObjectClassDefinition);
+		if (uidDefinition == null) {
+			throw new SchemaException("No definition for ConnId UID attribute found in definition "
+					+ ocDef);
+		}
+		Collection<ResourceAttribute<?>> identifiers = new ArrayList<ResourceAttribute<?>>(2);
 		ResourceAttribute<String> uidRoa = uidDefinition.instantiate();
 		uidRoa.setValue(new PrismPropertyValue<String>(uid.getUidValue()));
-		return uidRoa;
+		identifiers.add(uidRoa);
+		if (uid.getNameHint() != null) {
+			ResourceAttributeDefinition<String> nameDefinition = getNameDefinition(concreteObjectClassDefinition);
+			if (nameDefinition == null) {
+				throw new SchemaException("No definition for ConnId NAME attribute found in definition "
+						+ ocDef);
+			}
+			ResourceAttribute<String> nameRoa = nameDefinition.instantiate();
+			nameRoa.setValue(new PrismPropertyValue<String>(uid.getNameHintValue()));
+			identifiers.add(nameRoa);
+		}
+		return identifiers;
 	}
 
+	public static GuardedString toGuardedString(ProtectedStringType ps, String propertyName, Protector protector) {
+		if (ps == null) {
+			return null;
+		}
+		if (!protector.isEncrypted(ps)) {
+			if (ps.getClearValue() == null) {
+				return null;
+			}
+			LOGGER.warn("Using cleartext value for {}", propertyName);
+			return new GuardedString(ps.getClearValue().toCharArray());
+		}
+		try {
+			return new GuardedString(protector.decryptString(ps).toCharArray());
+		} catch (EncryptionException e) {
+			LOGGER.error("Unable to decrypt value of element {}: {}",
+					new Object[] { propertyName, e.getMessage(), e });
+			throw new SystemException("Unable to decrypt value of element " + propertyName + ": "
+					+ e.getMessage(), e);
+		} catch (RuntimeException e) {
+			// The ConnId will mask encryption exceptions into RuntimeException
+			throw new SystemException("Unable to encrypt value of element " + propertyName + ": "
+					+ e.getMessage(), e);
+		}
+	}
 }

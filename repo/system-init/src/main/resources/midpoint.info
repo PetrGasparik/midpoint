@@ -1,6 +1,6 @@
 midpoint.version=${project.version}
-midpoint.build=${describe}
-midpoint.branch=${scmBranch}
+midpoint.build=${git.describe}
+midpoint.branch=${git.branch}
 midpoint.timestamp=${timestamp}
 midpoint.scm=${project.scm.connection}
 midpoint.jira=${project.issueManagement.url}

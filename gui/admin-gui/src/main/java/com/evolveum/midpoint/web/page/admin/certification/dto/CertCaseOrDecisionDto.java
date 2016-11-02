@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2015 Evolveum
+ * Copyright (c) 2010-2016 Evolveum
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,16 @@
 
 package com.evolveum.midpoint.web.page.admin.certification.dto;
 
-import com.evolveum.midpoint.prism.parser.XNodeSerializer;
+import com.evolveum.midpoint.gui.api.page.PageBase;
 import com.evolveum.midpoint.prism.xml.XmlTypeConverter;
 import com.evolveum.midpoint.schema.util.CertCampaignTypeUtil;
 import com.evolveum.midpoint.web.component.util.Selectable;
-import com.evolveum.midpoint.web.page.PageBase;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCampaignType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationCaseType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.AccessCertificationStageType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectReferenceType;
 import org.apache.commons.lang.time.DurationFormatUtils;
 import org.apache.commons.lang3.Validate;
-import org.apache.wicket.model.StringResourceModel;
 
 import javax.xml.datatype.XMLGregorianCalendar;
 import javax.xml.namespace.QName;
@@ -80,6 +78,10 @@ public class CertCaseOrDecisionDto extends Selectable {
         return objectName;
     }
 
+	public QName getObjectType() {
+		return certCase.getObjectRef().getType();
+	}
+
     public String getTargetName() {
         return targetName;
     }
@@ -115,7 +117,7 @@ public class CertCaseOrDecisionDto extends Selectable {
 
     public Integer getCampaignStageNumber() {
         AccessCertificationCampaignType campaign = getCampaign();
-        return campaign != null ? campaign.getCurrentStageNumber() : null;      // numbers after # of stages should not occur, as there are no cases in these stages
+        return campaign != null ? campaign.getStageNumber() : null;      // numbers after # of stages should not occur, as there are no cases in these stages
     }
 
     public Integer getCampaignStageCount() {
@@ -124,7 +126,7 @@ public class CertCaseOrDecisionDto extends Selectable {
     }
 
     public Date getReviewRequested() {
-        XMLGregorianCalendar date = certCase.getReviewRequestedTimestamp();
+        XMLGregorianCalendar date = certCase.getCurrentReviewRequestedTimestamp();
         return XmlTypeConverter.toDate(date);
     }
 
@@ -133,7 +135,7 @@ public class CertCaseOrDecisionDto extends Selectable {
         if (campaign == null) {
             return null;
         }
-        int stageNumber = campaign.getCurrentStageNumber();
+        int stageNumber = campaign.getStageNumber();
         if (stageNumber <= 0 || stageNumber > CertCampaignTypeUtil.getNumberOfStages(campaign)) {
             return null;
         }
@@ -159,7 +161,7 @@ public class CertCaseOrDecisionDto extends Selectable {
     }
 
     private String computeDeadlineAsString(PageBase page) {
-        XMLGregorianCalendar deadline = certCase.getReviewDeadline();
+        XMLGregorianCalendar deadline = certCase.getCurrentReviewDeadline();
 
         if (deadline == null) {
             return "";
@@ -174,11 +176,13 @@ public class CertCaseOrDecisionDto extends Selectable {
 
             //todo i18n
             if (delta > 0) {
-                return new StringResourceModel("PageCert.in", page, null, null,
-                        DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
+            	return PageBase.createStringResourceStatic(page, "PageCert.in", DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
+//                return new StringResourceModel("PageCert.in", page, null, null,
+//                        DurationFormatUtils.formatDurationWords(delta, true, true)).getString();
             } else if (delta < 0) {
-                return new StringResourceModel("PageCert.ago", page, null, null,
-                        DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
+            	return PageBase.createStringResourceStatic(page, "PageCert.ago", DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
+//                return StringResourceModelMigration.of("PageCert.ago", page, null, null,
+//                        DurationFormatUtils.formatDurationWords(-delta, true, true)).getString();
             } else {
                 return page.getString("PageCert.now");
             }
