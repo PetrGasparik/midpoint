@@ -9,15 +9,19 @@ import org.apache.wicket.RestartResponseException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.markup.html.AjaxLink;
 import org.apache.wicket.extensions.markup.html.captcha.CaptchaImageResource;
+import org.apache.wicket.feedback.ComponentFeedbackMessageFilter;
+import org.apache.wicket.feedback.ContainerFeedbackMessageFilter;
 import org.apache.wicket.markup.ComponentTag;
 import org.apache.wicket.markup.html.basic.MultiLineLabel;
 import org.apache.wicket.markup.html.form.RequiredTextField;
 import org.apache.wicket.markup.html.image.Image;
+import org.apache.wicket.markup.html.panel.FeedbackPanel;
 import org.apache.wicket.model.AbstractReadOnlyModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.apache.wicket.model.PropertyModel;
 import org.apache.wicket.request.mapper.parameter.INamedParameters.NamedPair;
+import org.apache.wicket.util.string.StringValue;
 import org.apache.wicket.request.mapper.parameter.PageParameters;
 
 import com.evolveum.midpoint.common.policy.StringPolicyUtils;
@@ -86,15 +90,16 @@ public class PageSelfRegistration extends PageRegistrationBase {
 	private static final String ID_PASSWORD = "password";
 	private static final String ID_SUBMIT_REGISTRATION = "submitRegistration";
 	private static final String ID_REGISTRATION_SUBMITED = "registrationInfo";
-	private static final String ID_IMAGE = "image";
-	private static final String ID_CHANGE_LINK = "changeLink";
-	private static final String ID_USER_TEXT = "text";
+	private static final String ID_FEEDBACK = "feedback";
 
 	private static final String ID_CAPTCHA = "captcha";
 	
 	private static final String OPERATION_SAVE_USER = DOT_CLASS + "saveUser";
 	private static final String OPERATION_LOAD_ORGANIZATIONS = DOT_CLASS + "loadOrganization";
+	private static final String OPERATION_LOAD_USER = DOT_CLASS + "loadUser";
 
+	private static final String PARAM_USER_OID = "user";
+	
 	private static final long serialVersionUID = 1L;
 
 	private IModel<UserType> userModel;
@@ -110,12 +115,15 @@ public class PageSelfRegistration extends PageRegistrationBase {
 	public PageSelfRegistration(PageParameters pageParameters) {
 		super();
 
-		userModel = new LoadableModel<UserType>(true) {
+		
+		final String userOid = getOidFromParams(pageParameters);
+		
+		userModel = new LoadableModel<UserType>(false) {
 			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected UserType load() {
-				return createUser();
+				return createUserModel(userOid);
 			}
 		};
 		
@@ -123,7 +131,45 @@ public class PageSelfRegistration extends PageRegistrationBase {
 
 	}
 
-	private UserType createUser() {
+	private String getOidFromParams(PageParameters pageParameters){
+		if (pageParameters == null) {
+			return null;
+		}
+		StringValue oidValue = pageParameters.get(PARAM_USER_OID);
+		if (oidValue != null) {
+			return oidValue.toString();
+		}
+		return null;
+	}
+	
+	private UserType createUserModel(final String userOid) {
+		
+		if (userOid != null) {
+			PrismObject<UserType> result = runPrivileged(new Producer<PrismObject<UserType>>() {
+			
+					@Override
+					public PrismObject<UserType> run() {
+						Task task = createAnonymousTask(OPERATION_LOAD_USER);
+						OperationResult result = new OperationResult(OPERATION_LOAD_USER);
+						PrismObject<UserType> user = WebModelServiceUtils.loadObject(UserType.class, userOid, PageSelfRegistration.this, task, result);
+						result.computeStatus();
+						return user;
+					}
+				
+			});
+			
+			if (result == null) {
+				return instantiateUser();
+			}
+			
+			return result.asObjectable();
+		}
+		
+		return instantiateUser();
+
+	}
+	
+	private UserType instantiateUser(){
 		PrismObjectDefinition<UserType> userDef = getPrismContext().getSchemaRegistry()
 				.findObjectDefinitionByCompileTimeClass(UserType.class);
 		PrismObject<UserType> user;
@@ -134,27 +180,19 @@ public class PageSelfRegistration extends PageRegistrationBase {
 			user = userType.asPrismObject();
 
 		}
-
 		return user.asObjectable();
 	}
 
 	private void initLayout() {
+		
 		Form<?> mainForm = new Form<>(ID_MAIN_FORM);
-		mainForm.add(new VisibleEnableBehaviour() {
-
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public boolean isVisible() {
-				return !submited;
-			}
-
-			@Override
-			public boolean isEnabled() {
-				return !submited;
-			}
-		});
+		initAccessBehaviour(mainForm);
 		add(mainForm);
+		
+		//feedback
+	    FeedbackPanel feedback = new FeedbackPanel(ID_FEEDBACK, new ContainerFeedbackMessageFilter(PageSelfRegistration.this));
+        feedback.setOutputMarkupId(true);
+        mainForm.add(feedback);
 
 		TextPanel<String> firstName = new TextPanel<>(ID_FIRST_NAME,
 				new PropertyModel<String>(userModel, UserType.F_GIVEN_NAME.getLocalPart() + ".orig") {
@@ -166,8 +204,7 @@ public class PageSelfRegistration extends PageRegistrationBase {
 						userModel.getObject().setGivenName(new PolyStringType(object));
 					}
 				});
-		firstName.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-		firstName.getBaseFormComponent().setRequired(true);
+		initInputProperties(feedback, firstName);
 		mainForm.add(firstName);
 
 		TextPanel<String> lastName = new TextPanel<>(ID_LAST_NAME,
@@ -181,14 +218,12 @@ public class PageSelfRegistration extends PageRegistrationBase {
 					}
 
 				});
-		lastName.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-		lastName.getBaseFormComponent().setRequired(true);
+		initInputProperties(feedback, lastName);
 		mainForm.add(lastName);
 
 		TextPanel<String> email = new TextPanel<>(ID_EMAIL,
 				new PropertyModel<String>(userModel, UserType.F_EMAIL_ADDRESS.getLocalPart()));
-		email.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
-		email.getBaseFormComponent().setRequired(true);
+		initInputProperties(feedback, email);
 		mainForm.add(email);
 
 		AutoCompleteTextPanel<String> organization = new AutoCompleteTextPanel<String>(ID_ORGANIZATION,
@@ -220,6 +255,12 @@ public class PageSelfRegistration extends PageRegistrationBase {
 
 			private static final long serialVersionUID = 1L;
 
+			@Override
+			protected void onError(AjaxRequestTarget target,
+					org.apache.wicket.markup.html.form.Form<?> form) {
+				showErrors(target);
+			}
+			
 			protected void onSubmit(AjaxRequestTarget target,
 					org.apache.wicket.markup.html.form.Form<?> form) {
 
@@ -252,19 +293,55 @@ public class PageSelfRegistration extends PageRegistrationBase {
 
 	}
 	
+	private void initAccessBehaviour(Form mainForm) {
+		mainForm.add(new VisibleEnableBehaviour() {
+
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public boolean isVisible() {
+				return !submited;
+			}
+
+			@Override
+			public boolean isEnabled() {
+				return !submited;
+			}
+		});
+	}
+	
+	private void showErrors(AjaxRequestTarget target) {
+		target.add(get(createComponentPath(ID_MAIN_FORM, ID_FEEDBACK)));
+		target.add(getFeedbackPanel());
+	}
+	
+	private void initInputProperties(FeedbackPanel feedback, TextPanel<String> input) {
+		input.getBaseFormComponent().add(new EmptyOnBlurAjaxFormUpdatingBehaviour());
+		input.getBaseFormComponent().setRequired(true);
+		feedback.setFilter(new ContainerFeedbackMessageFilter(input.getBaseFormComponent()));
+		
+		input.add(new VisibleEnableBehaviour() {
+			
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public boolean isEnabled() {
+				return getOidFromParams(getPageParameters()) == null;
+			}
+			
+		});
+		
+		
+	}
+
 	private CaptchaPanel getCaptcha() {
 		return (CaptchaPanel) get(createComponentPath(ID_MAIN_FORM, ID_CAPTCHA));
 	}
 
 	private void submitRegistration(AjaxRequestTarget target) {
 
-		CaptchaPanel captcha = getCaptcha();
-		if (captcha.getCaptchaText() != null && captcha.getRandomText() != null) {
-			if (!captcha.getCaptchaText().equals(captcha.getRandomText())) {
-				getSession().error(createStringResource("PageSelfRegistration.captcha.validation.failed").getString());
-				captcha.invalidateCaptcha();
-				throw new RestartResponseException(this);
-			}
+		if (!validateCaptcha(target)) {
+			return;
 		}
 		
 		OperationResult result = runPrivileged(new Producer<OperationResult>() {
@@ -301,26 +378,30 @@ public class PageSelfRegistration extends PageRegistrationBase {
 			getSession().error(
 					createStringResource("PageSelfRegistration.registration.error", result.getMessage())
 							.getString());
-			throw new RestartResponseException(PageSelfRegistration.class);
+			userModel.getObject().setCredentials(null);
 
 		}
 
 		updateCaptcha(target);
 		target.add(getFeedbackPanel());
+		target.add(this);
 
 	}
-
-	private String generateCaptcha() {
-		OperationResult result = new OperationResult("generateRandomString");
-
-		StringPolicyType sp = StringPolicyUtils.normalize(new StringPolicyType());
-		LimitationsType limits = new LimitationsType();
-		limits.setMinLength(8);
-		limits.setMaxLength(12);
-		limits.setMinUniqueChars(6);
-		sp.setLimitations(limits);
-		return ValuePolicyGenerator.generate(sp, 8, result);
-
+	
+	private boolean validateCaptcha(AjaxRequestTarget target) {
+		CaptchaPanel captcha = getCaptcha();
+		if (captcha.getCaptchaText() != null && captcha.getRandomText() != null) {
+			if (!captcha.getCaptchaText().equals(captcha.getRandomText())) {
+				getSession().error(createStringResource("PageSelfRegistration.captcha.validation.failed").getString());
+				captcha.invalidateCaptcha();
+				userModel.getObject().setCredentials(null);
+				updateCaptcha(target);
+				target.add(getFeedbackPanel());
+				target.add(this);
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private List<String> prepareAutocompleteValues(final String input) {
@@ -414,16 +495,16 @@ public class PageSelfRegistration extends PageRegistrationBase {
 		NonceType nonceType = new NonceType();
 		nonceType.setValue(nonceCredentials);
 		
-		PageParameters pageParameters = getPageParameters();
-		if (pageParameters != null){
-			List<NamedPair> namedParameters = pageParameters.getAllNamed();
-			if (namedParameters != null && !namedParameters.isEmpty()) {
-				NamedPair firstParam = namedParameters.iterator().next();
-				if (firstParam != null) {
-					nonceType.setResetType(firstParam.getValue());
-				}
-			}
-		}
+//		PageParameters pageParameters = getPageParameters();
+//		if (pageParameters != null){
+//			List<NamedPair> namedParameters = pageParameters.getAllNamed();
+//			if (namedParameters != null && !namedParameters.isEmpty()) {
+//				NamedPair firstParam = namedParameters.iterator().next();
+//				if (firstParam != null) {
+//					nonceType.setName(firstParam.getValue());
+//				}
+//			}
+//		}
 
 		userType.getCredentials().setNonce(nonceType);
 		userType.setLifecycleState(getSelfRegistrationConfiguration().getInitialLifecycleState());
@@ -455,5 +536,11 @@ public class PageSelfRegistration extends PageRegistrationBase {
 				createComponentPath(ID_MAIN_FORM, ID_ORGANIZATION));
 		return org.getBaseFormComponent().getModel().getObject();
 	}
+	
+	@Override
+    protected void createBreadcrumb() {
+        //don't create breadcrumb for registration page
+    }
+
 
 }

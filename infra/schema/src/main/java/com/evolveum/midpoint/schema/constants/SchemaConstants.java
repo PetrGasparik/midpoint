@@ -29,6 +29,7 @@ import com.evolveum.midpoint.util.QNameUtil;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ActivationType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.CredentialsType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.FocusType;
+import com.evolveum.midpoint.xml.ns._public.common.common_3.NonceType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.ObjectType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.OperationalStateType;
 import com.evolveum.midpoint.xml.ns._public.common.common_3.PasswordType;
@@ -137,11 +138,59 @@ public abstract class SchemaConstants {
 	// public static final QName T_PROTECTED_BYTE_ARRAY_TYPE = new QName(NS_C,
 	// "ProtectedByteArrayType");
 
+	/**
+	 * Relation "is manager of". Used as a relation value in object references.
+	 * Specifies that the subject is a manager of organizational unit.
+	 */
 	public static final QName ORG_MANAGER = new QName(NS_ORG, "manager");
+	
+	/**
+	 * Relation used for metarole assignments. Sometimes it is important to
+	 * distinguish metarole and member assignments. This relation is used
+	 * for that purpose.
+	 */
+	public static final QName ORG_META = new QName(NS_ORG, "meta");
+
+	/**
+	 * Relation "is deputy of". Used as a relation value in object references.
+	 * Specifies that the subject is a deputy of another user.
+	 */
+	public static final QName ORG_DEPUTY = new QName(NS_ORG, "deputy");
+	
+	/**
+	 * Relation "is approver of". Used as a relation value in object references.
+	 * Specifies that the subject is a (general) approver of specified (abstract) role.
+	 * The approver will be asked for decision if the role is assigned, if there is
+	 * a rule conflict during assignment (e.g. SoD conflict) or if there is any similar
+	 * situation.
+	 * 
+	 * This is a generic approver used for all the situation. The system may be customized
+	 * with more specific approver roles, e.g. technicalApprover, securityApprover, etc.
+	 * 
+	 * This approver is responsible for the use of the role, which mostly means
+	 * that he decides about role assignment. It is NOT meant to approve role changes.
+	 * Role owner is meant for that purpose.
+	 */
+	public static final QName ORG_APPROVER = new QName(NS_ORG, "approver");
+	
+	/**
+	 * Relation "is owner of". Used as a relation value in object references.
+	 * Specifies that the subject is a (business) owner of specified (abstract) role.
+	 * The owner will be asked for decision if the role is modified, when the associated
+	 * policy changes and so on.
+	 * 
+	 * This owner is responsible for maintaining role definition and policies. It is
+	 * NPT necessarily concerned with role use (e.g. assignment). The approver relation
+	 * is meant for that purpose. 
+	 */
+	public static final QName ORG_OWNER = new QName(NS_ORG, "owner");
 
 	public static final ItemPath PATH_PASSWORD = new ItemPath(C_CREDENTIALS, CredentialsType.F_PASSWORD);
 	public static final ItemPath PATH_PASSWORD_VALUE = new ItemPath(C_CREDENTIALS, CredentialsType.F_PASSWORD,
 			PasswordType.F_VALUE);
+	public static final ItemPath PATH_NONCE = new ItemPath(C_CREDENTIALS, CredentialsType.F_NONCE);
+	public static final ItemPath PATH_NONCE_VALUE = new ItemPath(C_CREDENTIALS, CredentialsType.F_NONCE,
+			NonceType.F_VALUE);
 	public static final ItemPath PATH_ACTIVATION = new ItemPath(C_ACTIVATION);
 	public static final ItemPath PATH_ACTIVATION_ADMINISTRATIVE_STATUS = new ItemPath(C_ACTIVATION,
 			ActivationType.F_ADMINISTRATIVE_STATUS);
